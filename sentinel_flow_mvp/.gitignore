@@ -1,0 +1,39 @@
+# .gitignore
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE / OS specific
+.idea/
+.vscode/
+*.swp
+*.DS_Store
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Databases
+*.sqlite3
+
+# Node / Frontend build
+node_modules/
+.next/
+frontend/.next/
+*.tsbuildinfo
+next-env.d.ts
+
+# Application log / cache
+graphify-out/

@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-slate-950 text-white/90 font-sans;
+  }
+
+  ::selection {
+    background: rgba(129, 140, 248, 0.3);
+    color: white;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-glass border border-glass-border backdrop-blur-xl;
+  }
+
+  .glass-hover {
+    @apply hover:bg-white/[0.10] hover:border-glass-border-hover transition-all duration-300;
+  }
+
+  .glass-card {
+    @apply glass rounded-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] p-6;
+  }
+
+  .input-glass {
+    @apply w-full bg-white/[0.05] border border-glass-border rounded-xl px-4 py-3
+           text-white/90 placeholder:text-white/25
+           focus:outline-none focus:ring-2 focus:ring-accent-indigo/40 focus:border-accent-indigo/50
+           transition-all duration-200;
+  }
+
+  .btn-primary {
+    @apply relative overflow-hidden bg-accent-indigo/20 border border-accent-indigo/30
+           text-white rounded-xl px-6 py-3 font-medium text-sm
+           hover:bg-accent-indigo/30 active:scale-[0.97]
+           transition-all duration-200
+           disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden bg-white/[0.04] rounded-xl;
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.04),
+      transparent
+    );
+    animation: shimmer 2s linear infinite;
+  }
+
+  .stat-value {
+    @apply text-2xl font-semibold tracking-tight text-white;
+  }
+  .stat-label {
+    @apply text-xs font-medium text-white/40 uppercase tracking-wider;
+  }
+}

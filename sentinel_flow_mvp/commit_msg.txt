@@ -1,0 +1,7 @@
+feat(ml): unify forecasting stack and deprecate legacy stockout mock
+
+- Completely removed simulated TensorFlow mock logic from the StockoutPredictionModule.
+- Unified the ML infrastructure by routing stockout predictions through the shared, concurrent-safe PyTorch ChronosPipeline singleton.
+- Implemented a deterministic depletion algorithm to calculate days_until_depletion against the Chronos probabilistic forecast.
+- Repaired FastAPI payload mapping to ensure current_inventory and lead_time_days route correctly to the execution context.
+- Added containerized integration tests for the unified architecture.

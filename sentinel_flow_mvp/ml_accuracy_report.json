@@ -1,0 +1,9 @@
+{
+  "phase": "EVAL_PHASE_5_ML_BACKTEST",
+  "status": "COMPLETED",
+  "supplier_tested": "NVIDIA Corporation",
+  "data_points_analyzed": 1094,
+  "avg_mape_percent": 19.32,
+  "avg_mae_units": 17.0,
+  "avg_inference_latency_sec": 0.428
+}

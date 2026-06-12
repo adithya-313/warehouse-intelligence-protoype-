@@ -1,0 +1,5 @@
+fix(ui): resolve database desync and remove deprecated sku fallbacks
+
+- Fixed a silent payload bug in InferenceConsole.tsx where an empty SKU state triggered a hardcoded fallback to a deprecated SKU (SKU-NV-5090).
+- Re-aligned frontend default payload values to map accurately to the newly generated Phase 12 market dataset (e.g., SKU-NV-AI900).
+- Validated end-to-end data flow; UI now successfully renders the full 90-day dynamic Chronos historical and forecast trajectories.

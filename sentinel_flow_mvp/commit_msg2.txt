@@ -1,0 +1,5 @@
+fix(ml): align stockout API contract with frontend expectations
+
+- Corrected payload mapping in StockoutPredictionModule.
+- Routed raw Chronos demand predictions to 'forecast_trajectory' to ensure correct UI graph rendering.
+- Isolated mathematical 'inventory_depletion_curve' array within 'execution_metadata' to safely trigger frontend stockout alerts without distorting demand visuals.

@@ -1,0 +1,157 @@
+-- Enable TimescaleDB extension
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+
+-- Table 1: Relational Metadata (Standard PostgreSQL)
+-- Handles cross-industry polymorphism via JSONB
+CREATE TABLE IF NOT EXISTS suppliers (
+    supplier_id VARCHAR(255) PRIMARY KEY,
+    system_origin VARCHAR(100) NOT NULL,
+    industry_vertical VARCHAR(100) NOT NULL,
+    industry_specific_metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table 2: Time-Series Telemetry (TimescaleDB)
+-- High-frequency writes, optimized for ML covariate extraction
+-- tracking_id links predictions to actuals for PSI calculation
+CREATE TABLE IF NOT EXISTS inventory_telemetry (
+    recorded_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    supplier_id VARCHAR(255) NOT NULL REFERENCES suppliers(supplier_id),
+    tracking_id VARCHAR(255),
+    sku_id VARCHAR(255),
+    inventory_count INTEGER NOT NULL CHECK (inventory_count >= 0),
+    delivery_delay_days INTEGER NOT NULL CHECK (delivery_delay_days >= 0),
+    predicted_stockout_probability DOUBLE PRECISION,
+    is_critical_risk BOOLEAN
+);
+
+-- Convert to TimescaleDB Hypertable partitioned by time
+SELECT create_hypertable('inventory_telemetry', 'recorded_at', if_not_exists => TRUE);
+
+-- Create compound index for faster querying by supplier, sku, and time
+CREATE INDEX IF NOT EXISTS idx_telemetry_sku_time ON inventory_telemetry (supplier_id, sku_id, recorded_at DESC);
+
+-- Create index on tracking_id for efficient PSI join queries
+CREATE INDEX IF NOT EXISTS ix_inventory_telemetry_tracking_id ON inventory_telemetry (tracking_id);
+
+-- Table 3: ML Prediction Log
+-- Stores raw ML predictions before joining with actuals
+-- Enables Population Stability Index (PSI) drift calculation
+CREATE TABLE IF NOT EXISTS ml_prediction_log (
+    id SERIAL PRIMARY KEY,
+    tracking_id VARCHAR(255) NOT NULL,
+    predicted_stockout_probability DOUBLE PRECISION NOT NULL,
+    predicted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create index on tracking_id for efficient PSI queries
+CREATE INDEX IF NOT EXISTS ix_ml_prediction_log_tracking_id ON ml_prediction_log (tracking_id);
+
+-- Create index on predicted_at for time-window queries
+CREATE INDEX IF NOT EXISTS ix_ml_prediction_log_predicted_at ON ml_prediction_log (predicted_at DESC);
+
+-- Table 4: Warehouse Topology Nodes
+-- Each node represents a physical location in the warehouse (storage rack, picking station, etc.)
+CREATE TABLE IF NOT EXISTS warehouse_nodes (
+    id VARCHAR(255) PRIMARY KEY,
+    zone VARCHAR(100) NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table 5: Warehouse Topology Edges (Directed Graph)
+-- Each edge represents a traversable pathway between two nodes.
+-- Composite primary key ensures every directed edge is unique.
+CREATE TABLE IF NOT EXISTS warehouse_edges (
+    source_id VARCHAR(255) NOT NULL REFERENCES warehouse_nodes(id),
+    target_id VARCHAR(255) NOT NULL REFERENCES warehouse_nodes(id),
+    distance_meters DOUBLE PRECISION NOT NULL,
+    max_capacity INTEGER NOT NULL,
+    PRIMARY KEY (source_id, target_id)
+);
+
+-- Table 6: Movement Telemetry (Time-Series)
+-- High-frequency position data from forklifts, robots, and workers.
+-- Converted to TimescaleDB hypertable for efficient temporal queries.
+CREATE TABLE IF NOT EXISTS movement_telemetry (
+    id SERIAL,
+    entity_id VARCHAR(255) NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,
+    node_id VARCHAR(255) NOT NULL,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+-- Convert movement_telemetry to TimescaleDB Hypertable partitioned by timestamp
+SELECT create_hypertable('movement_telemetry', 'timestamp', if_not_exists => TRUE);
+
+-- Table 7: Immutable Audit Ledger
+-- Records financial and inventory events for fraud detection and compliance.
+-- This table is converted to a TimescaleDB hypertable for efficient time-range queries.
+-- A PostgreSQL trigger prevents any UPDATE or DELETE operations (immutability enforcement).
+CREATE TABLE IF NOT EXISTS audit_ledger (
+    id VARCHAR(255),
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    event_type VARCHAR(100) NOT NULL,
+    entity_id VARCHAR(255) NOT NULL,
+    sku_id VARCHAR(255),
+    amount_value DOUBLE PRECISION,
+    event_metadata JSONB,
+    PRIMARY KEY (id, timestamp)
+);
+
+-- Convert audit_ledger to TimescaleDB Hypertable partitioned by timestamp
+SELECT create_hypertable('audit_ledger', 'timestamp', if_not_exists => TRUE);
+
+-- Create an index on event_type for efficient filtering
+CREATE INDEX IF NOT EXISTS ix_audit_ledger_event_type ON audit_ledger (event_type);
+
+-- PostgreSQL Trigger Function to enforce ledger immutability
+-- Raises an exception on any UPDATE or DELETE attempt, ensuring audit trail integrity.
+CREATE OR REPLACE FUNCTION prevent_audit_tampering()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE EXCEPTION 'Audit ledger is immutable. UPDATE and DELETE are prohibited.';
+END;
+$$ LANGUAGE plpgsql;
+
+-- Attach the immutable trigger to the audit_ledger table
+-- The trigger fires BEFORE any UPDATE or DELETE operation
+DROP TRIGGER IF EXISTS trg_prevent_audit_tampering ON audit_ledger;
+CREATE TRIGGER trg_prevent_audit_tampering
+    BEFORE UPDATE OR DELETE ON audit_ledger
+    FOR EACH ROW
+    EXECUTE FUNCTION prevent_audit_tampering();
+
+-- Table 8: Audit Anomaly Scores
+-- Stores fraud detection results for events in the immutable audit ledger.
+-- This is a separate table to maintain ledger immutability.
+CREATE TABLE IF NOT EXISTS audit_anomaly_scores (
+    event_id VARCHAR(255) PRIMARY KEY,
+    risk_score DOUBLE PRECISION NOT NULL,
+    is_flagged BOOLEAN NOT NULL DEFAULT FALSE,
+    reason VARCHAR(500),
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Unique index on transaction_id inside metadata JSONB for idempotency
+-- Prevents duplicate financial events from being inserted
+-- Only applies when transaction_id is present (financial events)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_transaction
+    ON audit_ledger ((event_metadata->>'transaction_id'), timestamp)
+    WHERE event_metadata->>'transaction_id' IS NOT NULL;
+
+-- Table 9: LoRA Adapter Registry
+-- Tracks fine-tuning lifecycle for prediction module adapters.
+-- Status flows: TRAINING -> VALIDATING -> ACTIVE (or FAILED).
+CREATE TABLE IF NOT EXISTS lora_adapter_registry (
+    id VARCHAR(255) PRIMARY KEY,
+    module_name VARCHAR(100) NOT NULL,
+    supplier_id VARCHAR(255),
+    base_model_version VARCHAR(100) NOT NULL,
+    adapter_weights_path VARCHAR(500),
+    checksum VARCHAR(255),
+    status VARCHAR(50) NOT NULL DEFAULT 'TRAINING',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_lora_adapter_registry_module_name ON lora_adapter_registry (module_name);

@@ -1,0 +1,9 @@
+{
+  "phase": "EVAL_PHASE_4_ULTIMATE_STRESS",
+  "status": "COMPLETED",
+  "duration_sec": 12.35,
+  "requests_per_second": 80.97,
+  "stream_p95_ms": 185.24,
+  "predict_p95_ms": 2840.15,
+  "total_failures": 0
+}
