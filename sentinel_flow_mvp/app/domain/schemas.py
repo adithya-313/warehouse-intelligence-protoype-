@@ -4,7 +4,7 @@ These models enforce strict data validation before any processing occurs.
 """
 
 import math
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
@@ -60,7 +60,6 @@ class SupplierRecord(BaseModel):
     Attributes:
         supplier_id: The unique identification string for the supplier.
         timestamp: The exact date and time the record was created.
-        inventory_count: Current stock level. Must be strictly greater than or equal to zero.
         delivery_delay_days: Number of days the previous shipment was delayed.
         contact_name: Optional name of the contact person at the supplier.
         contact_email: Optional email address of the contact person.
@@ -74,12 +73,6 @@ class SupplierRecord(BaseModel):
     timestamp: datetime = Field(
         ...,
         description="The exact date and time the record was created.",
-    )
-
-    inventory_count: int = Field(
-        ...,
-        ge=0,
-        description="Current stock level. Must be strictly greater than or equal to zero.",
     )
 
     delivery_delay_days: int = Field(
@@ -759,3 +752,37 @@ class RiskDashboardResponse(BaseModel):
     stockouts: List[RiskItem] = Field(default_factory=list, description="Impending stockout alerts")
     dead_stock: List[RiskItem] = Field(default_factory=list, description="Dead / stagnant inventory alerts")
     anomalies: List[RiskItem] = Field(default_factory=list, description="Anomalous delivery + risk alerts")
+
+
+# --- Phase 13.1: Pharmacological Ledger Schemas ---
+
+class MedicationSchema(BaseModel):
+    """
+    Data contract for creating or reading a medication.
+    """
+    sku_id: str = Field(..., description="Unique identifier for the medication")
+    apis: List[str] = Field(..., description="List of Active Pharmaceutical Ingredients")
+    therapeutic_classes: List[str] = Field(..., description="List of therapeutic classes")
+    cdsco_schedule: str = Field(..., description="Regulatory schedule (e.g., Schedule H)")
+
+class PatientSchema(BaseModel):
+    """
+    Data contract for patient demographics and chronic diseases.
+    """
+    patient_id: str
+    age: int = Field(..., ge=0, le=120)
+    gender: str
+    chronic_diseases: List[str] = []
+
+class MedicationBatchSchema(BaseModel):
+    """
+    Data contract for a specific batch of medication.
+    Beginner Note: We use strict types like 'date' and 'float' to ensure data integrity
+    before it ever reaches the database.
+    """
+    batch_id: str
+    sku_id: str
+    expiry_date: date
+    cost_price: float = Field(..., ge=0.0)
+    max_retail_price: float = Field(..., ge=0.0)
+    available_quantity: int = Field(..., ge=0)

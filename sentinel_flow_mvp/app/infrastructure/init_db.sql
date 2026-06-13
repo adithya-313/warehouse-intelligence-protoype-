@@ -19,7 +19,6 @@ CREATE TABLE IF NOT EXISTS inventory_telemetry (
     supplier_id VARCHAR(255) NOT NULL REFERENCES suppliers(supplier_id),
     tracking_id VARCHAR(255),
     sku_id VARCHAR(255),
-    inventory_count INTEGER NOT NULL CHECK (inventory_count >= 0),
     delivery_delay_days INTEGER NOT NULL CHECK (delivery_delay_days >= 0),
     predicted_stockout_probability DOUBLE PRECISION,
     is_critical_risk BOOLEAN
@@ -155,3 +154,35 @@ CREATE TABLE IF NOT EXISTS lora_adapter_registry (
 );
 
 CREATE INDEX IF NOT EXISTS ix_lora_adapter_registry_module_name ON lora_adapter_registry (module_name);
+
+-- --- Phase 13.1: Pharmacological Ledger ---
+
+-- 1. Medications Table (The Anchor)
+CREATE TABLE IF NOT EXISTS medications (
+    sku_id VARCHAR(255) PRIMARY KEY,
+    apis TEXT[] NOT NULL,
+    therapeutic_classes TEXT[] NOT NULL,
+    cdsco_schedule VARCHAR(50) NOT NULL
+);
+
+-- 2. Patients Table
+CREATE TABLE IF NOT EXISTS patients (
+    patient_id VARCHAR(255) PRIMARY KEY,
+    age INTEGER NOT NULL,
+    gender VARCHAR(50) NOT NULL,
+    chronic_diseases TEXT[] DEFAULT '{}'
+);
+
+-- 3. Medication Batches Table (The Matrix)
+CREATE TABLE IF NOT EXISTS medication_batches (
+    batch_id VARCHAR(255) PRIMARY KEY,
+    sku_id VARCHAR(255) NOT NULL REFERENCES medications(sku_id),
+    expiry_date DATE NOT NULL,
+    cost_price NUMERIC(10, 2) NOT NULL,
+    max_retail_price NUMERIC(10, 2) NOT NULL,
+    available_quantity INTEGER NOT NULL DEFAULT 0
+);
+
+-- 4. FEFO Structural Index
+-- This index allows the database to instantly find the batch that expires next for any given SKU.
+CREATE INDEX IF NOT EXISTS idx_fefo_sort ON medication_batches(sku_id, expiry_date);
