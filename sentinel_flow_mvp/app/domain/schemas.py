@@ -786,3 +786,18 @@ class MedicationBatchSchema(BaseModel):
     cost_price: float = Field(..., ge=0.0)
     max_retail_price: float = Field(..., ge=0.0)
     available_quantity: int = Field(..., ge=0)
+
+# --- Phase 13.2: Event-Driven POS Schemas ---
+
+class MedicationSoldEvent(BaseModel):
+    """
+    Data contract for a Point-of-Sale (POS) transaction.
+    Beginner Note: This is the exact payload that gets published to Kafka 
+    when a pharmacist scans a medicine at the register.
+    """
+    transaction_id: str = Field(..., description="Unique ID from the POS register")
+    batch_id: str = Field(..., description="The specific physical batch sold")
+    sku_id: str = Field(..., description="The medication identifier")
+    quantity_sold: int = Field(..., gt=0, description="Number of units sold")
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    pharmacy_location: str = Field(..., description="Store or hospital ID")

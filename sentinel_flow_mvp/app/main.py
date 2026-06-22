@@ -32,6 +32,8 @@ from chronos import ChronosPipeline
 from app.api.dependencies import verify_api_key
 
 from app.api.v1 import audit, federated, ingestion, risk, stream_router, stats
+from app.services.kafka_producer import start_kafka_producer, stop_kafka_producer
+from app.api.pos_router import router as pos_router
 from app.core.config import get_application_settings
 from app.core.metrics import get_metrics_app
 from app.domain.schemas import (
@@ -116,6 +118,8 @@ async def application_lifespan(application: FastAPI):
     logger.info(f"Registered modules: {list(prediction_orchestrator._module_registry.keys())}")
     logger.info("=" * 60)
 
+    await start_kafka_producer()
+
     # Yield control to the application - this is where the app runs
     yield
 
@@ -123,6 +127,8 @@ async def application_lifespan(application: FastAPI):
     logger.info("=" * 60)
     logger.info("SENTINEL-FLOW: Application Shutdown")
     logger.info("=" * 60)
+
+    await stop_kafka_producer()
 
     logger.info("Cleaning up prediction orchestrator...")
     prediction_orchestrator._module_registry.clear()
@@ -239,6 +245,8 @@ def create_application() -> FastAPI:
         prefix="/api/v1/risk",
         tags=["risk"],
     )
+
+    application_instance.include_router(pos_router, prefix="/api/v1/pos", tags=["Point of Sale (Event Mesh)"])
 
     # Mount the Prometheus metrics endpoint at /metrics
     # This allows Prometheus to scrape metrics from the API
