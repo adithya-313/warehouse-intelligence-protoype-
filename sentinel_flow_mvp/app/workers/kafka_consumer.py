@@ -34,18 +34,30 @@ async def consume_sales_events():
             # Open a database session to update the ledger
             db: Session = SessionLocal()
             try:
-                # Find the specific batch
-                batch = db.query(MedicationBatchModel).filter(MedicationBatchModel.batch_id == batch_id).first()
+                # 1. Fetch the batch and LOCK the row until this transaction completes.
+                # Beginner Note: .with_for_update() translates to 'SELECT ... FOR UPDATE' in SQL.
+                # If Cashier A and Cashier B scan the exact same batch at the exact same millisecond,
+                # the database forces Cashier B to wait in line until Cashier A finishes.
+                batch = db.query(MedicationBatchModel).filter(
+                    MedicationBatchModel.batch_id == batch_id
+                ).with_for_update().first()
                 
                 if batch:
-                    # Deduct the quantity
-                    batch.available_quantity = max(0, batch.available_quantity - qty_sold)
-                    db.commit()
-                    logger.info(f"Ledger updated: Batch {batch_id} reduced by {qty_sold}. Remaining: {batch.available_quantity}")
+                    # 2. Strict validation: Do we actually have enough stock?
+                    # This prevents "ghost stock" (negative inventory) if two cashiers 
+                    # try to sell the last remaining box.
+                    if batch.available_quantity >= qty_sold:
+                        batch.available_quantity -= qty_sold
+                        db.commit() # This saves the change AND releases the row lock
+                        logger.info(f"Ledger updated: Batch {batch_id} reduced by {qty_sold}. Remaining: {batch.available_quantity}")
+                    else:
+                        # We don't have enough stock! Reject the transaction.
+                        db.rollback() # Release the lock without making changes
+                        logger.warning(f"Ghost stock prevented! Batch {batch_id} only has {batch.available_quantity} units. Cannot sell {qty_sold}.")
                 else:
                     logger.warning(f"Batch {batch_id} not found in ledger. Event ignored.")
             except Exception as e:
-                db.rollback()
+                db.rollback() # Always release the lock if something crashes
                 logger.error(f"Database error updating ledger: {e}")
             finally:
                 db.close()
