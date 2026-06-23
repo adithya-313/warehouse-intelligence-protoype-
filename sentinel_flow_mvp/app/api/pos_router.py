@@ -1,6 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
 from app.domain.schemas import MedicationSoldEvent
 from app.services.kafka_producer import publish_medication_sold
+from app.infrastructure.db.database import get_database_session
+from app.services.fefo_engine import get_optimal_fefo_batch
 import logging
 
 router = APIRouter()
@@ -21,3 +24,26 @@ async def record_medication_sale(event: MedicationSoldEvent):
     except Exception as e:
         logger.error(f"Failed to publish POS event: {e}")
         raise HTTPException(status_code=500, detail="Event mesh unavailable")
+
+@router.get("/fefo-routing/{sku_id}")
+async def get_fefo_routing(
+    sku_id: str, 
+    qty: int = 1, 
+    db: Session = Depends(get_database_session)
+):
+    """
+    Overrides standard FIFO. Analyzes the batch matrix and instructs the clerk 
+    exactly which physical box to pull from the shelf to minimize expiry waste.
+    """
+    routing_info = get_optimal_fefo_batch(db, sku_id, qty)
+    
+    if not routing_info:
+        raise HTTPException(
+            status_code=404, 
+            detail="No unexpired stock available for this medication."
+        )
+        
+    return {
+        "status": "success",
+        "routing": routing_info
+    }

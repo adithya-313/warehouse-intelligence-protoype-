@@ -786,6 +786,7 @@ class MedicationBatchSchema(BaseModel):
     cost_price: float = Field(..., ge=0.0)
     max_retail_price: float = Field(..., ge=0.0)
     available_quantity: int = Field(..., ge=0)
+    shelf_location: str = Field(default="UNASSIGNED", description="Physical shelf or bin location")
 
 # --- Phase 13.2: Event-Driven POS Schemas ---
 

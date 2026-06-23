@@ -180,7 +180,8 @@ CREATE TABLE IF NOT EXISTS medication_batches (
     expiry_date DATE NOT NULL,
     cost_price NUMERIC(10, 2) NOT NULL,
     max_retail_price NUMERIC(10, 2) NOT NULL,
-    available_quantity INTEGER NOT NULL DEFAULT 0
+    available_quantity INTEGER NOT NULL DEFAULT 0,
+    shelf_location VARCHAR(255) DEFAULT 'UNASSIGNED'
 );
 
 -- 4. FEFO Structural Index

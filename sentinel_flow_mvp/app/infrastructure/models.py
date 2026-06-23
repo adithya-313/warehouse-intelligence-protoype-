@@ -149,6 +149,9 @@ class MedicationBatchModel(Base):
     
     # The actual amount of pills/units left in this specific batch
     available_quantity = Column(Integer, nullable=False, default=0)
+    
+    # Physical location in the pharmacy to instruct the clerk where to go
+    shelf_location = Column(String, nullable=True, default="UNASSIGNED")
 
     # --- Structural Indexes ---
     # Beginner Note: This composite index makes FEFO (First-Expire-First-Out) sorting extremely fast.
