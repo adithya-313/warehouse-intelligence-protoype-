@@ -802,3 +802,16 @@ class MedicationSoldEvent(BaseModel):
     quantity_sold: int = Field(..., gt=0, description="Number of units sold")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     pharmacy_location: str = Field(..., description="Store or hospital ID")
+
+# --- Phase 14.3: Distributor Scorecard Schemas ---
+
+class DistributorScorecardResponse(BaseModel):
+    """
+    The financial scorecard returned to the frontend dashboard.
+    """
+    supplier_id: str
+    total_orders_analyzed: int
+    on_time_delivery_rate: float = Field(..., description="Percentage of orders delivered on time")
+    total_shortfall_items: int = Field(..., description="Total units the distributor failed to deliver")
+    financial_loss_rupees: float = Field(..., description="Total profit lost due to shortfalls (in ₹)")
+    recommendation: str = Field(..., description="AI-generated negotiation advice")

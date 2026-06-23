@@ -159,3 +159,36 @@ class MedicationBatchModel(Base):
     __table_args__ = (
         Index('idx_fefo_sort', 'sku_id', 'expiry_date'),
     )
+
+# --- Phase 14.3: Procurement & Distributor Tracking ---
+
+class PurchaseOrderModel(Base):
+    """
+    Tracks orders placed with distributors to measure their reliability.
+    Beginner Note: By comparing 'ordered_qty' with 'delivered_qty', we can 
+    calculate exactly how much stock the distributor failed to deliver.
+    """
+    __tablename__ = "purchase_orders"
+
+    po_id = Column(String, primary_key=True, index=True)
+    
+    # Links to the supplier/distributor who is supposed to deliver this
+    supplier_id = Column(String, ForeignKey("suppliers.supplier_id"), nullable=False)
+    
+    # Links to the specific medication ordered
+    sku_id = Column(String, ForeignKey("medications.sku_id"), nullable=False)
+    
+    # Quantities
+    ordered_qty = Column(Integer, nullable=False)
+    delivered_qty = Column(Integer, nullable=False, default=0)
+    
+    # Financials (Stored at the time of order to lock in the expected margins)
+    cost_price = Column(Numeric(10, 2), nullable=False)
+    expected_mrp = Column(Numeric(10, 2), nullable=False)
+    
+    # Timelines
+    order_date = Column(Date, nullable=False)
+    expected_delivery_date = Column(Date, nullable=False)
+    actual_delivery_date = Column(Date, nullable=True)
+    
+    status = Column(String, default="PENDING") # PENDING, DELIVERED, PARTIAL, FAILED

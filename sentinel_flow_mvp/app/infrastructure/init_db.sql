@@ -187,3 +187,18 @@ CREATE TABLE IF NOT EXISTS medication_batches (
 -- 4. FEFO Structural Index
 -- This index allows the database to instantly find the batch that expires next for any given SKU.
 CREATE INDEX IF NOT EXISTS idx_fefo_sort ON medication_batches(sku_id, expiry_date);
+
+-- --- Phase 14.3: Purchase Orders ---
+CREATE TABLE IF NOT EXISTS purchase_orders (
+    po_id VARCHAR(255) PRIMARY KEY,
+    supplier_id VARCHAR(255) NOT NULL REFERENCES suppliers(supplier_id),
+    sku_id VARCHAR(255) NOT NULL REFERENCES medications(sku_id),
+    ordered_qty INTEGER NOT NULL,
+    delivered_qty INTEGER NOT NULL DEFAULT 0,
+    cost_price NUMERIC(10, 2) NOT NULL,
+    expected_mrp NUMERIC(10, 2) NOT NULL,
+    order_date DATE NOT NULL,
+    expected_delivery_date DATE NOT NULL,
+    actual_delivery_date DATE,
+    status VARCHAR(50) DEFAULT 'PENDING'
+);
