@@ -22,7 +22,7 @@ celery_application.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    imports=["app.services.worker_tasks", "app.workers.audit_worker", "app.services.lora_training_worker"],
+    imports=["app.services.worker_tasks", "app.workers.audit_worker", "app.services.lora_training_worker", "app.workers.embedding_tasks"],
     beat_schedule={
         "run-drift-analysis-every-5-minutes": {
             "task": "run_drift_analysis",

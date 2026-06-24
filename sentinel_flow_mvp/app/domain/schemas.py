@@ -815,3 +815,14 @@ class DistributorScorecardResponse(BaseModel):
     total_shortfall_items: int = Field(..., description="Total units the distributor failed to deliver")
     financial_loss_rupees: float = Field(..., description="Total profit lost due to shortfalls (in ₹)")
     recommendation: str = Field(..., description="AI-generated negotiation advice")
+
+class KnowledgeIngestionRequest(BaseModel):
+    """Contract for ingesting new clinical guidelines."""
+    sku_id: str = Field(..., description="The Medication SKU ID")
+    content: str = Field(..., description="The clinical text to embed (e.g., 'Take with food')")
+    metadata_payload: Optional[Dict[str, Any]] = Field(default={}, description="Optional metadata like source URL")
+
+class KnowledgeIngestionResponse(BaseModel):
+    """Response contract for ingestion."""
+    message: str
+    task_id: str

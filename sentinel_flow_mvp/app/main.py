@@ -31,7 +31,7 @@ from chronos import ChronosPipeline
 
 from app.api.dependencies import verify_api_key
 
-from app.api.v1 import audit, federated, ingestion, risk, stream_router, stats
+from app.api.v1 import audit, federated, ingestion, risk, stream_router, stats, knowledge_base
 from app.services.kafka_producer import start_kafka_producer, stop_kafka_producer
 from app.api.pos_router import router as pos_router
 from app.api.erp_router import router as erp_router
@@ -247,6 +247,8 @@ def create_application() -> FastAPI:
         prefix="/api/v1/risk",
         tags=["risk"],
     )
+
+    application_instance.include_router(knowledge_base.router, prefix="/api/v1/knowledge-base", tags=["Clinical Knowledge"])
 
     application_instance.include_router(pos_router, prefix="/api/v1/pos", tags=["Point of Sale (Event Mesh)"])
     application_instance.include_router(erp_router, prefix="/api/v1/erp", tags=["Legacy ERP Bridge"])
