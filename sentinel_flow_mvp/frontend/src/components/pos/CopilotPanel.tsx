@@ -49,6 +49,11 @@ export default function CopilotPanel() {
         }),
       });
 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Server Error: ${response.status}`);
+      }
+
       const data = await response.json();
 
       // 4. Add AI Response to UI
