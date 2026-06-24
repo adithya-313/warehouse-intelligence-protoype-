@@ -1,9 +1,10 @@
 from fastapi import APIRouter, status, Depends
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_database_session
-from app.domain.schemas import KnowledgeIngestionRequest, KnowledgeIngestionResponse, SemanticSearchRequest, SemanticSearchResponse
+from app.domain.schemas import KnowledgeIngestionRequest, KnowledgeIngestionResponse, SemanticSearchRequest, SemanticSearchResponse, RAGQueryRequest, RAGQueryResponse
 from app.workers.embedding_tasks import generate_and_store_embedding
 from app.services.semantic_search import execute_clinical_search
+from app.services.rag_pipeline import generate_clinical_response
 
 router = APIRouter()
 
@@ -46,4 +47,25 @@ async def search_clinical_knowledge(
         query=payload.query,
         results=search_data["results"],
         safety_warning=search_data["safety_warning"]
+    )
+
+@router.post("/ask", response_model=RAGQueryResponse, status_code=status.HTTP_200_OK)
+async def ask_clinical_assistant(
+    payload: RAGQueryRequest,
+    db: Session = Depends(get_database_session)
+):
+    """
+    Context-Constrained AI Assistant Endpoint.
+    Takes a natural language query, retrieves clinical context, and generates a safe answer.
+    """
+    rag_data = generate_clinical_response(
+        db=db,
+        query=payload.query,
+        sku_id=payload.sku_id
+    )
+    
+    return RAGQueryResponse(
+        query=payload.query,
+        answer=rag_data["answer"],
+        context_used=rag_data["context_used"]
     )

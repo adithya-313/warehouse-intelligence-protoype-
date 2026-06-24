@@ -845,3 +845,14 @@ class SemanticSearchResponse(BaseModel):
     query: str
     results: list[SearchResultItem]
     safety_warning: Optional[str] = None
+
+class RAGQueryRequest(BaseModel):
+    """Contract for asking the AI assistant a clinical question."""
+    query: str = Field(..., description="The natural language question (e.g., 'Is this safe for a 34F pregnant patient?')")
+    sku_id: Optional[str] = Field(None, description="Optional: Filter context by specific medication SKU")
+
+class RAGQueryResponse(BaseModel):
+    """Response contract for the AI assistant."""
+    query: str
+    answer: str = Field(..., description="The AI-generated answer based strictly on context.")
+    context_used: list[SearchResultItem] = Field(..., description="The exact database records used to generate the answer.")
