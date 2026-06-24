@@ -8,16 +8,13 @@ USER root
 RUN apk add --no-cache \
     build-base \
     git \
-    postgresql15-dev \
-    clang18 \
-    llvm18 \
-    && ln -sf /usr/bin/clang-18 /usr/local/bin/clang-19
+    postgresql15-dev
 
-# Clone the pgvector repository and compile it
+# Clone the pgvector repository and compile it (skip LLVM JIT to avoid heavy deps)
 RUN git clone --branch v0.5.1 https://github.com/pgvector/pgvector.git /tmp/pgvector \
     && cd /tmp/pgvector \
-    && make \
-    && make install \
+    && make LLVM=0 \
+    && make install LLVM=0 \
     && rm -rf /tmp/pgvector
 
 # Switch back to the default postgres user for security
