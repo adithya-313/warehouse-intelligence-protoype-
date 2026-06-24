@@ -826,3 +826,22 @@ class KnowledgeIngestionResponse(BaseModel):
     """Response contract for ingestion."""
     message: str
     task_id: str
+
+class SemanticSearchRequest(BaseModel):
+    """Contract for querying the clinical knowledge base."""
+    query: str = Field(..., description="The pharmacist's question (e.g., 'Safe for pregnancy?')")
+    sku_id: Optional[str] = Field(None, description="Optional: Filter by specific medication SKU")
+    top_k: int = Field(3, description="Number of results to return")
+
+class SearchResultItem(BaseModel):
+    """A single matched clinical guideline."""
+    sku_id: str
+    content: str
+    confidence_score: float
+    metadata_payload: dict
+
+class SemanticSearchResponse(BaseModel):
+    """Response contract for semantic search."""
+    query: str
+    results: list[SearchResultItem]
+    safety_warning: Optional[str] = None
