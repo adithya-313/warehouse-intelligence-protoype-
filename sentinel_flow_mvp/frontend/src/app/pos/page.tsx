@@ -6,7 +6,8 @@ import { useHardwareScanner } from '../../hooks/useHardwareScanner';
 import { checkoutCart } from '../../services/posApi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
-import { ShoppingCart, ScanLine, Search, Trash2, CreditCard } from 'lucide-react';
+import { ShoppingCart, ScanLine, Search, Trash2, CreditCard, Bot } from 'lucide-react';
+import CopilotPanel from '@/components/pos/CopilotPanel';
 
 export default function POSInterface() {
   const { cart, addItem, removeItem, clearCart, getTotal, isProcessing, setProcessing } = usePOSStore();
@@ -72,6 +73,9 @@ export default function POSInterface() {
           <h1 className="text-xl font-semibold tracking-tight text-white">Sentinel POS</h1>
         </div>
         <div className="flex items-center gap-4 text-sm text-slate-400">
+          <button onClick={() => usePOSStore.getState().toggleCopilot()} className="p-2 bg-blue-100 text-blue-600 rounded-lg font-bold flex items-center gap-2">
+            <Bot size={20}/> Ask Copilot
+          </button>
           <span className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             Kafka Mesh Online
@@ -187,6 +191,7 @@ export default function POSInterface() {
           </div>
         </div>
       </main>
+      <CopilotPanel />
     </div>
   );
 }

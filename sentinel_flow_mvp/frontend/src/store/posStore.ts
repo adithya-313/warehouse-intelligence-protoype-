@@ -9,15 +9,26 @@ export interface CartItem {
   quantity: number;
 }
 
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'ai';
+  content: string;
+  sources?: any[];
+}
+
 interface POSState {
   cart: CartItem[];
   isProcessing: boolean;
+  isCopilotOpen: boolean;
+  chatHistory: ChatMessage[];
   // Actions
   addItem: (item: Omit<CartItem, 'quantity'>) => void;
   removeItem: (batch_id: string) => void;
   clearCart: () => void;
   setProcessing: (status: boolean) => void;
   getTotal: () => number;
+  toggleCopilot: () => void;
+  addChatMessage: (msg: ChatMessage) => void;
 }
 
 // Beginner Note: Zustand is a lightning-fast state manager. It allows any component
@@ -25,6 +36,11 @@ interface POSState {
 export const usePOSStore = create<POSState>((set, get) => ({
   cart: [],
   isProcessing: false,
+  isCopilotOpen: false,
+  chatHistory: [],
+
+  toggleCopilot: () => set((state) => ({ isCopilotOpen: !state.isCopilotOpen })),
+  addChatMessage: (msg) => set((state) => ({ chatHistory: [...state.chatHistory, msg] })),
 
   addItem: (newItem) => set((state) => {
     const existingItem = state.cart.find(item => item.batch_id === newItem.batch_id);
