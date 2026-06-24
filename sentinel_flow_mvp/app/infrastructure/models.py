@@ -6,7 +6,8 @@ Defines the mapping between Python objects and the underlying PostgreSQL/Timesca
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Date, Index, Numeric, text
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Date, Index, Numeric, text, Text, JSON
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -192,3 +193,30 @@ class PurchaseOrderModel(Base):
     actual_delivery_date = Column(Date, nullable=True)
     
     status = Column(String, default="PENDING") # PENDING, DELIVERED, PARTIAL, FAILED
+
+# ==========================================
+# PHASE 15.1: CLINICAL KNOWLEDGE BASE (VECTOR DB)
+# ==========================================
+
+class ClinicalKnowledgeBase(Base):
+    """
+    Domain Model: Clinical Knowledge Base.
+    Stores medical guidelines and their vector embeddings for semantic search.
+    """
+    __tablename__ = "clinical_knowledge_base"
+
+    # Primary Key
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Foreign Key linking to the specific medication (SKU)
+    sku_id = Column(String, ForeignKey("medications.sku_id"), nullable=False, index=True)
+    
+    # The actual human-readable text (e.g., "Contraindicated in 3rd trimester of pregnancy")
+    content = Column(Text, nullable=False)
+    
+    # The AI representation of the text. 
+    # We use 768 dimensions because PubMedBERT outputs exactly 768 numbers.
+    embedding = Column(Vector(768), nullable=False)
+    
+    # Flexible metadata (e.g., source URL, CDSCO schedule, confidence score)
+    metadata_payload = Column(JSON, default={})

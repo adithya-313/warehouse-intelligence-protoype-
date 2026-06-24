@@ -23,7 +23,6 @@ celery_application.conf.update(
     timezone="UTC",
     enable_utc=True,
     imports=["app.services.worker_tasks", "app.workers.audit_worker", "app.services.lora_training_worker"],
-    # Configure Celery Beat schedule for periodic tasks
     beat_schedule={
         "run-drift-analysis-every-5-minutes": {
             "task": "run_drift_analysis",
@@ -31,3 +30,11 @@ celery_application.conf.update(
         },
     },
 )
+
+# --- TASK ROUTING CONFIGURATION ---
+# We separate CPU-heavy AI tasks from fast database updates to prevent system lockups.
+# The 'embeddings' queue will handle the ONNX-quantized PubMedBERT model.
+celery_application.conf.task_routes = {
+    'app.workers.embedding_tasks.*': {'queue': 'embeddings'},
+    '*': {'queue': 'celery'}
+}
