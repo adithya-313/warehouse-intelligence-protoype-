@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.infrastructure.db.database import get_database_session
+from app.infrastructure.database import get_database_session
 from app.services.supplier_scorecard_service import generate_financial_scorecard
 from app.domain.schemas import DistributorScorecardResponse
 import logging

@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from app.domain.schemas import MedicationSoldEvent
 from app.services.kafka_producer import publish_medication_sold
-from app.infrastructure.db.database import get_database_session
+from app.infrastructure.database import get_database_session
 from app.services.fefo_engine import get_optimal_fefo_batch
 from app.services.recommendation_engine import get_clinical_cross_sells, get_high_margin_generics
 import logging
