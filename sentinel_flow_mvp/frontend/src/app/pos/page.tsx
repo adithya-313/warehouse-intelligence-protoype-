@@ -77,7 +77,7 @@ export default function POSInterface() {
           <button onClick={() => usePOSStore.getState().toggleCopilot()} className="p-2 bg-blue-100 text-blue-600 rounded-lg font-bold flex items-center gap-2">
             <Bot size={20}/> Ask Copilot
           </button>
-          <Link href="/suppliers" className="p-2 bg-indigo-100 text-indigo-700 rounded-lg font-bold flex items-center gap-2 hover:bg-indigo-200 transition-colors">
+          <Link href="/suppliers" className="p-2 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors flex items-center gap-2">
             <BarChart3 size={20} /> Vendor Intelligence
           </Link>
           <span className="flex items-center gap-2">
@@ -111,11 +111,24 @@ export default function POSInterface() {
             </form>
           </div>
 
-          {/* Hardware Scanner Status */}
-          <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-800 rounded-2xl bg-slate-900/20">
-            <ScanLine className="w-16 h-16 text-slate-600 mb-4" />
-            <p className="text-slate-400 text-lg">Ready for hardware scanner</p>
-            <p className="text-slate-600 text-sm mt-2">Just point and shoot. No clicking required.</p>
+          {/* Sleek Global Scanner Status */}
+          <div className="mt-6 bg-blue-50/5 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                <ScanLine className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white">Hardware Scanner Active</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Global listener enabled. Scan any barcode instantly.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+              </span>
+              <span className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider">Ready</span>
+            </div>
           </div>
         </div>
 
@@ -153,7 +166,7 @@ export default function POSInterface() {
                     </div>
                     <div className="flex items-center gap-6">
                       <span className="text-lg font-semibold text-emerald-400">
-                        ${(item.price * item.quantity).toFixed(2)}
+                        ₹{(item.price * item.quantity).toFixed(2)}
                       </span>
                       <div className="flex items-center gap-3 bg-slate-950 px-3 py-1 rounded-lg border border-slate-800">
                         <span className="text-slate-300">Qty:</span>
@@ -176,7 +189,7 @@ export default function POSInterface() {
           <div className="p-8 bg-slate-900 border-t border-slate-800">
             <div className="flex items-center justify-between mb-6">
               <span className="text-slate-400 text-lg">Total Amount</span>
-              <span className="text-4xl font-bold text-white">${getTotal().toFixed(2)}</span>
+              <span className="text-4xl font-bold text-white">₹{getTotal().toFixed(2)}</span>
             </div>
             <button 
               onClick={handleCheckout}
