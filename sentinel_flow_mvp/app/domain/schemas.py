@@ -856,3 +856,30 @@ class RAGQueryResponse(BaseModel):
     query: str
     answer: str = Field(..., description="The AI-generated answer based strictly on context.")
     context_used: list[SearchResultItem] = Field(..., description="The exact database records used to generate the answer.")
+
+
+class PatientCreate(BaseModel):
+    patient_id: str
+    name: str
+    phone_number: str
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    chronic_diseases: List[str] = []
+
+
+class TreatmentPlanCreate(BaseModel):
+    patient_id: str
+    sku_id: str
+    daily_dosage: float = Field(..., gt=0, description="Pills/units consumed per day")
+    total_quantity_dispensed: int = Field(..., gt=0, description="Total pills/units given")
+
+
+class TreatmentPlanResponse(BaseModel):
+    plan_id: str
+    patient_id: str
+    sku_id: str
+    daily_dosage: float
+    total_quantity_dispensed: int
+    start_date: datetime
+    projected_depletion_date: datetime
+    is_active: bool

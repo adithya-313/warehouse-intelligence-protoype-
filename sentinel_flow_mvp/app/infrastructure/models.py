@@ -3,7 +3,7 @@
 Defines the mapping between Python objects and the underlying PostgreSQL/TimescaleDB tables.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from pgvector.sqlalchemy import Vector
@@ -220,3 +220,37 @@ class ClinicalKnowledgeBase(Base):
     
     # Flexible metadata (e.g., source URL, CDSCO schedule, confidence score)
     metadata_payload = Column(JSON, default={})
+
+
+# ==========================================
+# PHASE 16: PATIENT CRM & ADHERENCE LEDGER
+# ==========================================
+
+class Patient(Base):
+    """Domain Model: Patient Profile."""
+    __tablename__ = "patients"
+
+    patient_id = Column(String, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    phone_number = Column(String, unique=True, index=True, nullable=False)
+    age = Column(Integer)
+    gender = Column(String)
+    chronic_diseases = Column(JSON, default=[])
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class TreatmentPlan(Base):
+    """Domain Model: Medication Adherence Ledger."""
+    __tablename__ = "treatment_plans"
+
+    plan_id = Column(String, primary_key=True, index=True)
+    patient_id = Column(String, ForeignKey("patients.patient_id"), nullable=False, index=True)
+    sku_id = Column(String, nullable=False, index=True)
+
+    daily_dosage = Column(Float, nullable=False)
+    total_quantity_dispensed = Column(Integer, nullable=False)
+
+    start_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    projected_depletion_date = Column(DateTime, nullable=False, index=True)
+
+    is_active = Column(Boolean, default=True)
