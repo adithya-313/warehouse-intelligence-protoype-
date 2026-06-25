@@ -45,9 +45,9 @@ from app.domain.schemas import (
     ProcurementOptimizationRequest,
     StandardizedPredictionResponse,
 )
-from app.infrastructure.database import SessionLocal, get_database_session
+from app.infrastructure.database import engine, SessionLocal, get_database_session
 from app.infrastructure.db.models import LoRAAdapterRegistry
-from app.infrastructure.models import SupplierModel
+from app.infrastructure.models import Base, SupplierModel
 from app.services.models.demand_forecast import DemandForecastingModule
 from app.services.models.stockout_prediction import StockoutPredictionModule
 from app.services.prediction_orchestrator import PredictionOrchestrator
@@ -77,7 +77,12 @@ async def application_lifespan(application: FastAPI):
     logger.info("SENTINEL-FLOW: Application Startup")
     logger.info("=" * 60)
 
-    # Step 0: Expand the anyio thread pool for synchronous route offloading
+    # Step 0: Create all database tables (including pgvector clinical_knowledge_base)
+    logger.info("Initializing database tables...")
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables created successfully.")
+
+    # Step 0a: Expand the anyio thread pool for synchronous route offloading
     # FastAPI offloads sync def routes to anyio's thread pool (default 40 tokens).
     # With DB pool at 50 and concurrency up to 200, we need more threads.
     anyio.to_thread.current_default_thread_limiter().total_tokens = 200

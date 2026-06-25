@@ -1,5 +1,5 @@
--- Enable TimescaleDB extension
-CREATE EXTENSION IF NOT EXISTS timescaledb;
+-- Enable pgvector extension for AI-powered semantic search on clinical knowledge
+CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Table 1: Relational Metadata (Standard PostgreSQL)
 -- Handles cross-industry polymorphism via JSONB
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Table 2: Time-Series Telemetry (TimescaleDB)
+-- Table 2: Time-Series Telemetry
 -- High-frequency writes, optimized for ML covariate extraction
 -- tracking_id links predictions to actuals for PSI calculation
 CREATE TABLE IF NOT EXISTS inventory_telemetry (
@@ -23,9 +23,6 @@ CREATE TABLE IF NOT EXISTS inventory_telemetry (
     predicted_stockout_probability DOUBLE PRECISION,
     is_critical_risk BOOLEAN
 );
-
--- Convert to TimescaleDB Hypertable partitioned by time
-SELECT create_hypertable('inventory_telemetry', 'recorded_at', if_not_exists => TRUE);
 
 -- Create compound index for faster querying by supplier, sku, and time
 CREATE INDEX IF NOT EXISTS idx_telemetry_sku_time ON inventory_telemetry (supplier_id, sku_id, recorded_at DESC);
@@ -69,9 +66,8 @@ CREATE TABLE IF NOT EXISTS warehouse_edges (
     PRIMARY KEY (source_id, target_id)
 );
 
--- Table 6: Movement Telemetry (Time-Series)
+-- Table 6: Movement Telemetry
 -- High-frequency position data from forklifts, robots, and workers.
--- Converted to TimescaleDB hypertable for efficient temporal queries.
 CREATE TABLE IF NOT EXISTS movement_telemetry (
     id SERIAL,
     entity_id VARCHAR(255) NOT NULL,
@@ -80,12 +76,8 @@ CREATE TABLE IF NOT EXISTS movement_telemetry (
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
--- Convert movement_telemetry to TimescaleDB Hypertable partitioned by timestamp
-SELECT create_hypertable('movement_telemetry', 'timestamp', if_not_exists => TRUE);
-
 -- Table 7: Immutable Audit Ledger
 -- Records financial and inventory events for fraud detection and compliance.
--- This table is converted to a TimescaleDB hypertable for efficient time-range queries.
 -- A PostgreSQL trigger prevents any UPDATE or DELETE operations (immutability enforcement).
 CREATE TABLE IF NOT EXISTS audit_ledger (
     id VARCHAR(255),
@@ -97,9 +89,6 @@ CREATE TABLE IF NOT EXISTS audit_ledger (
     event_metadata JSONB,
     PRIMARY KEY (id, timestamp)
 );
-
--- Convert audit_ledger to TimescaleDB Hypertable partitioned by timestamp
-SELECT create_hypertable('audit_ledger', 'timestamp', if_not_exists => TRUE);
 
 -- Create an index on event_type for efficient filtering
 CREATE INDEX IF NOT EXISTS ix_audit_ledger_event_type ON audit_ledger (event_type);
