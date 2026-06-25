@@ -6,8 +6,12 @@ from app.domain.schemas import PatientCreate, TreatmentPlanCreate
 
 
 def register_patient(db: Session, payload: PatientCreate) -> Patient:
-    """Idempotent patient registration."""
-    existing = db.query(Patient).filter(Patient.phone_number == payload.phone_number).first()
+    """Idempotent patient registration, isolated by tenant."""
+    existing = db.query(Patient).filter(
+        Patient.phone_number == payload.phone_number,
+        Patient.tenant_id == payload.tenant_id
+    ).first()
+
     if existing:
         return existing
 
@@ -20,14 +24,13 @@ def register_patient(db: Session, payload: PatientCreate) -> Patient:
 
 def create_treatment_plan(db: Session, payload: TreatmentPlanCreate) -> TreatmentPlan:
     """Calculates the exact depletion horizon and creates the ledger entry."""
-
     days_until_empty = payload.total_quantity_dispensed / payload.daily_dosage
-
     start_dt = datetime.now(timezone.utc)
     depletion_dt = start_dt + timedelta(days=days_until_empty)
 
     plan = TreatmentPlan(
         plan_id=f"PLAN-{uuid.uuid4().hex[:8].upper()}",
+        tenant_id=payload.tenant_id,
         patient_id=payload.patient_id,
         sku_id=payload.sku_id,
         daily_dosage=payload.daily_dosage,
