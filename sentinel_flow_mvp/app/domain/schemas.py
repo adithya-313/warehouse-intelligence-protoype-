@@ -860,6 +860,7 @@ class RAGQueryResponse(BaseModel):
 
 class PatientCreate(BaseModel):
     patient_id: str
+    tenant_id: str = Field(default="system_admin")
     name: str
     phone_number: str
     age: Optional[int] = None
@@ -869,6 +870,7 @@ class PatientCreate(BaseModel):
 
 class TreatmentPlanCreate(BaseModel):
     patient_id: str
+    tenant_id: str = Field(default="system_admin")
     sku_id: str
     daily_dosage: float = Field(..., gt=0, description="Pills/units consumed per day")
     total_quantity_dispensed: int = Field(..., gt=0, description="Total pills/units given")

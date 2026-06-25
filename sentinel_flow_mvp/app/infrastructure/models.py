@@ -14,6 +14,25 @@ from sqlalchemy.orm import declarative_base, relationship
 Base = declarative_base()
 
 
+class Tenant(Base):
+    """
+    Domain Model: SaaS Tenant (Pharmacy/Organization).
+    Stores isolated credentials for multi-tenant WhatsApp and UPI integrations.
+    """
+    __tablename__ = "tenants"
+
+    tenant_id = Column(String, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    
+    # Per-Tenant Integrations
+    upi_id = Column(String, nullable=True)
+    meta_whatsapp_token = Column(String, nullable=True)
+    whatsapp_phone_id = Column(String, nullable=True)
+    
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    is_active = Column(Boolean, default=True)
+
+
 class SupplierModel(Base):
     """Represents the 'suppliers' table containing static and polymorphic metadata.
 
@@ -113,20 +132,7 @@ class MedicationModel(Base):
     cdsco_schedule = Column(String, nullable=False)
 
 
-class PatientModel(Base):
-    """
-    Represents a patient receiving medications.
-    Beginner Note: We track chronic diseases as an array to help the ML models
-    predict future medication demand based on patient demographics.
-    """
-    __tablename__ = "patients"
 
-    patient_id = Column(String, primary_key=True, index=True)
-    age = Column(Integer, nullable=False)
-    gender = Column(String, nullable=False)
-    
-    # List of chronic conditions (e.g., ['Diabetes', 'Hypertension'])
-    chronic_diseases = Column(ARRAY(String), default=[])
 
 
 class MedicationBatchModel(Base):
@@ -231,6 +237,7 @@ class Patient(Base):
     __tablename__ = "patients"
 
     patient_id = Column(String, primary_key=True, index=True)
+    tenant_id = Column(String, ForeignKey("tenants.tenant_id"), nullable=False, index=True, default="system_admin")
     name = Column(String, nullable=False)
     phone_number = Column(String, unique=True, index=True, nullable=False)
     age = Column(Integer)
@@ -244,6 +251,7 @@ class TreatmentPlan(Base):
     __tablename__ = "treatment_plans"
 
     plan_id = Column(String, primary_key=True, index=True)
+    tenant_id = Column(String, ForeignKey("tenants.tenant_id"), nullable=False, index=True, default="system_admin")
     patient_id = Column(String, ForeignKey("patients.patient_id"), nullable=False, index=True)
     sku_id = Column(String, nullable=False, index=True)
 
