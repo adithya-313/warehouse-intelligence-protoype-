@@ -87,6 +87,11 @@ class ApplicationSettings(BaseSettings):
         description="Directory to store adapter weight files.",
     )
 
+    # Phase 16.3: Meta WhatsApp API & Payments
+    META_WHATSAPP_TOKEN: str | None = Field(default=None, description="Meta Graph API Token")
+    WHATSAPP_PHONE_ID: str | None = Field(default=None, description="WhatsApp Business Phone Number ID")
+    PHARMACY_UPI_ID: str = Field(default="pharmacy@upi", description="The UPI ID for receiving payments")
+
 
 @lru_cache
 def get_application_settings() -> ApplicationSettings:
