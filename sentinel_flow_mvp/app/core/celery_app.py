@@ -7,6 +7,7 @@ import os
 from datetime import timedelta
 
 from celery import Celery
+from celery.schedules import crontab
 
 REDIS_URI = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -22,11 +23,15 @@ celery_application.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    imports=["app.services.worker_tasks", "app.workers.audit_worker", "app.services.lora_training_worker", "app.workers.embedding_tasks"],
+    imports=["app.services.worker_tasks", "app.workers.audit_worker", "app.services.lora_training_worker", "app.workers.embedding_tasks", "app.workers.adherence_tasks"],
     beat_schedule={
         "run-drift-analysis-every-5-minutes": {
             "task": "run_drift_analysis",
-            "schedule": timedelta(seconds=300),  # 5 minutes = 300 seconds
+            "schedule": timedelta(seconds=300),
+        },
+        "daily-adherence-sweep-8am": {
+            "task": "app.workers.adherence_tasks.sweep_depletion_horizons",
+            "schedule": crontab(hour=8, minute=0),
         },
     },
 )
