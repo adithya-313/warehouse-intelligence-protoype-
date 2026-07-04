@@ -87,7 +87,7 @@ export default function SettingsDashboard() {
         style={{ rotateX, rotateY }}
         initial={{ opacity: 0, scale: 0.98, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 400, damping: 40, delay: 0.15 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30, delay: 0.05 }}
         className="relative rounded-[2.5rem] p-[1px] bg-gradient-to-br from-blue-200/60 via-rose-200/60 to-amber-200/60 shadow-[0_32px_64px_rgba(0,0,0,0.08)] will-change-transform flex flex-col md:flex-row min-h-[600px]"
       >
         {/* OPTICS FIX: Removed transformStyle and translateZ to prevent text rasterization blur */}

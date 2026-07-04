@@ -9,7 +9,7 @@ export default function Template({ children }: { children: React.ReactNode }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ 
-        duration: 0.4, 
+        duration: 0.15, 
         ease: [0.22, 1, 0.36, 1] // Apple-style custom easing curve
       }}
       className="w-full min-h-screen will-change-[opacity]"

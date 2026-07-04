@@ -47,7 +47,7 @@ export default function Scorecard({ supplierId = "SUPP-001" }: { supplierId?: st
             setData({ supplier_id: "SUPP-099", name: "Apex Pharma", financial_loss_rupees: 14500, delivery_success_rate: 82, trust_score: 65, risk_level: "HIGH", recent_failures: 3 });
           }
           setIsLoading(false);
-        }, 400);
+        }, 50); // Reduced from 400ms to 50ms for hyper-fast demo loading
         return;
       }
 
@@ -84,7 +84,7 @@ export default function Scorecard({ supplierId = "SUPP-001" }: { supplierId?: st
         style={{ rotateX, rotateY, transformStyle: "preserve-3d" }}
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 400, damping: 40, delay: 0.15 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30, delay: 0.05 }}
         className="relative rounded-[2.5rem] p-[1px] bg-gradient-to-br from-blue-200/60 via-rose-200/60 to-amber-200/60 shadow-[0_32px_64px_rgba(0,0,0,0.08)] will-change-transform"
       >
         {/* Quantum Glass Inner Container */}
