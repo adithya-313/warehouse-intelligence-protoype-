@@ -7,7 +7,20 @@ const config: Config = {
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        sans: [
+          '-apple-system', 
+          'BlinkMacSystemFont', 
+          '"SF Pro Display"', 
+          '"Segoe UI"', 
+          'Roboto', 
+          'Helvetica', 
+          'Arial', 
+          'sans-serif'
+        ],
+      },
+    },
   },
   plugins: [],
 }
