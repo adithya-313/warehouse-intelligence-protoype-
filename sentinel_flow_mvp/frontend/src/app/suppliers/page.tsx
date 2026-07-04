@@ -45,9 +45,22 @@ export default function SuppliersPage() {
           </div>
         </header>
         
-        {/* SPATIAL SCORECARD */}
-        <div className="flex-1 flex items-center justify-center">
-          <Scorecard supplierId="SUPP-001" />
+        {/* SPATIAL SCORECARD MATRIX */}
+        <div className="flex-1 flex flex-col gap-12 items-center justify-start pb-24">
+          <div className="w-full text-center mb-4">
+            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Elite Performance</p>
+          </div>
+          <Scorecard supplierId="DEMO-GOOD" />
+          
+          <div className="w-full text-center mt-8 mb-4">
+            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Average Performance (SLA Warning)</p>
+          </div>
+          <Scorecard supplierId="DEMO-AVG" />
+          
+          <div className="w-full text-center mt-8 mb-4">
+            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Critical Risk</p>
+          </div>
+          <Scorecard supplierId="DEMO-BAD" />
         </div>
 
       </div>

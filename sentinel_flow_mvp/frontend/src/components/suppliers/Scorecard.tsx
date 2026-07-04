@@ -36,6 +36,22 @@ export default function Scorecard({ supplierId = "SUPP-001" }: { supplierId?: st
 
   useEffect(() => {
     const fetchScorecard = async () => {
+      // DEMO INTERCEPTOR FOR VISUAL COMPARISON
+      if (supplierId.startsWith('DEMO-')) {
+        setTimeout(() => {
+          if (supplierId === 'DEMO-GOOD') {
+            setData({ supplier_id: "SUPP-001", name: "MediCorp Global", financial_loss_rupees: 0, delivery_success_rate: 99, trust_score: 98, risk_level: "TRUSTED", recent_failures: 0 });
+          } else if (supplierId === 'DEMO-AVG') {
+            setData({ supplier_id: "SUPP-042", name: "Relief Logistics", financial_loss_rupees: 2400, delivery_success_rate: 88, trust_score: 75, risk_level: "TRUSTED", recent_failures: 1 });
+          } else {
+            setData({ supplier_id: "SUPP-099", name: "Apex Pharma", financial_loss_rupees: 14500, delivery_success_rate: 82, trust_score: 65, risk_level: "HIGH", recent_failures: 3 });
+          }
+          setIsLoading(false);
+        }, 400);
+        return;
+      }
+
+      // NORMAL PRODUCTION FETCH
       try {
         const res = await fetch(`/api/v1/suppliers/${supplierId}/scorecard`, {
           headers: { 'X-Tenant-ID': 'PHARM-001' }
@@ -44,15 +60,7 @@ export default function Scorecard({ supplierId = "SUPP-001" }: { supplierId?: st
         const json = await res.json();
         setData(json);
       } catch (err) {
-        setData({
-          supplier_id: supplierId,
-          name: "Apex Pharma Distributors (DEMO)",
-          financial_loss_rupees: 14500,
-          delivery_success_rate: 82,
-          trust_score: 65,
-          risk_level: "HIGH",
-          recent_failures: 3
-        });
+        setData({ supplier_id: supplierId, name: "Unknown Supplier", financial_loss_rupees: 0, delivery_success_rate: 0, trust_score: 0, risk_level: "HIGH", recent_failures: 0 });
       } finally {
         setIsLoading(false);
       }
