@@ -84,7 +84,7 @@ export default function Scorecard({ supplierId = "SUPP-001" }: { supplierId?: st
         style={{ rotateX, rotateY, transformStyle: "preserve-3d" }}
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 400, damping: 40 }}
+        transition={{ type: "spring", stiffness: 400, damping: 40, delay: 0.15 }}
         className="relative rounded-[2.5rem] p-[1px] bg-gradient-to-br from-blue-200/60 via-rose-200/60 to-amber-200/60 shadow-[0_32px_64px_rgba(0,0,0,0.08)] will-change-transform"
       >
         {/* Quantum Glass Inner Container */}
