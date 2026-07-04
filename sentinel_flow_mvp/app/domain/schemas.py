@@ -885,3 +885,15 @@ class TreatmentPlanResponse(BaseModel):
     start_date: datetime
     projected_depletion_date: datetime
     is_active: bool
+
+class TenantSettingsUpdate(BaseModel):
+    upi_id: Optional[str] = None
+    meta_whatsapp_token: Optional[str] = None
+    whatsapp_phone_id: Optional[str] = None
+
+class TenantSettingsResponse(BaseModel):
+    tenant_id: str
+    name: str
+    upi_id: Optional[str]
+    meta_whatsapp_token_configured: bool
+    whatsapp_phone_id: Optional[str]
