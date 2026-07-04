@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bot, Settings, BarChart3, ShoppingBag, ArrowRight, Barcode } from 'lucide-react';
+import { Search, Bot, Settings, BarChart3, ShoppingBag, ArrowRight, Barcode, ScanLine } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePOSStore } from '@/store/posStore';
 import CopilotPanel from '@/components/pos/CopilotPanel';
