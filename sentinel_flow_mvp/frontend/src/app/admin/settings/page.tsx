@@ -31,9 +31,9 @@ export default function SettingsPage() {
           <div className="flex items-center gap-6">
             <Link href="/pos">
               <motion.div 
-                whileHover={{ scale: 1.05, x: -5 }}
+                whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className="p-3 bg-white/60 backdrop-blur-md border border-white/80 shadow-sm rounded-2xl text-slate-500 hover:text-slate-800 hover:bg-white transition-all flex items-center justify-center group"
+                className="p-3 bg-white/60 backdrop-blur-md border border-white/80 shadow-sm rounded-2xl text-slate-500 hover:text-slate-800 hover:bg-white transition-colors flex items-center justify-center group will-change-transform"
               >
                 <ArrowLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
               </motion.div>
