@@ -1,22 +1,55 @@
+"use client";
+
 import React from 'react';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
 import Scorecard from '@/components/suppliers/Scorecard';
 
 export default function SuppliersPage() {
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-8">
-      <div className="max-w-6xl mx-auto">
-        <header className="flex justify-between items-center mb-10">
-          <div className="flex items-center gap-4">
-            <Link href="/pos" className="p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-full hover:bg-gray-50 transition-colors">
-              <ArrowLeft size={20} className="text-gray-600 dark:text-gray-300" />
+    <div className="relative min-h-screen bg-[#fdfbfb] text-slate-800 overflow-hidden selection:bg-blue-100 font-sans antialiased">
+      
+      {/* ETHEREAL BIOLOGICAL ORBS */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none flex items-center justify-center z-0">
+        <motion.div 
+          animate={{ rotate: 360, scale: [1, 1.05, 1] }} 
+          transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+          className="absolute w-[800px] h-[800px] bg-rose-100/50 blur-[120px] rounded-full will-change-transform translate-x-1/4 -translate-y-1/4 mix-blend-multiply" 
+        />
+        <motion.div 
+          animate={{ rotate: -360, scale: [1, 1.1, 1] }} 
+          transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
+          className="absolute w-[600px] h-[600px] bg-blue-100/50 blur-[120px] rounded-full will-change-transform -translate-x-1/4 translate-y-1/4 mix-blend-multiply" 
+        />
+      </div>
+
+      <div className="relative z-10 max-w-[1600px] mx-auto p-6 md:p-10 min-h-screen flex flex-col">
+        
+        {/* HEADER WITH PREDICTIVE INTENT NAVIGATION */}
+        <header className="flex justify-between items-center mb-12">
+          <div className="flex items-center gap-6">
+            <Link href="/pos">
+              <motion.div 
+                whileHover={{ scale: 1.05, x: -5 }}
+                whileTap={{ scale: 0.95 }}
+                className="p-3 bg-white/60 backdrop-blur-md border border-white/80 shadow-sm rounded-2xl text-slate-500 hover:text-slate-800 hover:bg-white transition-all flex items-center justify-center group"
+              >
+                <ArrowLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
+              </motion.div>
             </Link>
-            <h1 className="text-3xl font-black tracking-tight text-gray-900 dark:text-white">Vendor Intelligence</h1>
+            <div>
+              <h1 className="text-3xl font-black tracking-tight text-slate-900">Vendor Intelligence</h1>
+              <p className="text-slate-500 font-medium mt-1">Real-time supply chain risk analysis</p>
+            </div>
           </div>
         </header>
         
-        <Scorecard supplierId="SUPP-001" />
+        {/* SPATIAL SCORECARD */}
+        <div className="flex-1 flex items-center justify-center">
+          <Scorecard supplierId="SUPP-001" />
+        </div>
+
       </div>
     </div>
   );
