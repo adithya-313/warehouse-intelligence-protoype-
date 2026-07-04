@@ -18,7 +18,7 @@ export default function POSDashboard() {
   return (
     <div className="relative min-h-screen bg-[#fdfbfb] text-slate-800 overflow-hidden selection:bg-blue-100">
       
-      {/* ETHEREAL BIOLOGICAL ORBS (GPU Accelerated) */}
+      {/* ETHEREAL BIOLOGICAL ORBS */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none flex items-center justify-center z-0">
         <motion.div 
           animate={{ rotate: 360, scale: [1, 1.05, 1] }} 
@@ -54,14 +54,22 @@ export default function POSDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* DESIGN TOKEN: Neural Pulse (AI Button) */}
             <motion.button 
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={toggleCopilot}
-              className="px-5 py-2.5 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/50 text-blue-600 rounded-2xl text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
+              className="relative px-5 py-2.5 rounded-2xl text-sm font-bold transition-all flex items-center gap-2 overflow-hidden group shadow-sm border border-white/50"
             >
-              <Bot size={18} /> Clinical Copilot
+              <motion.div 
+                animate={{ backgroundPosition: ["0% center", "200% center"] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-violet-500/10 to-cyan-500/10 bg-[length:200%_auto]"
+              />
+              <Bot size={18} className="text-cyan-600 relative z-10" /> 
+              <span className="bg-gradient-to-r from-cyan-700 to-violet-700 bg-clip-text text-transparent relative z-10">Clinical Copilot</span>
             </motion.button>
+
             <Link href="/suppliers">
               <motion.button 
                 whileHover={{ scale: 1.02 }}
@@ -93,11 +101,10 @@ export default function POSDashboard() {
             transition={{ delay: 0.1 }}
             className="lg:col-span-8 flex flex-col gap-8"
           >
-            {/* Massive, Elegant Search Bar */}
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-100 to-rose-100 rounded-[2rem] blur-xl opacity-50 group-hover:opacity-70 transition-opacity duration-500"></div>
-              <div className="relative bg-white/80 backdrop-blur-3xl border border-white shadow-[0_8px_32px_rgba(0,0,0,0.04)] rounded-[2rem] p-4 flex items-center gap-4 transition-all focus-within:ring-4 focus-within:ring-blue-100 focus-within:border-blue-300">
-                <div className="p-4 bg-slate-50 rounded-2xl text-slate-400">
+            {/* DESIGN TOKEN: Iridescent Pearl Wrapper (Search Bar) */}
+            <div className="relative group rounded-[2rem] p-[1px] bg-gradient-to-br from-blue-200/50 via-rose-200/50 to-amber-200/50 shadow-[0_8px_32px_rgba(0,0,0,0.04)]">
+              <div className="relative bg-white/80 backdrop-blur-3xl rounded-[calc(2rem-1px)] p-4 flex items-center gap-4 transition-all focus-within:bg-white/90">
+                <div className="p-4 bg-slate-50 rounded-2xl text-slate-400 shadow-inner border border-slate-100/50">
                   <Search size={24} />
                 </div>
                 <input 
@@ -119,58 +126,65 @@ export default function POSDashboard() {
             </div>
 
             {/* Empty State / Inventory Area */}
-            <div className="flex-1 bg-white/40 backdrop-blur-xl border border-white/80 shadow-[0_8px_32px_rgba(0,0,0,0.02)] rounded-[2rem] flex flex-col items-center justify-center text-center p-10">
-              <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mb-6 shadow-inner border border-slate-100">
-                <ScanLine size={32} className="text-slate-300" />
+            <div className="flex-1 rounded-[2rem] p-[1px] bg-gradient-to-br from-white/40 to-white/10">
+              <div className="h-full w-full bg-white/40 backdrop-blur-xl rounded-[calc(2rem-1px)] flex flex-col items-center justify-center text-center p-10">
+                <div className="w-20 h-20 bg-white/60 rounded-3xl flex items-center justify-center mb-6 shadow-sm border border-white">
+                  <ScanLine size={32} className="text-slate-300" />
+                </div>
+                <h3 className="text-xl font-semibold text-slate-700 mb-2">Ready for next patient</h3>
+                <p className="text-slate-400 max-w-sm">The system is listening. Scan a product to instantly add it to the active transaction.</p>
               </div>
-              <h3 className="text-xl font-semibold text-slate-700 mb-2">Ready for next patient</h3>
-              <p className="text-slate-400 max-w-sm">The system is listening. Scan a product to instantly add it to the active transaction.</p>
             </div>
           </motion.div>
 
           {/* RIGHT COLUMN: THE RECEIPT (CART) */}
+          {/* DESIGN TOKEN: Iridescent Pearl Wrapper (Cart) */}
           <motion.div 
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
-            className="lg:col-span-4 bg-white/70 backdrop-blur-3xl border border-white shadow-[0_16px_48px_rgba(0,0,0,0.05)] rounded-[2.5rem] flex flex-col overflow-hidden relative"
+            className="lg:col-span-4 rounded-[2.5rem] p-[1px] bg-gradient-to-br from-blue-200/50 via-rose-200/50 to-amber-200/50 shadow-[0_16px_48px_rgba(0,0,0,0.05)] flex flex-col"
           >
-            <div className="p-8 border-b border-slate-100/50">
-              <h2 className="text-xl font-bold text-slate-800 tracking-tight">Current Order</h2>
-            </div>
-            
-            <div className="flex-1 p-8 overflow-y-auto">
-              <AnimatePresence mode="popLayout">
-                {cart.length === 0 ? (
-                  <motion.div 
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="h-full flex flex-col items-center justify-center text-slate-400"
-                  >
-                    <ShoppingBag size={48} className="mb-4 opacity-20" />
-                    <p className="font-medium">Cart is empty</p>
-                  </motion.div>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Cart items would map here with layout animations */}
-                  </div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Checkout Footer */}
-            <div className="p-8 bg-white/80 backdrop-blur-md border-t border-slate-100/50">
-              <div className="flex justify-between items-end mb-6">
-                <span className="text-slate-500 font-medium">Total Amount</span>
-                <span className="text-5xl font-black text-slate-900 tracking-tighter">₹{totalAmount.toFixed(2)}</span>
+            <div className="h-full w-full bg-white/70 backdrop-blur-3xl rounded-[calc(2.5rem-1px)] flex flex-col overflow-hidden relative">
+              <div className="p-8 border-b border-slate-100/50">
+                <h2 className="text-xl font-bold text-slate-800 tracking-tight">Current Order</h2>
               </div>
-              <motion.button 
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                disabled={cart.length === 0}
-                className="w-full py-5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-slate-900/20"
-              >
-                Complete Checkout <ArrowRight size={20} />
-              </motion.button>
+              
+              <div className="flex-1 p-8 overflow-y-auto">
+                <AnimatePresence mode="popLayout">
+                  {cart.length === 0 ? (
+                    <motion.div 
+                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                      className="h-full flex flex-col items-center justify-center text-slate-400"
+                    >
+                      <ShoppingBag size={48} className="mb-4 opacity-20" />
+                      <p className="font-medium">Cart is empty</p>
+                    </motion.div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Cart items would map here */}
+                    </div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Checkout Footer */}
+              <div className="p-8 bg-white/80 backdrop-blur-md border-t border-slate-100/50">
+                <div className="flex justify-between items-end mb-6">
+                  <span className="text-slate-500 font-medium">Total Amount</span>
+                  <span className="text-5xl font-black text-slate-900 tracking-tighter">₹{totalAmount.toFixed(2)}</span>
+                </div>
+                
+                {/* DESIGN TOKEN: Liquid Titanium (Checkout Button) */}
+                <motion.button 
+                  whileHover={{ scale: 1.02, backgroundPosition: "100% center" }}
+                  whileTap={{ scale: 0.98 }}
+                  disabled={cart.length === 0}
+                  className="w-full py-5 bg-gradient-to-r from-slate-900 via-slate-700 to-slate-900 bg-[length:200%_auto] text-white rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-[inset_0_1px_1px_rgba(255,255,255,0.25),0_12px_24px_rgba(15,23,42,0.2)] border border-slate-800"
+                >
+                  Complete Checkout <ArrowRight size={20} />
+                </motion.button>
+              </div>
             </div>
           </motion.div>
 
