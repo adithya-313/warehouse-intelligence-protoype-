@@ -6,7 +6,7 @@ import { useHardwareScanner } from '../../hooks/useHardwareScanner';
 import { checkoutCart } from '../../services/posApi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
-import { ShoppingCart, ScanLine, Search, Trash2, CreditCard, Bot, BarChart3 } from 'lucide-react';
+import { ShoppingCart, ScanLine, Search, Trash2, CreditCard, Bot, BarChart3, Settings } from 'lucide-react';
 import Link from 'next/link';
 import CopilotPanel from '@/components/pos/CopilotPanel';
 
@@ -79,6 +79,9 @@ export default function POSInterface() {
           </button>
           <Link href="/suppliers" className="p-2 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors flex items-center gap-2">
             <BarChart3 size={20} /> Vendor Intelligence
+          </Link>
+          <Link href="/admin/settings" className="p-2 text-gray-400 hover:text-gray-200 hover:bg-slate-800 rounded-lg transition-colors" title="Tenant Settings">
+            <Settings size={20} />
           </Link>
           <span className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
