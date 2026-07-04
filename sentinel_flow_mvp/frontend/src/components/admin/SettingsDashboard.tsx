@@ -20,13 +20,13 @@ export default function SettingsDashboard() {
     whatsapp_phone_id: ''
   });
 
-  // 3D Spatial Parallax Hooks
+  // OPTIMIZED PHYSICS: Softer springs to prevent mouse jitter
   const x = useMotionValue(0);
   const y = useMotionValue(0);
-  const mouseXSpring = useSpring(x, { stiffness: 300, damping: 30 });
-  const mouseYSpring = useSpring(y, { stiffness: 300, damping: 30 });
-  const rotateX = useTransform(mouseYSpring, [-0.5, 0.5], ["3deg", "-3deg"]);
-  const rotateY = useTransform(mouseXSpring, [-0.5, 0.5], ["-3deg", "3deg"]);
+  const mouseXSpring = useSpring(x, { stiffness: 150, damping: 25 });
+  const mouseYSpring = useSpring(y, { stiffness: 150, damping: 25 });
+  const rotateX = useTransform(mouseYSpring, [-0.5, 0.5], ["2deg", "-2deg"]);
+  const rotateY = useTransform(mouseXSpring, [-0.5, 0.5], ["-2deg", "2deg"]);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -83,24 +83,22 @@ export default function SettingsDashboard() {
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
-      {/* DESIGN TOKEN: Iridescent Pearl Wrapper */}
       <motion.div 
-        style={{ rotateX, rotateY, transformStyle: "preserve-3d" }}
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        style={{ rotateX, rotateY }}
+        initial={{ opacity: 0, scale: 0.98, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ type: "spring", stiffness: 400, damping: 40 }}
         className="relative rounded-[2.5rem] p-[1px] bg-gradient-to-br from-blue-200/60 via-rose-200/60 to-amber-200/60 shadow-[0_32px_64px_rgba(0,0,0,0.08)] will-change-transform flex flex-col md:flex-row min-h-[600px]"
       >
-        {/* Quantum Glass Inner Container */}
-        <div className="relative w-full h-full bg-white/70 backdrop-blur-3xl rounded-[calc(2.5rem-1px)] flex flex-col md:flex-row overflow-hidden" style={{ transform: "translateZ(20px)" }}>
+        {/* OPTICS FIX: Removed transformStyle and translateZ to prevent text rasterization blur */}
+        <div className="relative w-full h-full bg-white/70 backdrop-blur-3xl rounded-[calc(2.5rem-1px)] flex flex-col md:flex-row overflow-hidden">
           
-          {/* Dynamic SVG Film Grain */}
           <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay" 
                style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}>
           </div>
 
           {/* Sidebar Navigation */}
-          <div className="w-full md:w-72 bg-white/40 border-r border-slate-100/50 p-8 flex flex-col relative z-10" style={{ transform: "translateZ(30px)" }}>
+          <div className="w-full md:w-72 bg-white/40 border-r border-slate-100/50 p-8 flex flex-col relative z-10">
             <div className="mb-12">
               <h2 className="text-slate-800 text-2xl font-bold tracking-tight">Settings</h2>
               <p className="text-slate-500 text-xs uppercase tracking-widest mt-2 font-semibold">Command Center</p>
@@ -135,91 +133,91 @@ export default function SettingsDashboard() {
           </div>
 
           {/* Content Area */}
-          <div className="flex-1 p-10 md:p-12 flex flex-col relative z-10" style={{ transform: "translateZ(40px)" }}>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 10, filter: "blur(4px)" }}
-                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                className="flex-1"
-              >
-                {activeTab === 'whatsapp' && (
-                  <div className="space-y-10">
-                    <div>
-                      <h3 className="text-3xl font-bold text-slate-800 tracking-tight mb-3 flex items-center gap-3">
-                        WhatsApp Integration <ShieldCheck className="text-emerald-500 w-6 h-6" />
-                      </h3>
-                      <p className="text-slate-500 text-sm leading-relaxed max-w-md font-medium">Connect your official Meta Business account to enable automated patient adherence loops.</p>
-                    </div>
-                    
-                    <div className="space-y-8 max-w-lg">
-                      {/* Token Input with Active Edge FX & Decryption Eye */}
-                      <div className="space-y-2 group">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                          <Key size={14} className="text-blue-500" /> Permanent Access Token
-                        </label>
-                        <div className="relative rounded-2xl p-[1px] bg-slate-200 transition-all duration-500 group-focus-within:bg-gradient-to-r group-focus-within:from-blue-400 group-focus-within:to-cyan-400 shadow-sm">
-                          <div className="relative bg-white/90 backdrop-blur-xl rounded-[calc(2rem-1px)] flex items-center">
+          <div className="flex-1 p-10 md:p-12 flex flex-col relative z-10">
+            {/* LAYOUT FIX: Added min-h-[350px] to prevent container snapping on tab switch */}
+            <div className="min-h-[350px]">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeTab}
+                  initial={{ opacity: 0, y: 10, filter: "blur(4px)" }}
+                  animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                  exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  className="flex-1"
+                >
+                  {activeTab === 'whatsapp' && (
+                    <div className="space-y-10">
+                      <div>
+                        <h3 className="text-3xl font-bold text-slate-800 tracking-tight mb-3 flex items-center gap-3">
+                          WhatsApp Integration <ShieldCheck className="text-emerald-500 w-6 h-6" />
+                        </h3>
+                        <p className="text-slate-500 text-sm leading-relaxed max-w-md font-medium">Connect your official Meta Business account to enable automated patient adherence loops.</p>
+                      </div>
+                      
+                      <div className="space-y-8 max-w-lg">
+                        <div className="space-y-2 group">
+                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                            <Key size={14} className="text-blue-500" /> Permanent Access Token
+                          </label>
+                          <div className="relative rounded-2xl p-[1px] bg-slate-200 transition-all duration-500 group-focus-within:bg-gradient-to-r group-focus-within:from-blue-400 group-focus-within:to-cyan-400 shadow-sm">
+                            <div className="relative bg-white/90 backdrop-blur-xl rounded-[calc(2rem-1px)] flex items-center">
+                              <input 
+                                type={showToken ? "text" : "password"} 
+                                value={formData.meta_whatsapp_token}
+                                onChange={(e) => setFormData({...formData, meta_whatsapp_token: e.target.value})}
+                                className="w-full bg-transparent px-5 py-4 text-slate-800 font-mono text-sm focus:outline-none placeholder-slate-300"
+                                placeholder="EAAGm0..."
+                              />
+                              <button 
+                                onClick={() => setShowToken(!showToken)}
+                                className="absolute right-3 p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+                              >
+                                {showToken ? <EyeOff size={18} /> : <Eye size={18} />}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 group">
+                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Phone Number ID</label>
+                          <div className="relative rounded-2xl p-[1px] bg-slate-200 transition-all duration-500 group-focus-within:bg-gradient-to-r group-focus-within:from-blue-400 group-focus-within:to-cyan-400 shadow-sm">
                             <input 
-                              type={showToken ? "text" : "password"} 
-                              value={formData.meta_whatsapp_token}
-                              onChange={(e) => setFormData({...formData, meta_whatsapp_token: e.target.value})}
-                              className="w-full bg-transparent px-5 py-4 text-slate-800 font-mono text-sm focus:outline-none placeholder-slate-300"
-                              placeholder="EAAGm0..."
+                              type="text" 
+                              value={formData.whatsapp_phone_id}
+                              onChange={(e) => setFormData({...formData, whatsapp_phone_id: e.target.value})}
+                              className="w-full bg-white/90 backdrop-blur-xl rounded-[calc(2rem-1px)] px-5 py-4 text-slate-800 font-mono text-sm focus:outline-none placeholder-slate-300"
+                              placeholder="1029384756"
                             />
-                            <button 
-                              onClick={() => setShowToken(!showToken)}
-                              className="absolute right-3 p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
-                            >
-                              {showToken ? <EyeOff size={18} /> : <Eye size={18} />}
-                            </button>
                           </div>
                         </div>
                       </div>
+                    </div>
+                  )}
 
-                      {/* Phone ID Input */}
-                      <div className="space-y-2 group">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Phone Number ID</label>
-                        <div className="relative rounded-2xl p-[1px] bg-slate-200 transition-all duration-500 group-focus-within:bg-gradient-to-r group-focus-within:from-blue-400 group-focus-within:to-cyan-400 shadow-sm">
+                  {activeTab === 'payments' && (
+                    <div className="space-y-10">
+                      <div>
+                        <h3 className="text-3xl font-bold text-slate-800 tracking-tight mb-3">UPI Payments</h3>
+                        <p className="text-slate-500 text-sm leading-relaxed max-w-md font-medium">Set the destination UPI ID. This will be dynamically embedded into patient refill reminders.</p>
+                      </div>
+                      <div className="space-y-2 max-w-lg group">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Business UPI ID</label>
+                        <div className="relative rounded-2xl p-[1px] bg-slate-200 transition-all duration-500 group-focus-within:bg-gradient-to-r group-focus-within:from-emerald-400 group-focus-within:to-teal-400 shadow-sm">
                           <input 
                             type="text" 
-                            value={formData.whatsapp_phone_id}
-                            onChange={(e) => setFormData({...formData, whatsapp_phone_id: e.target.value})}
+                            value={formData.upi_id}
+                            onChange={(e) => setFormData({...formData, upi_id: e.target.value})}
                             className="w-full bg-white/90 backdrop-blur-xl rounded-[calc(2rem-1px)] px-5 py-4 text-slate-800 font-mono text-sm focus:outline-none placeholder-slate-300"
-                            placeholder="1029384756"
+                            placeholder="pharmacy@icici"
                           />
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </div>
 
-                {activeTab === 'payments' && (
-                  <div className="space-y-10">
-                    <div>
-                      <h3 className="text-3xl font-bold text-slate-800 tracking-tight mb-3">UPI Payments</h3>
-                      <p className="text-slate-500 text-sm leading-relaxed max-w-md font-medium">Set the destination UPI ID. This will be dynamically embedded into patient refill reminders.</p>
-                    </div>
-                    <div className="space-y-2 max-w-lg group">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Business UPI ID</label>
-                      <div className="relative rounded-2xl p-[1px] bg-slate-200 transition-all duration-500 group-focus-within:bg-gradient-to-r group-focus-within:from-emerald-400 group-focus-within:to-teal-400 shadow-sm">
-                        <input 
-                          type="text" 
-                          value={formData.upi_id}
-                          onChange={(e) => setFormData({...formData, upi_id: e.target.value})}
-                          className="w-full bg-white/90 backdrop-blur-xl rounded-[calc(2rem-1px)] px-5 py-4 text-slate-800 font-mono text-sm focus:outline-none placeholder-slate-300"
-                          placeholder="pharmacy@icici"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </motion.div>
-            </AnimatePresence>
-
-            {/* DESIGN TOKEN: Liquid Titanium (Save Button) */}
             <div className="mt-auto pt-8 flex justify-end">
               <motion.button
                 onClick={handleSave}
