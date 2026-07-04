@@ -2,51 +2,42 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, ShieldCheck, Loader2, Bot, User, AlertTriangle } from 'lucide-react';
+import { Send, ShieldCheck, Bot, User, X, Sparkles, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-// Adjust import based on your actual store export name
-import { usePOSStore } from '@/store/posStore'; 
+import { usePOSStore } from '@/store/posStore';
 
 export default function CopilotPanel() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // Assuming these exist in your updated store
   const isCopilotOpen = usePOSStore((state: any) => state.isCopilotOpen);
+  const toggleCopilot = usePOSStore((state: any) => state.toggleCopilot);
   const chatHistory = usePOSStore((state: any) => state.chatHistory);
   const addChatMessage = usePOSStore((state: any) => state.addChatMessage);
-  const cart = usePOSStore((state: any) => state.cart); // Cross-reference cart
+  const cart = usePOSStore((state: any) => state.cart);
 
-  // Auto-scroll to bottom of chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory, isLoading]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
-
     const userText = input.trim();
     setInput('');
     
-    // 1. Add User Message to UI instantly (Optimistic UI)
     addChatMessage({ id: Date.now().toString(), role: 'user', content: userText });
     setIsLoading(true);
 
     try {
-      // 2. Cross-Reference: Append current cart items to the query context behind the scenes
       const cartContext = cart && cart.length > 0 
         ? `\n\n[SYSTEM NOTE: The patient is currently purchasing: ${cart.map((c: any) => c.name || c.sku_id).join(', ')}]` 
         : '';
 
-      // 3. Call Backend API
       const response = await fetch('/api/v1/knowledge-base/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          query: userText + cartContext,
-          top_k: 3 
-        }),
+        body: JSON.stringify({ query: userText + cartContext, top_k: 3 }),
       });
 
       if (!response.ok) {
@@ -56,19 +47,17 @@ export default function CopilotPanel() {
 
       const data = await response.json();
 
-      // 4. Add AI Response to UI
       addChatMessage({ 
         id: (Date.now() + 1).toString(), 
         role: 'ai', 
         content: data.answer,
         sources: data.context_used 
       });
-
-    } catch (error) {
+    } catch (error: any) {
       addChatMessage({ 
         id: (Date.now() + 1).toString(), 
         role: 'ai', 
-        content: "SYSTEM ERROR: Unable to reach clinical database. Consult pharmacist." 
+        content: `SYSTEM ERROR: ${error.message || "Unable to reach clinical database. Consult pharmacist."}` 
       });
     } finally {
       setIsLoading(false);
@@ -78,115 +67,154 @@ export default function CopilotPanel() {
   return (
     <AnimatePresence>
       {isCopilotOpen && (
-        <motion.div
-          initial={{ x: 400, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: 400, opacity: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="fixed right-0 top-0 h-screen w-96 bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-l border-gray-200 dark:border-gray-800 shadow-2xl flex flex-col z-50"
-        >
-          {/* Header */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center gap-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
-            <div className="p-2 bg-blue-500 rounded-lg shadow-inner">
-              <ShieldCheck className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h2 className="font-bold text-gray-900 dark:text-white text-sm">Clinical Copilot</h2>
-              <p className="text-xs text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                Safety Guard Active
-              </p>
-            </div>
-          </div>
+        <>
+          {/* Backdrop Blur Overlay */}
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={toggleCopilot}
+            className="fixed inset-0 bg-slate-900/10 backdrop-blur-sm z-40"
+          />
 
-          {/* Chat Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
-            {chatHistory?.length === 0 && (
-              <div className="text-center text-gray-400 text-sm mt-10 flex flex-col items-center gap-2">
-                <Bot className="w-8 h-8 opacity-50" />
-                <p>Ask about interactions, dosages, or pregnancy safety.</p>
-              </div>
-            )}
-
-            {chatHistory?.map((msg: any) => (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                key={msg.id} 
-                className={cn(
-                  "flex gap-3 max-w-[85%]",
-                  msg.role === 'user' ? "ml-auto flex-row-reverse" : "mr-auto"
-                )}
-              >
-                <div className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm",
-                  msg.role === 'user' ? "bg-indigo-100 text-indigo-600" : "bg-blue-600 text-white"
-                )}>
-                  {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
-                </div>
-                
-                <div className={cn(
-                  "p-3 rounded-2xl text-sm shadow-sm",
-                  msg.role === 'user' 
-                    ? "bg-indigo-600 text-white rounded-tr-none" 
-                    : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-100 dark:border-gray-700 rounded-tl-none"
-                )}>
-                  <p className="leading-relaxed">{msg.content}</p>
-                  
-                  {/* Source Citations (Trust Building) */}
-                  {msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-3 pt-2 border-t border-gray-100 dark:border-gray-700">
-                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Verified Sources</p>
-                      {msg.sources.map((src: any, idx: number) => (
-                        <div key={idx} className="text-xs text-gray-500 bg-gray-50 dark:bg-gray-900 p-1.5 rounded mb-1 border border-gray-100 dark:border-gray-800">
-                          {src.sku_id}: {src.content.substring(0, 60)}...
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            ))}
+          {/* 3D Perspective Wrapper */}
+          <div className="fixed inset-y-0 right-0 w-full max-w-[440px] z-50 p-4 md:p-6" style={{ perspective: '1200px' }}>
             
-            {/* Loading Skeleton */}
-            {isLoading && (
-              <div className="flex gap-3 max-w-[85%] mr-auto">
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shrink-0 shadow-sm">
-                  <Loader2 className="w-4 h-4 text-white animate-spin" />
+            {/* DESIGN TOKEN: Iridescent Pearl Wrapper */}
+            <motion.div
+              initial={{ x: "100%", rotateY: -25, opacity: 0, scale: 0.95 }}
+              animate={{ x: 0, rotateY: 0, opacity: 1, scale: 1 }}
+              exit={{ x: "100%", rotateY: -15, opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", damping: 35, stiffness: 300, mass: 0.8 }}
+              className="h-full w-full rounded-[2.5rem] p-[1px] bg-gradient-to-br from-blue-200/60 via-rose-200/60 to-amber-200/60 shadow-[0_24px_64px_rgba(0,0,0,0.1)] origin-right"
+            >
+              {/* Quantum Glass Inner Container */}
+              <div className="relative h-full w-full bg-white/80 backdrop-blur-3xl rounded-[calc(2.5rem-1px)] flex flex-col overflow-hidden">
+                
+                {/* Dynamic SVG Film Grain Texture */}
+                <div className="absolute inset-0 opacity-[0.04] pointer-events-none mix-blend-overlay" 
+                     style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}>
                 </div>
-                <div className="p-4 rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-tl-none flex items-center gap-1">
-                  <span className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                  <span className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                  <span className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
 
-          {/* Input Area */}
-          <div className="p-4 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800">
-            <div className="relative flex items-center">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                placeholder="Verify clinical safety..."
-                className="w-full bg-gray-100 dark:bg-gray-800 border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 rounded-full py-3 pl-4 pr-12 text-sm transition-all outline-none"
-                disabled={isLoading}
-              />
-              <button 
-                onClick={handleSend}
-                disabled={isLoading || !input.trim()}
-                className="absolute right-2 p-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-full transition-colors shadow-md"
-              >
-                <Send size={16} className={cn(isLoading && "opacity-0")} />
-                {isLoading && <Loader2 size={16} className="absolute top-2 left-2 animate-spin" />}
-              </button>
-            </div>
+                {/* Header */}
+                <div className="relative z-10 p-6 border-b border-slate-100/50 flex items-center justify-between bg-white/40">
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-50 to-violet-50 border border-cyan-100/50 shadow-sm">
+                      <Bot className="w-5 h-5 text-cyan-600" />
+                      <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-white rounded-full"></span>
+                    </div>
+                    <div>
+                      <h2 className="font-bold text-slate-800 tracking-tight text-lg">Clinical Copilot</h2>
+                      <p className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 uppercase tracking-wider">
+                        <ShieldCheck size={12} /> Safety Guard Active
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={toggleCopilot} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100/50 rounded-full transition-colors">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {/* Chat Area */}
+                <div className="relative z-10 flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth">
+                  {chatHistory?.length === 0 && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col items-center justify-center text-center space-y-4">
+                      <div className="w-16 h-16 bg-gradient-to-br from-cyan-100/50 to-violet-100/50 rounded-2xl flex items-center justify-center border border-white shadow-sm">
+                        <Sparkles className="w-8 h-8 text-cyan-500" />
+                      </div>
+                      <div>
+                        <h3 className="text-slate-700 font-semibold">How can I assist?</h3>
+                        <p className="text-slate-400 text-sm max-w-[200px] mt-1">Ask about interactions, dosages, or pregnancy safety.</p>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {chatHistory?.map((msg: any) => (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      key={msg.id} 
+                      className={cn("flex gap-3 max-w-[88%]", msg.role === 'user' ? "ml-auto flex-row-reverse" : "mr-auto")}
+                    >
+                      <div className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm border border-white/50",
+                        msg.role === 'user' ? "bg-slate-100 text-slate-600" : "bg-gradient-to-br from-cyan-500 to-violet-500 text-white"
+                      )}>
+                        {msg.role === 'user' ? <User size={14} /> : <Bot size={14} />}
+                      </div>
+                      
+                      <div className={cn(
+                        "p-4 text-[15px] leading-relaxed shadow-sm",
+                        msg.role === 'user' 
+                          ? "bg-white border border-slate-100 text-slate-800 rounded-2xl rounded-tr-sm" // Tactile Brutalist
+                          : "bg-gradient-to-br from-slate-50 to-blue-50/30 border border-blue-100/50 text-slate-800 rounded-2xl rounded-tl-sm" // Liquid Mercury
+                      )}>
+                        <p>{msg.content}</p>
+                        
+                        {/* Verified Sources */}
+                        {msg.sources && msg.sources.length > 0 && (
+                          <div className="mt-4 pt-3 border-t border-slate-200/50">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                              <ShieldCheck size={12} className="text-emerald-500" /> Verified Sources
+                            </p>
+                            {msg.sources.map((src: any, idx: number) => (
+                              <div key={idx} className="text-xs text-slate-500 bg-white/60 p-2 rounded-lg mb-1.5 border border-slate-100 shadow-sm">
+                                <span className="font-semibold text-slate-700">{src.sku_id}:</span> {src.content.substring(0, 60)}...
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  ))}
+                  
+                  {/* Chromatic Aberration Loading Orb */}
+                  {isLoading && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3 max-w-[85%] mr-auto items-center">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-violet-500 flex items-center justify-center shrink-0 shadow-sm">
+                        <Bot size={14} className="text-white" />
+                      </div>
+                      <div className="p-4 rounded-2xl rounded-tl-sm bg-white/50 border border-slate-100 flex items-center gap-2">
+                        <motion.div 
+                          animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+                          transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                          className="w-3 h-3 rounded-full bg-cyan-400 shadow-[-2px_0_8px_rgba(6,182,212,0.5),2px_0_8px_rgba(217,70,239,0.5)]"
+                        />
+                        <span className="text-xs font-medium text-slate-400 tracking-widest uppercase">Processing</span>
+                      </div>
+                    </motion.div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Input Area */}
+                <div className="relative z-10 p-4 bg-white/60 backdrop-blur-md border-t border-slate-100/50">
+                  <div className="relative flex items-center group">
+                    <input
+                      type="text"
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                      placeholder="Verify clinical safety..."
+                      className="w-full bg-white border border-slate-200 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100 rounded-2xl py-4 pl-5 pr-14 text-[15px] text-slate-800 transition-all outline-none shadow-sm placeholder-slate-400"
+                      disabled={isLoading}
+                    />
+                    {/* Magnetic Send Button */}
+                    <motion.button 
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={handleSend}
+                      disabled={isLoading || !input.trim()}
+                      className="absolute right-2 p-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-xl transition-colors shadow-md"
+                    >
+                      <Send size={18} className={cn(isLoading && "opacity-0", "ml-0.5")} />
+                      {isLoading && <Loader2 size={18} className="absolute top-2.5 left-2.5 animate-spin" />}
+                    </motion.button>
+                  </div>
+                </div>
+
+              </div>
+            </motion.div>
           </div>
-        </motion.div>
+        </>
       )}
     </AnimatePresence>
   );
