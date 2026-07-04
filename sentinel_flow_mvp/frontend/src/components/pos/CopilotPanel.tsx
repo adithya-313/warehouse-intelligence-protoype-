@@ -75,8 +75,8 @@ export default function CopilotPanel() {
             className="fixed inset-0 bg-slate-900/10 backdrop-blur-sm z-40"
           />
 
-          {/* 3D Perspective Wrapper */}
-          <div className="fixed inset-y-0 right-0 w-full max-w-[440px] z-50 p-4 md:p-6" style={{ perspective: '1200px' }}>
+          {/* 3D Perspective Wrapper - Enforcing font-sans and antialiased for Apple typography */}
+          <div className="fixed inset-y-0 right-0 w-full max-w-[440px] z-50 p-4 md:p-6 font-sans antialiased" style={{ perspective: '1200px' }}>
             
             {/* DESIGN TOKEN: Iridescent Pearl Wrapper */}
             <motion.div
@@ -142,10 +142,10 @@ export default function CopilotPanel() {
                       </div>
                       
                       <div className={cn(
-                        "p-4 text-[15px] leading-relaxed shadow-sm",
+                        "p-4 text-sm leading-relaxed shadow-sm",
                         msg.role === 'user' 
-                          ? "bg-white border border-slate-100 text-slate-800 rounded-2xl rounded-tr-sm" // Tactile Brutalist
-                          : "bg-gradient-to-br from-slate-50 to-blue-50/30 border border-blue-100/50 text-slate-800 rounded-2xl rounded-tl-sm" // Liquid Mercury
+                          ? "bg-white border border-slate-100 text-slate-800 rounded-2xl rounded-tr-sm" 
+                          : "bg-gradient-to-br from-slate-50 to-blue-50/30 border border-blue-100/50 text-slate-800 rounded-2xl rounded-tl-sm"
                       )}>
                         <p>{msg.content}</p>
                         
@@ -166,19 +166,27 @@ export default function CopilotPanel() {
                     </motion.div>
                   ))}
                   
-                  {/* Chromatic Aberration Loading Orb */}
+                  {/* THE QUANTUM SYNAPSE LOADER */}
                   {isLoading && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3 max-w-[85%] mr-auto items-center">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-violet-500 flex items-center justify-center shrink-0 shadow-sm">
-                        <Bot size={14} className="text-white" />
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3 max-w-[85%] mr-auto items-center">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center shrink-0 shadow-sm border border-white/80">
+                        <Bot size={14} className="text-slate-400" />
                       </div>
-                      <div className="p-4 rounded-2xl rounded-tl-sm bg-white/50 border border-slate-100 flex items-center gap-2">
+                      <div className="relative overflow-hidden px-5 py-3 rounded-2xl rounded-tl-sm bg-white/60 border border-white/80 shadow-sm min-w-[120px] flex items-center justify-center">
+                        {/* Liquid Light Beam */}
                         <motion.div 
-                          animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+                          animate={{ x: ["-200%", "200%"] }}
                           transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                          className="w-3 h-3 rounded-full bg-cyan-400 shadow-[-2px_0_8px_rgba(6,182,212,0.5),2px_0_8px_rgba(217,70,239,0.5)]"
+                          className="absolute inset-0 w-full bg-gradient-to-r from-transparent via-cyan-400/20 to-transparent skew-x-12"
                         />
-                        <span className="text-xs font-medium text-slate-400 tracking-widest uppercase">Processing</span>
+                        {/* Breathing Text */}
+                        <motion.span 
+                          animate={{ opacity: [0.4, 1, 0.4] }}
+                          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                          className="text-[10px] font-bold tracking-[0.2em] uppercase bg-gradient-to-r from-cyan-600 to-blue-600 bg-clip-text text-transparent"
+                        >
+                          Synthesizing
+                        </motion.span>
                       </div>
                     </motion.div>
                   )}
@@ -194,7 +202,7 @@ export default function CopilotPanel() {
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                       placeholder="Verify clinical safety..."
-                      className="w-full bg-white border border-slate-200 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100 rounded-2xl py-4 pl-5 pr-14 text-[15px] text-slate-800 transition-all outline-none shadow-sm placeholder-slate-400"
+                      className="w-full bg-white border border-slate-200 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100 rounded-2xl py-4 pl-5 pr-14 text-sm text-slate-800 transition-all outline-none shadow-sm placeholder-slate-400"
                       disabled={isLoading}
                     />
                     {/* Magnetic Send Button */}
@@ -203,10 +211,9 @@ export default function CopilotPanel() {
                       whileTap={{ scale: 0.9 }}
                       onClick={handleSend}
                       disabled={isLoading || !input.trim()}
-                      className="absolute right-2 p-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-xl transition-colors shadow-md"
+                      className="absolute right-2 p-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-xl transition-colors shadow-md flex items-center justify-center"
                     >
-                      <Send size={18} className={cn(isLoading && "opacity-0", "ml-0.5")} />
-                      {isLoading && <Loader2 size={18} className="absolute top-2.5 left-2.5 animate-spin" />}
+                      {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} className="ml-0.5" />}
                     </motion.button>
                   </div>
                 </div>
