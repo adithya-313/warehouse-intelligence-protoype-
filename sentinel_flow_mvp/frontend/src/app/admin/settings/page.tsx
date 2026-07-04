@@ -8,7 +8,7 @@ import SettingsDashboard from '@/components/admin/SettingsDashboard';
 
 export default function SettingsPage() {
   return (
-    <div className="relative min-h-screen bg-[#fdfbfb] text-slate-800 overflow-hidden selection:bg-blue-100 font-sans antialiased">
+    <div className="relative min-h-screen bg-[#fdfbfb] text-slate-800 overflow-x-hidden selection:bg-blue-100 font-sans antialiased">
       
       {/* ETHEREAL BIOLOGICAL ORBS */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none flex items-center justify-center z-0">
