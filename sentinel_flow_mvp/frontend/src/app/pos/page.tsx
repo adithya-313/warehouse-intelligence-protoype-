@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
-import { Search, ScanLine, Bot, Settings, BarChart3, CreditCard } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Search, Bot, Settings, BarChart3, ShoppingBag, ArrowRight, Barcode } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePOSStore } from '@/store/posStore';
 import CopilotPanel from '@/components/pos/CopilotPanel';
@@ -16,140 +16,163 @@ export default function POSDashboard() {
   const totalAmount = cart.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
 
   return (
-    <div className="relative min-h-screen bg-[#05050A] text-white overflow-hidden font-sans selection:bg-cyan-500/30">
+    <div className="relative min-h-screen bg-[#fdfbfb] text-slate-800 overflow-hidden selection:bg-blue-100">
       
-      {/* GPU-ACCELERATED AMBIENT ORBS */}
+      {/* ETHEREAL BIOLOGICAL ORBS (GPU Accelerated) */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none flex items-center justify-center z-0">
         <motion.div 
-          animate={{ rotate: 360, scale: [1, 1.1, 1] }} 
-          transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-          className="absolute w-[800px] h-[800px] bg-cyan-500/5 blur-[150px] rounded-full will-change-transform translate-x-1/3 -translate-y-1/4" 
+          animate={{ rotate: 360, scale: [1, 1.05, 1] }} 
+          transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+          className="absolute w-[800px] h-[800px] bg-rose-100/50 blur-[120px] rounded-full will-change-transform translate-x-1/4 -translate-y-1/4 mix-blend-multiply" 
         />
         <motion.div 
-          animate={{ rotate: -360, scale: [1, 1.2, 1] }} 
-          transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-          className="absolute w-[600px] h-[600px] bg-fuchsia-500/5 blur-[150px] rounded-full will-change-transform -translate-x-1/3 translate-y-1/4" 
+          animate={{ rotate: -360, scale: [1, 1.1, 1] }} 
+          transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
+          className="absolute w-[600px] h-[600px] bg-blue-100/50 blur-[120px] rounded-full will-change-transform -translate-x-1/4 translate-y-1/4 mix-blend-multiply" 
+        />
+        <motion.div 
+          animate={{ scale: [1, 1.2, 1], opacity: [0.4, 0.6, 0.4] }} 
+          transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute w-[500px] h-[500px] bg-amber-50/60 blur-[100px] rounded-full will-change-transform mix-blend-multiply" 
         />
       </div>
 
       {/* MAIN LAYOUT */}
-      <div className="relative z-10 max-w-[1600px] mx-auto p-6 h-screen flex flex-col">
+      <div className="relative z-10 max-w-[1600px] mx-auto p-6 md:p-8 h-screen flex flex-col">
         
-        {/* HEADER */}
-        <header className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">Sentinel POS</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="text-xs font-medium text-emerald-400 uppercase tracking-widest">Kafka Mesh Online</span>
+        {/* FLOATING HEADER */}
+        <motion.header 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex justify-between items-center mb-8 bg-white/40 backdrop-blur-2xl border border-white/80 shadow-[0_4px_24px_rgba(0,0,0,0.02)] rounded-3xl px-6 py-4"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl flex items-center justify-center shadow-md">
+              <ShoppingBag className="text-white w-5 h-5" />
             </div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Sentinel</h1>
           </div>
 
           <div className="flex items-center gap-3">
-            <button 
+            <motion.button 
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={toggleCopilot}
-              className="px-4 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.15)]"
+              className="px-5 py-2.5 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/50 text-blue-600 rounded-2xl text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
             >
-              <Bot size={16} /> Ask Copilot
-            </button>
-            <Link 
-              href="/suppliers" 
-              className="px-4 py-2 bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.05] text-slate-300 rounded-xl text-sm font-semibold transition-all flex items-center gap-2"
-            >
-              <BarChart3 size={16} /> Vendor Intelligence
+              <Bot size={18} /> Clinical Copilot
+            </motion.button>
+            <Link href="/suppliers">
+              <motion.button 
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="px-5 py-2.5 bg-white/60 hover:bg-white border border-gray-200/50 text-slate-600 rounded-2xl text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
+              >
+                <BarChart3 size={18} /> Vendors
+              </motion.button>
             </Link>
-            <Link 
-              href="/admin/settings" 
-              className="p-2 bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.05] text-slate-400 hover:text-white rounded-xl transition-all"
-            >
-              <Settings size={18} />
+            <Link href="/admin/settings">
+              <motion.button 
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="p-2.5 bg-white/60 hover:bg-white border border-gray-200/50 text-slate-400 hover:text-slate-600 rounded-2xl transition-colors shadow-sm"
+              >
+                <Settings size={20} />
+              </motion.button>
             </Link>
           </div>
-        </header>
+        </motion.header>
 
         {/* TWO-COLUMN WORKSPACE */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 min-h-0">
           
-          {/* LEFT COLUMN: SEARCH & SCANNER */}
-          <div className="lg:col-span-8 flex flex-col gap-6">
-            
-            {/* Search Panel (Quantum Glass) */}
-            <div className="bg-white/[0.02] backdrop-blur-xl border border-white/[0.05] rounded-[2rem] p-8 shadow-2xl">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
-                <Search size={20} className="text-slate-400" /> Manual Entry
-              </h2>
-              <div className="flex gap-3">
+          {/* LEFT COLUMN: SEARCH & INVENTORY */}
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1 }}
+            className="lg:col-span-8 flex flex-col gap-8"
+          >
+            {/* Massive, Elegant Search Bar */}
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-100 to-rose-100 rounded-[2rem] blur-xl opacity-50 group-hover:opacity-70 transition-opacity duration-500"></div>
+              <div className="relative bg-white/80 backdrop-blur-3xl border border-white shadow-[0_8px_32px_rgba(0,0,0,0.04)] rounded-[2rem] p-4 flex items-center gap-4 transition-all focus-within:ring-4 focus-within:ring-blue-100 focus-within:border-blue-300">
+                <div className="p-4 bg-slate-50 rounded-2xl text-slate-400">
+                  <Search size={24} />
+                </div>
                 <input 
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Type barcode or medicine name..."
-                  className="flex-1 bg-black/40 border border-white/[0.1] rounded-xl px-5 py-4 text-white font-mono text-sm focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/50 transition-all placeholder-white/20"
+                  placeholder="Scan barcode or type medicine name..."
+                  className="flex-1 bg-transparent border-none text-xl text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-0 font-medium"
                 />
-                <button className="px-8 py-4 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl font-semibold transition-all">
-                  Add
-                </button>
-              </div>
-
-              {/* Sleek Global Scanner Status */}
-              <div className="mt-6 bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-cyan-500/20 rounded-lg">
-                    <ScanLine className="w-5 h-5 text-cyan-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-white">Hardware Scanner Active</h3>
-                    <p className="text-xs text-slate-400">Global listener enabled. Scan any barcode instantly.</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider">Ready</span>
+                {/* Subtle Scanner Indicator */}
+                <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50/50 rounded-xl border border-emerald-100/50">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  </span>
+                  <Barcode size={16} className="text-emerald-600" />
                 </div>
               </div>
             </div>
 
-            {/* Inventory / Quick Add Area (Placeholder for future) */}
-            <div className="flex-1 bg-white/[0.01] border border-white/[0.02] rounded-[2rem] flex items-center justify-center">
-              <p className="text-slate-600 text-sm font-mono uppercase tracking-widest">Awaiting Telemetry</p>
+            {/* Empty State / Inventory Area */}
+            <div className="flex-1 bg-white/40 backdrop-blur-xl border border-white/80 shadow-[0_8px_32px_rgba(0,0,0,0.02)] rounded-[2rem] flex flex-col items-center justify-center text-center p-10">
+              <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mb-6 shadow-inner border border-slate-100">
+                <ScanLine size={32} className="text-slate-300" />
+              </div>
+              <h3 className="text-xl font-semibold text-slate-700 mb-2">Ready for next patient</h3>
+              <p className="text-slate-400 max-w-sm">The system is listening. Scan a product to instantly add it to the active transaction.</p>
             </div>
-          </div>
+          </motion.div>
 
-          {/* RIGHT COLUMN: CART */}
-          <div className="lg:col-span-4 bg-white/[0.02] backdrop-blur-xl border border-white/[0.05] rounded-[2rem] flex flex-col shadow-2xl overflow-hidden">
-            <div className="p-6 border-b border-white/[0.05]">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                Current Order
-              </h2>
+          {/* RIGHT COLUMN: THE RECEIPT (CART) */}
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2 }}
+            className="lg:col-span-4 bg-white/70 backdrop-blur-3xl border border-white shadow-[0_16px_48px_rgba(0,0,0,0.05)] rounded-[2.5rem] flex flex-col overflow-hidden relative"
+          >
+            <div className="p-8 border-b border-slate-100/50">
+              <h2 className="text-xl font-bold text-slate-800 tracking-tight">Current Order</h2>
             </div>
             
-            <div className="flex-1 p-6 overflow-y-auto">
-              {cart.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-slate-500 text-sm">
-                  Cart is empty. Scan an item to begin.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Cart items would map here */}
-                </div>
-              )}
+            <div className="flex-1 p-8 overflow-y-auto">
+              <AnimatePresence mode="popLayout">
+                {cart.length === 0 ? (
+                  <motion.div 
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="h-full flex flex-col items-center justify-center text-slate-400"
+                  >
+                    <ShoppingBag size={48} className="mb-4 opacity-20" />
+                    <p className="font-medium">Cart is empty</p>
+                  </motion.div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Cart items would map here with layout animations */}
+                  </div>
+                )}
+              </AnimatePresence>
             </div>
 
-            <div className="p-6 bg-black/40 border-t border-white/[0.05]">
+            {/* Checkout Footer */}
+            <div className="p-8 bg-white/80 backdrop-blur-md border-t border-slate-100/50">
               <div className="flex justify-between items-end mb-6">
-                <span className="text-slate-400 text-sm font-medium">Total Amount</span>
-                <span className="text-4xl font-black text-white tracking-tight">₹{totalAmount.toFixed(2)}</span>
+                <span className="text-slate-500 font-medium">Total Amount</span>
+                <span className="text-5xl font-black text-slate-900 tracking-tighter">₹{totalAmount.toFixed(2)}</span>
               </div>
-              <button 
+              <motion.button 
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 disabled={cart.length === 0}
-                className="w-full py-4 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-400 rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-slate-900/20"
               >
-                <CreditCard size={18} /> Complete Transaction
-              </button>
+                Complete Checkout <ArrowRight size={20} />
+              </motion.button>
             </div>
-          </div>
+          </motion.div>
 
         </div>
       </div>
