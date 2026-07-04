@@ -2,7 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+@supports (font: -apple-system-body) and (-webkit-appearance: none) {
+  html { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+}
 body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   background-color: #f8fafc;
   color: #0f172a;
 }

@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, CreditCard, Shield, Check, Loader2, Key } from 'lucide-react';
+import { MessageSquare, CreditCard, Check, Loader2, Key } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// Removed the useless Security tab
 const TABS = [
   { id: 'whatsapp', label: 'WhatsApp API', icon: MessageSquare },
   { id: 'payments', label: 'UPI Payments', icon: CreditCard },
-  { id: 'security', label: 'Security', icon: Shield },
 ];
 
 export default function SettingsDashboard() {
@@ -20,7 +20,6 @@ export default function SettingsDashboard() {
     whatsapp_phone_id: ''
   });
 
-  // Fetch current settings on mount
   useEffect(() => {
     fetch('/api/v1/settings', { headers: { 'X-Tenant-ID': 'PHARM-001' } })
       .then(res => res.json())
@@ -32,18 +31,12 @@ export default function SettingsDashboard() {
             whatsapp_phone_id: data.whatsapp_phone_id || ''
           });
         }
-      })
-      .catch(() => {/* backend may not be running in dev */});
+      });
   }, []);
 
   const handleSave = async () => {
     setSaveState('saving');
-    
-    // Only send token if it was actually changed (not the masked dots)
-    const payload: Record<string, string> = {
-      upi_id: formData.upi_id,
-      whatsapp_phone_id: formData.whatsapp_phone_id,
-    };
+    const payload: any = { upi_id: formData.upi_id, whatsapp_phone_id: formData.whatsapp_phone_id };
     if (!formData.meta_whatsapp_token.includes('••••')) {
       payload.meta_whatsapp_token = formData.meta_whatsapp_token;
     }
@@ -56,28 +49,29 @@ export default function SettingsDashboard() {
       });
       setSaveState('success');
       setTimeout(() => setSaveState('idle'), 2000);
-    } catch {
+    } catch (error) {
       setSaveState('idle');
     }
   };
 
   return (
-    <div className="relative min-h-screen bg-[#030712] flex items-center justify-center p-6 overflow-hidden font-sans">
-      {/* Ambient Bioluminescence Background */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-indigo-600/20 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute top-1/3 left-1/3 w-[400px] h-[400px] bg-cyan-500/10 blur-[100px] rounded-full pointer-events-none" />
+    <div className="relative min-h-screen bg-[#fdfbfb] flex items-center justify-center p-6 overflow-hidden">
+      {/* Ethereal Biological Orbs */}
+      <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-rose-100/60 blur-[120px] rounded-full pointer-events-none mix-blend-multiply" />
+      <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-blue-100/60 blur-[100px] rounded-full pointer-events-none mix-blend-multiply" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-amber-50/40 blur-[150px] rounded-full pointer-events-none mix-blend-multiply" />
 
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.98, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="relative w-full max-w-4xl bg-white/[0.02] border border-white/[0.05] backdrop-blur-3xl rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[600px]"
+        transition={{ type: "spring", stiffness: 400, damping: 40 }}
+        className="relative w-full max-w-4xl bg-white/60 backdrop-blur-3xl border border-white/80 shadow-[0_8px_32px_rgba(0,0,0,0.04)] rounded-[2rem] overflow-hidden flex flex-col md:flex-row min-h-[600px]"
       >
         {/* Sidebar Navigation */}
-        <div className="w-full md:w-72 bg-black/40 border-r border-white/[0.05] p-6 flex flex-col">
-          <div className="mb-10">
-            <h2 className="text-white text-xl font-black tracking-tight">Workspace</h2>
-            <p className="text-gray-500 text-xs uppercase tracking-widest mt-1 font-semibold">Tenant Configuration</p>
+        <div className="w-full md:w-72 bg-white/40 border-r border-gray-100/50 p-8 flex flex-col">
+          <div className="mb-12">
+            <h2 className="text-slate-800 text-2xl font-semibold tracking-tight">Settings</h2>
+            <p className="text-slate-500 text-xs uppercase tracking-widest mt-2 font-medium">Pharmacy Profile</p>
           </div>
 
           <nav className="flex flex-col gap-2">
@@ -89,140 +83,85 @@ export default function SettingsDashboard() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    "relative flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors outline-none text-left",
-                    isActive ? "text-white" : "text-gray-400 hover:text-gray-200"
+                    "relative flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-medium transition-all outline-none",
+                    isActive ? "text-slate-900" : "text-slate-500 hover:text-slate-700 hover:bg-white/50"
                   )}
                 >
                   {isActive && (
                     <motion.div
                       layoutId="activeTab"
-                      className="absolute inset-0 bg-indigo-500/20 border border-indigo-500/30 rounded-xl"
-                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                      className="absolute inset-0 bg-white shadow-sm border border-gray-100 rounded-2xl"
+                      transition={{ type: "spring", stiffness: 500, damping: 35 }}
                     />
                   )}
-                  <Icon size={18} className="relative z-10 flex-shrink-0" />
+                  <Icon size={18} className="relative z-10" />
                   <span className="relative z-10">{tab.label}</span>
                 </button>
               );
             })}
           </nav>
-
-          {/* Sidebar Footer */}
-          <div className="mt-auto pt-6 border-t border-white/[0.05]">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-indigo-500/30 border border-indigo-400/30 flex items-center justify-center">
-                <span className="text-indigo-300 text-xs font-bold">P1</span>
-              </div>
-              <div>
-                <p className="text-white text-xs font-semibold">PHARM-001</p>
-                <p className="text-gray-500 text-xs">Admin</p>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 p-10 flex flex-col relative">
+        <div className="flex-1 p-10 md:p-12 flex flex-col relative">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
               className="flex-1"
             >
               {activeTab === 'whatsapp' && (
-                <div className="space-y-8">
+                <div className="space-y-10">
                   <div>
-                    <h3 className="text-2xl font-bold text-white mb-2">Meta Graph API</h3>
-                    <p className="text-gray-400 text-sm leading-relaxed">
-                      Configure your official WhatsApp Business credentials for automated adherence loops.
-                    </p>
+                    <h3 className="text-3xl font-semibold text-slate-800 tracking-tight mb-3">WhatsApp Integration</h3>
+                    <p className="text-slate-500 text-sm leading-relaxed max-w-md">Connect your official Meta Business account to enable automated patient adherence loops.</p>
                   </div>
-
-                  <div className="space-y-5">
+                  
+                  <div className="space-y-6 max-w-lg">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                      <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                         <Key size={12} /> Permanent Access Token
                       </label>
-                      <input
-                        type="password"
+                      <input 
+                        type="password" 
                         value={formData.meta_whatsapp_token}
-                        onChange={(e) => setFormData({ ...formData, meta_whatsapp_token: e.target.value })}
-                        className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder-gray-700"
+                        onChange={(e) => setFormData({...formData, meta_whatsapp_token: e.target.value})}
+                        className="w-full bg-white/50 border border-gray-200 rounded-2xl px-5 py-4 text-slate-700 font-mono text-sm focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all placeholder-slate-300 shadow-sm"
                         placeholder="EAAGm0..."
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Phone Number ID</label>
-                      <input
-                        type="text"
+                      <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Phone Number ID</label>
+                      <input 
+                        type="text" 
                         value={formData.whatsapp_phone_id}
-                        onChange={(e) => setFormData({ ...formData, whatsapp_phone_id: e.target.value })}
-                        className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder-gray-700"
+                        onChange={(e) => setFormData({...formData, whatsapp_phone_id: e.target.value})}
+                        className="w-full bg-white/50 border border-gray-200 rounded-2xl px-5 py-4 text-slate-700 font-mono text-sm focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all placeholder-slate-300 shadow-sm"
                         placeholder="1029384756"
                       />
                     </div>
-                  </div>
-
-                  {/* Info card */}
-                  <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-xl p-4">
-                    <p className="text-indigo-300 text-xs leading-relaxed">
-                      🔒 Your access token is encrypted at rest and never exposed via the API. The dashboard only shows whether a token is configured.
-                    </p>
                   </div>
                 </div>
               )}
 
               {activeTab === 'payments' && (
-                <div className="space-y-8">
+                <div className="space-y-10">
                   <div>
-                    <h3 className="text-2xl font-bold text-white mb-2">UPI Integration</h3>
-                    <p className="text-gray-400 text-sm leading-relaxed">
-                      Set the destination UPI ID for automated refill payment links sent via WhatsApp.
-                    </p>
+                    <h3 className="text-3xl font-semibold text-slate-800 tracking-tight mb-3">UPI Payments</h3>
+                    <p className="text-slate-500 text-sm leading-relaxed max-w-md">Set the destination UPI ID. This will be dynamically embedded into patient refill reminders.</p>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Business UPI ID</label>
-                    <input
-                      type="text"
+                  <div className="space-y-2 max-w-lg">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Business UPI ID</label>
+                    <input 
+                      type="text" 
                       value={formData.upi_id}
-                      onChange={(e) => setFormData({ ...formData, upi_id: e.target.value })}
-                      className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder-gray-700"
+                      onChange={(e) => setFormData({...formData, upi_id: e.target.value})}
+                      className="w-full bg-white/50 border border-gray-200 rounded-2xl px-5 py-4 text-slate-700 font-mono text-sm focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition-all placeholder-slate-300 shadow-sm"
                       placeholder="pharmacy@icici"
                     />
-                  </div>
-                  <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4">
-                    <p className="text-emerald-300 text-xs leading-relaxed">
-                      💳 Payment links are generated dynamically per transaction and include the patient's prescription total.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'security' && (
-                <div className="space-y-8">
-                  <div>
-                    <h3 className="text-2xl font-bold text-white mb-2">Security</h3>
-                    <p className="text-gray-400 text-sm leading-relaxed">
-                      Tenant isolation and access control configuration.
-                    </p>
-                  </div>
-                  <div className="space-y-4">
-                    {[
-                      { label: 'Multi-tenant isolation', status: 'Enforced', color: 'emerald' },
-                      { label: 'X-Tenant-ID header auth', status: 'Active', color: 'emerald' },
-                      { label: 'Payload tenant override', status: 'Blocked', color: 'emerald' },
-                      { label: 'Token encryption at rest', status: 'AES-256', color: 'indigo' },
-                    ].map((item) => (
-                      <div key={item.label} className="flex items-center justify-between bg-black/30 border border-white/[0.05] rounded-xl px-4 py-3">
-                        <span className="text-gray-300 text-sm">{item.label}</span>
-                        <span className={`text-xs font-bold px-2 py-1 rounded-md bg-${item.color}-500/10 text-${item.color}-400 border border-${item.color}-500/20`}>
-                          {item.status}
-                        </span>
-                      </div>
-                    ))}
                   </div>
                 </div>
               )}
@@ -230,39 +169,23 @@ export default function SettingsDashboard() {
           </AnimatePresence>
 
           {/* Haptic Save Button */}
-          <div className="mt-auto pt-8 border-t border-white/10 flex justify-end">
+          <div className="mt-auto pt-8 flex justify-end">
             <motion.button
               onClick={handleSave}
-              disabled={saveState !== 'idle' || activeTab === 'security'}
-              whileHover={{ scale: saveState === 'idle' && activeTab !== 'security' ? 1.02 : 1 }}
-              whileTap={{ scale: saveState === 'idle' && activeTab !== 'security' ? 0.95 : 1 }}
+              disabled={saveState !== 'idle'}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
               className={cn(
-                "relative overflow-hidden px-8 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center min-w-[140px]",
-                activeTab === 'security'
-                  ? "bg-white/5 text-gray-600 cursor-not-allowed border border-white/5"
-                  : saveState === 'idle'
-                  ? "bg-white text-black hover:bg-gray-200"
-                  : saveState === 'saving'
-                  ? "bg-indigo-600 text-white"
-                  : "bg-green-500 text-white"
+                "relative overflow-hidden px-8 py-3.5 rounded-2xl font-semibold text-sm transition-all flex items-center justify-center min-w-[140px] shadow-sm",
+                saveState === 'idle' ? "bg-slate-900 text-white hover:bg-slate-800 hover:shadow-md" : 
+                saveState === 'saving' ? "bg-blue-500 text-white" : 
+                "bg-emerald-500 text-white"
               )}
             >
               <AnimatePresence mode="wait">
-                {saveState === 'idle' && (
-                  <motion.span key="idle" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                    {activeTab === 'security' ? 'Read Only' : 'Save Changes'}
-                  </motion.span>
-                )}
-                {saveState === 'saving' && (
-                  <motion.div key="saving" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  </motion.div>
-                )}
-                {saveState === 'success' && (
-                  <motion.div key="success" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
-                    <Check className="w-5 h-5" />
-                  </motion.div>
-                )}
+                {saveState === 'idle' && <motion.span key="idle" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>Save Changes</motion.span>}
+                {saveState === 'saving' && <motion.div key="saving" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><Loader2 className="w-5 h-5 animate-spin" /></motion.div>}
+                {saveState === 'success' && <motion.div key="success" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}><Check className="w-5 h-5" /></motion.div>}
               </AnimatePresence>
             </motion.button>
           </div>
