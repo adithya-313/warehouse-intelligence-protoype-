@@ -1,47 +1,59 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useMotionValue, useSpring } from 'framer-motion';
 
 export default function GlobalCursor() {
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isHovering, setIsHovering] = useState(false);
+  
+  // OPTIMIZATION: useMotionValue bypasses React state, preventing 60FPS re-renders.
+  const mouseX = useMotionValue(-100);
+  const mouseY = useMotionValue(-100);
+  
+  // Ultra-tight spring physics for zero-latency tracking
+  const springX = useSpring(mouseX, { damping: 40, stiffness: 800, mass: 0.05 });
+  const springY = useSpring(mouseY, { damping: 40, stiffness: 800, mass: 0.05 });
 
   useEffect(() => {
     const updateMousePosition = (e: MouseEvent) => {
-      setMousePosition({ x: e.clientX, y: e.clientY });
+      mouseX.set(e.clientX);
+      mouseY.set(e.clientY);
       
-      // Check if hovering over a clickable element
       const target = e.target as HTMLElement;
-      const isClickable = window.getComputedStyle(target).cursor === 'pointer' || target.tagName.toLowerCase() === 'button' || target.tagName.toLowerCase() === 'a';
+      const isClickable = window.getComputedStyle(target).cursor === 'pointer' || 
+                          target.tagName.toLowerCase() === 'button' || 
+                          target.tagName.toLowerCase() === 'a' ||
+                          target.closest('button') !== null ||
+                          target.closest('a') !== null;
       setIsHovering(isClickable);
     };
 
-    window.addEventListener('mousemove', updateMousePosition);
+    window.addEventListener('mousemove', updateMousePosition, { passive: true });
     return () => window.removeEventListener('mousemove', updateMousePosition);
-  }, []);
+  }, [mouseX, mouseY]);
 
-  // Hide on touch devices
   if (typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches) {
     return null;
   }
 
   return (
     <motion.div
-      className="fixed top-0 left-0 w-6 h-6 bg-blue-500/20 border border-blue-400/50 backdrop-blur-sm rounded-full pointer-events-none z-[9999] flex items-center justify-center mix-blend-multiply"
-      animate={{
-        x: mousePosition.x - 12,
-        y: mousePosition.y - 12,
-        scale: isHovering ? 2.5 : 1,
-        backgroundColor: isHovering ? "rgba(16, 185, 129, 0.1)" : "rgba(56, 189, 248, 0.2)",
-        borderColor: isHovering ? "rgba(16, 185, 129, 0.4)" : "rgba(56, 189, 248, 0.5)"
+      className="fixed top-0 left-0 pointer-events-none z-[9999] flex items-center justify-center rounded-full"
+      style={{
+        x: springX,
+        y: springY,
+        translateX: "-50%",
+        translateY: "-50%"
       }}
-      transition={{ type: "spring", stiffness: 800, damping: 35, mass: 0.1 }}
-    >
-      <motion.div 
-        className="w-1 h-1 bg-blue-600 rounded-full"
-        animate={{ scale: isHovering ? 0 : 1 }}
-      />
-    </motion.div>
+      animate={{
+        width: isHovering ? 48 : 16,
+        height: isHovering ? 48 : 16,
+        backgroundColor: isHovering ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0)",
+        backdropFilter: isHovering ? "blur(4px)" : "blur(0px)",
+        border: isHovering ? "1px solid rgba(255, 255, 255, 0.4)" : "1.5px solid rgba(148, 163, 184, 0.8)",
+        boxShadow: isHovering ? "0 4px 12px rgba(0,0,0,0.05), inset 0 0 8px rgba(255,255,255,0.2)" : "none"
+      }}
+      transition={{ type: "spring", stiffness: 500, damping: 28, mass: 0.1 }}
+    />
   );
 }

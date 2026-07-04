@@ -48,7 +48,8 @@ export default function CopilotPanel() {
   const cart = usePOSStore((state: any) => state.cart);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // OPTIMIZATION: block: "nearest" prevents the browser window from jerking downward
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [chatHistory, isLoading]);
 
   const handleSend = async () => {

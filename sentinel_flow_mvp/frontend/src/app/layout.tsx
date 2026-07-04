@@ -14,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="font-sans antialiased bg-[#fdfbfb] text-slate-900 cursor-none">
+      <body className="font-sans antialiased bg-[#fdfbfb] text-slate-900 cursor-none overflow-hidden w-screen h-screen">
         <GlobalCursor />
         {children}
       </body>
