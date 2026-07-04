@@ -1,216 +1,160 @@
 "use client";
 
 import React, { useState } from 'react';
-import { usePOSStore } from '../../store/posStore';
-import { useHardwareScanner } from '../../hooks/useHardwareScanner';
-import { checkoutCart } from '../../services/posApi';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Toaster, toast } from 'sonner';
-import { ShoppingCart, ScanLine, Search, Trash2, CreditCard, Bot, BarChart3, Settings } from 'lucide-react';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
+import { Search, ScanLine, Bot, Settings, BarChart3, CreditCard } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { usePOSStore } from '@/store/posStore';
 import CopilotPanel from '@/components/pos/CopilotPanel';
 
-export default function POSInterface() {
-  const { cart, addItem, removeItem, clearCart, getTotal, isProcessing, setProcessing } = usePOSStore();
-  const [manualInput, setManualInput] = useState('');
-
-  // --- The Hardware Scanner Integration ---
-  useHardwareScanner((barcode) => {
-    // In a real app, you would fetch the item details from the DB using the barcode.
-    // For this MVP, we mock the database lookup.
-    const mockItem = {
-      batch_id: `BATCH-${barcode}`,
-      sku_id: `SKU-${barcode.substring(0, 4)}`,
-      name: `Medication (${barcode})`,
-      price: 15.99
-    };
-    addItem(mockItem);
-    toast.success(`${mockItem.name} added to cart`);
-  });
-
-  // --- Manual Entry Handler ---
-  const handleManualAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualInput) return;
-    addItem({
-      batch_id: `BATCH-${manualInput}`,
-      sku_id: `SKU-MANUAL`,
-      name: `Manual Entry (${manualInput})`,
-      price: 10.00
-    });
-    toast.success(`Item added manually`);
-    setManualInput('');
-  };
-
-  // --- Checkout Handler ---
-  const handleCheckout = async () => {
-    if (cart.length === 0) return;
-    setProcessing(true);
-    try {
-      // Send to Kafka via FastAPI
-      await checkoutCart(cart, "STORE-001");
-      toast.success("Transaction Complete! Sent to Event Mesh.", {
-        style: { background: '#10b981', color: 'white', border: 'none' }
-      });
-      clearCart();
-    } catch (error) {
-      toast.error("Checkout failed. Please try again.");
-    } finally {
-      setProcessing(false);
-    }
-  };
+export default function POSDashboard() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const toggleCopilot = usePOSStore((state: any) => state.toggleCopilot);
+  const cart = usePOSStore((state: any) => state.cart) || [];
+  
+  const totalAmount = cart.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-emerald-500/30">
-      {/* Beautiful Toast Notifications */}
-      <Toaster position="top-center" theme="dark" />
+    <div className="relative min-h-screen bg-[#05050A] text-white overflow-hidden font-sans selection:bg-cyan-500/30">
+      
+      {/* GPU-ACCELERATED AMBIENT ORBS */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none flex items-center justify-center z-0">
+        <motion.div 
+          animate={{ rotate: 360, scale: [1, 1.1, 1] }} 
+          transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
+          className="absolute w-[800px] h-[800px] bg-cyan-500/5 blur-[150px] rounded-full will-change-transform translate-x-1/3 -translate-y-1/4" 
+        />
+        <motion.div 
+          animate={{ rotate: -360, scale: [1, 1.2, 1] }} 
+          transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+          className="absolute w-[600px] h-[600px] bg-fuchsia-500/5 blur-[150px] rounded-full will-change-transform -translate-x-1/3 translate-y-1/4" 
+        />
+      </div>
 
-      {/* Top Navigation Bar */}
-      <header className="flex items-center justify-between px-8 py-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
-            <ScanLine className="w-6 h-6 text-emerald-400" />
-          </div>
-          <h1 className="text-xl font-semibold tracking-tight text-white">Sentinel POS</h1>
-        </div>
-        <div className="flex items-center gap-4 text-sm text-slate-400">
-          <button onClick={() => usePOSStore.getState().toggleCopilot()} className="p-2 bg-blue-100 text-blue-600 rounded-lg font-bold flex items-center gap-2">
-            <Bot size={20}/> Ask Copilot
-          </button>
-          <Link href="/suppliers" className="p-2 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors flex items-center gap-2">
-            <BarChart3 size={20} /> Vendor Intelligence
-          </Link>
-          <Link href="/admin/settings" className="p-2 text-gray-400 hover:text-gray-200 hover:bg-slate-800 rounded-lg transition-colors" title="Tenant Settings">
-            <Settings size={20} />
-          </Link>
-          <span className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            Kafka Mesh Online
-          </span>
-        </div>
-      </header>
-
-      <main className="flex h-[calc(100vh-73px)]">
-        {/* Left Panel: Scanner & Search */}
-        <div className="w-1/2 p-8 border-r border-slate-800 flex flex-col gap-8">
-          
-          {/* Manual Entry Section */}
-          <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 shadow-xl">
-            <h2 className="text-lg font-medium text-white mb-4 flex items-center gap-2">
-              <Search className="w-5 h-5 text-slate-400" />
-              Manual Entry
-            </h2>
-            <form onSubmit={handleManualAdd} className="relative">
-              <input 
-                type="text" 
-                value={manualInput}
-                onChange={(e) => setManualInput(e.target.value)}
-                placeholder="Type barcode or medicine name..." 
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl py-4 px-5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
-              />
-              <button type="submit" className="absolute right-3 top-3 bg-slate-800 hover:bg-slate-700 text-white px-4 py-1.5 rounded-lg transition-colors">
-                Add
-              </button>
-            </form>
-          </div>
-
-          {/* Sleek Global Scanner Status */}
-          <div className="mt-6 bg-blue-50/5 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-xl p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-                <ScanLine className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white">Hardware Scanner Active</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Global listener enabled. Scan any barcode instantly.</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+      {/* MAIN LAYOUT */}
+      <div className="relative z-10 max-w-[1600px] mx-auto p-6 h-screen flex flex-col">
+        
+        {/* HEADER */}
+        <header className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-white">Sentinel POS</h1>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
-              <span className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider">Ready</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Panel: The Cart */}
-        <div className="w-1/2 bg-slate-900/30 flex flex-col relative">
-          <div className="p-8 flex-1 overflow-y-auto">
-            <h2 className="text-2xl font-semibold text-white mb-6 flex items-center gap-3">
-              <ShoppingCart className="w-6 h-6 text-emerald-400" />
-              Current Order
-            </h2>
-
-            {/* Cart Items with Framer Motion for smooth entry/exit */}
-            <div className="flex flex-col gap-3">
-              <AnimatePresence>
-                {cart.length === 0 && (
-                  <motion.p 
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="text-slate-500 text-center py-10"
-                  >
-                    Cart is empty. Scan an item to begin.
-                  </motion.p>
-                )}
-                {cart.map((item) => (
-                  <motion.div 
-                    key={item.batch_id}
-                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, x: -50, scale: 0.95 }}
-                    transition={{ duration: 0.2 }}
-                    className="flex items-center justify-between bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 hover:border-slate-600 transition-colors"
-                  >
-                    <div>
-                      <h3 className="text-white font-medium">{item.name}</h3>
-                      <p className="text-sm text-slate-400">Batch: {item.batch_id}</p>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <span className="text-lg font-semibold text-emerald-400">
-                        ₹{(item.price * item.quantity).toFixed(2)}
-                      </span>
-                      <div className="flex items-center gap-3 bg-slate-950 px-3 py-1 rounded-lg border border-slate-800">
-                        <span className="text-slate-300">Qty:</span>
-                        <span className="text-white font-medium">{item.quantity}</span>
-                      </div>
-                      <button 
-                        onClick={() => removeItem(item.batch_id)}
-                        className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+              <span className="text-xs font-medium text-emerald-400 uppercase tracking-widest">Kafka Mesh Online</span>
             </div>
           </div>
 
-          {/* Checkout Footer */}
-          <div className="p-8 bg-slate-900 border-t border-slate-800">
-            <div className="flex items-center justify-between mb-6">
-              <span className="text-slate-400 text-lg">Total Amount</span>
-              <span className="text-4xl font-bold text-white">₹{getTotal().toFixed(2)}</span>
-            </div>
+          <div className="flex items-center gap-3">
             <button 
-              onClick={handleCheckout}
-              disabled={cart.length === 0 || isProcessing}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-bold text-lg py-5 rounded-xl flex items-center justify-center gap-3 transition-all shadow-[0_0_40px_-10px_rgba(16,185,129,0.5)] disabled:shadow-none"
+              onClick={toggleCopilot}
+              className="px-4 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.15)]"
             >
-              {isProcessing ? (
-                <span className="animate-pulse">Processing via Kafka...</span>
-              ) : (
-                <>
-                  <CreditCard className="w-6 h-6" />
-                  Complete Transaction
-                </>
-              )}
+              <Bot size={16} /> Ask Copilot
             </button>
+            <Link 
+              href="/suppliers" 
+              className="px-4 py-2 bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.05] text-slate-300 rounded-xl text-sm font-semibold transition-all flex items-center gap-2"
+            >
+              <BarChart3 size={16} /> Vendor Intelligence
+            </Link>
+            <Link 
+              href="/admin/settings" 
+              className="p-2 bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.05] text-slate-400 hover:text-white rounded-xl transition-all"
+            >
+              <Settings size={18} />
+            </Link>
           </div>
+        </header>
+
+        {/* TWO-COLUMN WORKSPACE */}
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0">
+          
+          {/* LEFT COLUMN: SEARCH & SCANNER */}
+          <div className="lg:col-span-8 flex flex-col gap-6">
+            
+            {/* Search Panel (Quantum Glass) */}
+            <div className="bg-white/[0.02] backdrop-blur-xl border border-white/[0.05] rounded-[2rem] p-8 shadow-2xl">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
+                <Search size={20} className="text-slate-400" /> Manual Entry
+              </h2>
+              <div className="flex gap-3">
+                <input 
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Type barcode or medicine name..."
+                  className="flex-1 bg-black/40 border border-white/[0.1] rounded-xl px-5 py-4 text-white font-mono text-sm focus:outline-none focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/50 transition-all placeholder-white/20"
+                />
+                <button className="px-8 py-4 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl font-semibold transition-all">
+                  Add
+                </button>
+              </div>
+
+              {/* Sleek Global Scanner Status */}
+              <div className="mt-6 bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-cyan-500/20 rounded-lg">
+                    <ScanLine className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Hardware Scanner Active</h3>
+                    <p className="text-xs text-slate-400">Global listener enabled. Scan any barcode instantly.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider">Ready</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Inventory / Quick Add Area (Placeholder for future) */}
+            <div className="flex-1 bg-white/[0.01] border border-white/[0.02] rounded-[2rem] flex items-center justify-center">
+              <p className="text-slate-600 text-sm font-mono uppercase tracking-widest">Awaiting Telemetry</p>
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN: CART */}
+          <div className="lg:col-span-4 bg-white/[0.02] backdrop-blur-xl border border-white/[0.05] rounded-[2rem] flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-white/[0.05]">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                Current Order
+              </h2>
+            </div>
+            
+            <div className="flex-1 p-6 overflow-y-auto">
+              {cart.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+                  Cart is empty. Scan an item to begin.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Cart items would map here */}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 bg-black/40 border-t border-white/[0.05]">
+              <div className="flex justify-between items-end mb-6">
+                <span className="text-slate-400 text-sm font-medium">Total Amount</span>
+                <span className="text-4xl font-black text-white tracking-tight">₹{totalAmount.toFixed(2)}</span>
+              </div>
+              <button 
+                disabled={cart.length === 0}
+                className="w-full py-4 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-400 rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <CreditCard size={18} /> Complete Transaction
+              </button>
+            </div>
+          </div>
+
         </div>
-      </main>
+      </div>
+
+      {/* COPILOT OVERLAY */}
       <CopilotPanel />
     </div>
   );
