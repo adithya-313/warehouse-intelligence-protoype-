@@ -36,6 +36,7 @@ from app.services.kafka_producer import start_kafka_producer, stop_kafka_produce
 from app.api.pos_router import router as pos_router
 from app.api.erp_router import router as erp_router
 from app.api.supplier_router import router as supplier_router
+from app.api.v1.procurement_router import router as procurement_router
 from app.core.config import get_application_settings
 from app.core.metrics import get_metrics_app
 from app.domain.schemas import (
@@ -259,6 +260,8 @@ def create_application() -> FastAPI:
     application_instance.include_router(pos_router, prefix="/api/v1/pos", tags=["Point of Sale (Event Mesh)"])
     application_instance.include_router(erp_router, prefix="/api/v1/erp", tags=["Legacy ERP Bridge"])
     application_instance.include_router(supplier_router, prefix="/api/v1/suppliers", tags=["Distributor Management"])
+
+    application_instance.include_router(procurement_router, prefix="/api/v1")
 
     application_instance.include_router(patients.router, prefix="/api/v1/patients", tags=["CRM & Adherence"])
     application_instance.include_router(settings.router, prefix="/api/v1/settings", tags=["Tenant Settings"])
