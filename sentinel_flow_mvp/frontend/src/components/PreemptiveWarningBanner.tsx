@@ -10,6 +10,7 @@ export function PreemptiveWarningBanner() {
   const [alerts, setAlerts] = useState<DiseaseWaveAlert[]>([]);
   const [isOrdering, setIsOrdering] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
 
   useEffect(() => {
     // Fetch alerts on mount
@@ -18,13 +19,14 @@ export function PreemptiveWarningBanner() {
 
   const handleOneClickPO = async (alert: DiseaseWaveAlert) => {
     setIsOrdering(true);
+    setOrderError(null); // Reset error state
     try {
       const res = await api.createAutoPO(alert.sku_id, alert.recommended_supplier_id, alert.expected_volume);
       setOrderSuccess(`PO #${res.po_id} routed successfully!`);
-      // Remove alert after success
       setTimeout(() => setAlerts((prev) => prev.filter((a) => a.sku_id !== alert.sku_id)), 3000);
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error("PO Creation Failed:", error);
+      setOrderError("Failed to route PO. Check backend logs.");
     } finally {
       setIsOrdering(false);
     }
@@ -61,29 +63,30 @@ export function PreemptiveWarningBanner() {
                 </div>
               </div>
 
-              <button
-                onClick={() => handleOneClickPO(alert)}
-                disabled={isOrdering || !!orderSuccess}
-                className={cn(
-                  "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white transition-all shadow-md",
-                  orderSuccess 
-                    ? "bg-emerald-500 hover:bg-emerald-600" 
-                    : "bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 hover:shadow-lg hover:-translate-y-0.5",
-                  isOrdering && "opacity-70 cursor-not-allowed"
-                )}
-              >
-                {orderSuccess ? (
-                  <>
-                    <CheckCircle2 className="w-5 h-5" />
-                    {orderSuccess}
-                  </>
-                ) : (
-                  <>
-                    <ShoppingCart className="w-5 h-5" />
-                    {isOrdering ? "Routing PO..." : "1-Click Approve PO"}
-                  </>
-                )}
-              </button>
+              <div className="flex flex-col items-end gap-2">
+                <button
+                  onClick={() => handleOneClickPO(alert)}
+                  disabled={isOrdering || !!orderSuccess}
+                  className={cn(
+                    "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white transition-all shadow-md",
+                    orderSuccess 
+                      ? "bg-emerald-500 hover:bg-emerald-600" 
+                      : orderError
+                      ? "bg-red-500 hover:bg-red-600"
+                      : "bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 hover:shadow-lg hover:-translate-y-0.5",
+                    isOrdering && "opacity-70 cursor-not-allowed"
+                  )}
+                >
+                  {orderSuccess ? (
+                    <><CheckCircle2 className="w-5 h-5" /> {orderSuccess}</>
+                  ) : orderError ? (
+                    <><AlertTriangle className="w-5 h-5" /> Retry Order</>
+                  ) : (
+                    <><ShoppingCart className="w-5 h-5" /> {isOrdering ? "Routing PO..." : "1-Click Approve PO"}</>
+                  )}
+                </button>
+                {orderError && <span className="text-xs text-red-500 font-medium">{orderError}</span>}
+              </div>
             </div>
           ))}
         </div>
