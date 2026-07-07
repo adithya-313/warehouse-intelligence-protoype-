@@ -10,6 +10,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     libpq-dev \
     gcc \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # ISOLATED AI LAYER: Permanent cache for heavy ML libraries
