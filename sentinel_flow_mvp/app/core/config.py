@@ -65,6 +65,11 @@ class ApplicationSettings(BaseSettings):
         description="The Redis connection URL for Celery broker and pub/sub",
     )
 
+    KAFKA_BOOTSTRAP_SERVERS: str = Field(
+        default="redpanda:9092",
+        description="Kafka bootstrap servers",
+    )
+
     ML_TRAIN_BATCH_SIZE: int = Field(
         default=4,
         description="Batch size for ML training loops",

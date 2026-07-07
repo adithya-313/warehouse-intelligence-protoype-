@@ -2,6 +2,7 @@ import json
 import logging
 from aiokafka import AIOKafkaProducer
 from app.domain.schemas import MedicationSoldEvent
+from app.core.config import get_application_settings
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +16,9 @@ async def start_kafka_producer():
     """
     global _producer
     try:
+        settings = get_application_settings()
         _producer = AIOKafkaProducer(
-            bootstrap_servers='localhost:9092',
+            bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
             value_serializer=lambda v: json.dumps(v).encode('utf-8')
         )
         await _producer.start()

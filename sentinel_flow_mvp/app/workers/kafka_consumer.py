@@ -5,6 +5,7 @@ from aiokafka import AIOKafkaConsumer
 from sqlalchemy.orm import Session
 from app.infrastructure.database import SessionLocal
 from app.infrastructure.models import MedicationBatchModel
+from app.core.config import get_application_settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,10 +16,11 @@ async def consume_sales_events():
     Beginner Note: This runs independently of the API. It pulls events from the 
     'medication-sales' topic and safely deducts inventory.
     """
+    settings = get_application_settings()
     consumer = AIOKafkaConsumer(
         'medication-sales',
-        bootstrap_servers='localhost:9092',
-        group_id="ledger-updater-group",
+        bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
+        group_id="inventory-updater-group",
         value_deserializer=lambda m: json.loads(m.decode('utf-8'))
     )
     
