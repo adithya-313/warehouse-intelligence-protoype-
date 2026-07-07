@@ -7,6 +7,7 @@ import { Search, Bot, Settings, BarChart3, ShoppingBag, ArrowRight, Barcode, Sca
 import { cn } from '@/lib/utils';
 import { usePOSStore } from '@/store/posStore';
 import CopilotPanel from '@/components/pos/CopilotPanel';
+import { PreemptiveWarningBanner } from "@/components/PreemptiveWarningBanner";
 
 export default function POSDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -90,6 +91,9 @@ export default function POSDashboard() {
             </Link>
           </div>
         </motion.header>
+
+        {/* PREEMPTIVE BANNER */}
+        <PreemptiveWarningBanner />
 
         {/* TWO-COLUMN WORKSPACE */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 min-h-0">
