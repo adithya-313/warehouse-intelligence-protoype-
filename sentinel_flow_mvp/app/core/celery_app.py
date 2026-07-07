@@ -23,7 +23,7 @@ celery_application.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    imports=["app.services.worker_tasks", "app.workers.audit_worker", "app.services.lora_training_worker", "app.workers.embedding_tasks", "app.workers.adherence_tasks"],
+    imports=["app.services.worker_tasks", "app.workers.audit_worker", "app.services.lora_training_worker", "app.workers.embedding_tasks", "app.workers.adherence_tasks", "app.tasks.covariate_tasks"],
     beat_schedule={
         "run-drift-analysis-every-5-minutes": {
             "task": "run_drift_analysis",
@@ -32,6 +32,10 @@ celery_application.conf.update(
         "daily-adherence-sweep-8am": {
             "task": "app.workers.adherence_tasks.sweep_depletion_horizons",
             "schedule": crontab(hour=8, minute=0),
+        },
+        'fetch-covariates-every-6-hours': {
+            'task': 'fetch_exogenous_covariates_task',
+            'schedule': 21600.0, # 6 hours in seconds
         },
     },
 )
