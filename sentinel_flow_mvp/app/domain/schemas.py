@@ -247,6 +247,11 @@ class BaseInferenceRequest(BaseModel):
         description="Target model identifier (e.g., 'demand_forecast', 'fuel_cost').",
     )
 
+    covariates: Dict[str, float] | None = Field(
+        default=None, 
+        description="Exogenous variables like weather or trends"
+    )
+
     features: Dict[str, Any] = Field(
         ...,
         description="Dictionary containing the input feature vector for the model.",
