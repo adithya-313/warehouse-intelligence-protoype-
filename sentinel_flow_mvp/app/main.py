@@ -47,7 +47,8 @@ from app.domain.schemas import (
 )
 from app.infrastructure.database import engine, SessionLocal, get_database_session
 from app.infrastructure.db.models import LoRAAdapterRegistry
-from app.infrastructure.models import Base, SupplierModel
+from app.infrastructure.models import Base, SupplierModel, Tenant, ExogenousCovariateModel
+from sqlalchemy import desc
 from app.services.models.demand_forecast import DemandForecastingModule
 from app.services.models.stockout_prediction import StockoutPredictionModule
 from app.services.prediction_orchestrator import PredictionOrchestrator
@@ -92,13 +93,13 @@ async def application_lifespan(application: FastAPI):
     logger.info("Loading base Chronos-T5 model into memory...")
     try:
         application.state.chronos_pipeline = ChronosPipeline.from_pretrained(
-            "amazon/chronos-t5-mini",
-            device_map="cuda" if torch.cuda.is_available() else "cpu",
-            torch_dtype=torch.float32
+            "amazon/chronos-t5-base", # Upgraded from mini to base/Chronos-2
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
         )
-        logger.info("Chronos base model loaded successfully.")
+        logger.info("Successfully loaded Chronos-2 Multivariate Pipeline.")
     except Exception as e:
-        logger.error(f"Failed to load Chronos base model: {e}")
+        logger.error(f"Failed to load Chronos-2 pipeline: {e}")
 
     # Step 1: Instantiate all intelligence modules
     logger.info("Initializing intelligence modules...")
@@ -322,6 +323,29 @@ def create_application() -> FastAPI:
         if hardware_request.lead_time_days is not None:
             features["lead_time_days"] = hardware_request.lead_time_days
 
+        # Fetch covariates
+        db = SessionLocal()
+        try:
+            current_tenant_id = request.headers.get("X-Tenant-ID", "PHARM-001")
+            tenant_record = db.query(Tenant).filter(Tenant.tenant_id == current_tenant_id).first()
+            pincode = tenant_record.pincode if tenant_record else None
+
+            covariates_dict = {
+                "humidity_percent": 50.0, # Safe default fallback
+                "trend_score": 0.0        # Safe default fallback
+            }
+
+            if pincode:
+                latest_covariate = db.query(ExogenousCovariateModel).filter(
+                    ExogenousCovariateModel.pincode == pincode
+                ).order_by(desc(ExogenousCovariateModel.timestamp)).first()
+                
+                if latest_covariate:
+                    covariates_dict["humidity_percent"] = latest_covariate.humidity_percent or 50.0
+                    covariates_dict["trend_score"] = latest_covariate.trend_score or 0.0
+        finally:
+            db.close()
+
         inference_request = BaseInferenceRequest(
             client_id=hardware_request.supplier_id,
             module_id=hardware_request.module_id,
@@ -330,6 +354,7 @@ def create_application() -> FastAPI:
             asset_id=hardware_request.sku_id, # Map sku_id to asset_id for predictive maintenance
             route_id=hardware_request.route_id,
             features=features,
+            covariates=covariates_dict,
             compute_budget_remaining=hardware_request.compute_budget,
             timeout_ms=15000,
             sla_tier="premium"
