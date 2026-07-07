@@ -57,6 +57,9 @@ class ApplicationSettings(BaseSettings):
     # Phase 15.2: Google Gemini API Key for RAG Pipeline
     GEMINI_API_KEY: str | None = Field(default=None, description="Google Gemini API Key")
 
+    WEATHER_API_KEY: str | None = Field(default=None, description="Weather API Key")
+    TRENDS_API_KEY: str | None = Field(default=None, description="Search Trends API Key")
+
     redis_url: str = Field(
         default="redis://localhost:6379/0",
         description="The Redis connection URL for Celery broker and pub/sub",
