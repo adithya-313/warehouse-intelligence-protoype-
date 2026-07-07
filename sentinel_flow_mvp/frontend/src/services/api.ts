@@ -21,6 +21,15 @@ export interface DiseaseWaveAlert {
   warning_message: string;
 }
 
+export interface NotificationResponse {
+  id: number;
+  title: string;
+  message: string;
+  alert_type: string;
+  is_read: boolean;
+  created_at: string;
+}
+
 export interface AutoPOResponse {
   po_id: number;
   status: string;
@@ -200,6 +209,28 @@ export const api = {
       body: JSON.stringify({ sku_id, supplier_id, quantity }),
     });
     if (!response.ok) throw new Error("Failed to create Purchase Order");
+    return await response.json();
+  },
+
+  async fetchNotifications(): Promise<NotificationResponse[]> {
+    try {
+      const response = await fetch(`/api/v1/notifications/`, {
+        headers: { 'X-Tenant-ID': DEFAULT_TENANT },
+      });
+      if (!response.ok) return [];
+      return await response.json();
+    } catch (error) {
+      console.error("Failed to fetch notifications:", error);
+      return [];
+    }
+  },
+
+  async markNotificationRead(id: number): Promise<{status: string}> {
+    const response = await fetch(`/api/v1/notifications/${id}/read`, {
+      method: 'PATCH',
+      headers: { 'X-Tenant-ID': DEFAULT_TENANT },
+    });
+    if (!response.ok) throw new Error("Failed to mark notification as read");
     return await response.json();
   },
 };

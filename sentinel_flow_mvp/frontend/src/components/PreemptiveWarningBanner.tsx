@@ -40,48 +40,52 @@ export function PreemptiveWarningBanner() {
         exit={{ opacity: 0, scale: 0.95 }}
         className="mb-6 rounded-[2rem] p-[1px] bg-gradient-to-br from-rose-400/60 via-orange-300/60 to-amber-200/60 shadow-[0_16px_32px_rgba(225,29,72,0.15)]"
       >
-        <div className="bg-white/80 backdrop-blur-3xl rounded-[calc(2rem-1px)] p-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-rose-100 text-rose-600 rounded-full">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                Epidemiological Wave Detected
-                <span className="text-xs font-semibold px-2 py-1 bg-rose-100 text-rose-700 rounded-full">
-                  {(alerts[0].probability_score * 100).toFixed(0)}% Probability
-                </span>
-              </h3>
-              <p className="text-sm text-slate-600 mt-1">{alerts[0].warning_message}</p>
-              <p className="text-sm font-medium text-slate-700 mt-1">
-                Recommended Action: Procure {alerts[0].expected_volume} units of {alerts[0].sku_name}.
-              </p>
-            </div>
-          </div>
+        <div className="max-h-[200px] overflow-y-auto pr-2 space-y-4 custom-scrollbar">
+          {alerts.map((alert) => (
+            <div key={alert.sku_id} className="bg-white/80 backdrop-blur-3xl rounded-[calc(2rem-1px)] p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-rose-100 text-rose-600 rounded-full">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    Epidemiological Wave Detected
+                    <span className="text-xs font-semibold px-2 py-1 bg-rose-100 text-rose-700 rounded-full">
+                      {(alert.probability_score * 100).toFixed(0)}% Probability
+                    </span>
+                  </h3>
+                  <p className="text-sm text-slate-600 mt-1">{alert.warning_message}</p>
+                  <p className="text-sm font-medium text-slate-700 mt-1">
+                    Recommended Action: Procure {alert.expected_volume} units of {alert.sku_name}.
+                  </p>
+                </div>
+              </div>
 
-          <button
-            onClick={() => handleOneClickPO(alerts[0])}
-            disabled={isOrdering || !!orderSuccess}
-            className={cn(
-              "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white transition-all shadow-md",
-              orderSuccess 
-                ? "bg-emerald-500 hover:bg-emerald-600" 
-                : "bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 hover:shadow-lg hover:-translate-y-0.5",
-              isOrdering && "opacity-70 cursor-not-allowed"
-            )}
-          >
-            {orderSuccess ? (
-              <>
-                <CheckCircle2 className="w-5 h-5" />
-                {orderSuccess}
-              </>
-            ) : (
-              <>
-                <ShoppingCart className="w-5 h-5" />
-                {isOrdering ? "Routing PO..." : "1-Click Approve PO"}
-              </>
-            )}
-          </button>
+              <button
+                onClick={() => handleOneClickPO(alert)}
+                disabled={isOrdering || !!orderSuccess}
+                className={cn(
+                  "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white transition-all shadow-md",
+                  orderSuccess 
+                    ? "bg-emerald-500 hover:bg-emerald-600" 
+                    : "bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 hover:shadow-lg hover:-translate-y-0.5",
+                  isOrdering && "opacity-70 cursor-not-allowed"
+                )}
+              >
+                {orderSuccess ? (
+                  <>
+                    <CheckCircle2 className="w-5 h-5" />
+                    {orderSuccess}
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart className="w-5 h-5" />
+                    {isOrdering ? "Routing PO..." : "1-Click Approve PO"}
+                  </>
+                )}
+              </button>
+            </div>
+          ))}
         </div>
       </motion.div>
     </AnimatePresence>
