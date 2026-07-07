@@ -14,7 +14,8 @@ export function NotificationBell() {
     api.fetchNotifications().then(setNotifications).catch(console.error);
   }, []);
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const safeNotifications = Array.isArray(notifications) ? notifications : [];
+  const unreadCount = safeNotifications.filter((n) => !n.is_read).length;
 
   const handleMarkAsRead = async (id: number) => {
     try {
@@ -47,12 +48,12 @@ export function NotificationBell() {
           </div>
           
           <div className="max-h-96 overflow-y-auto custom-scrollbar">
-            {notifications.length === 0 ? (
+            {safeNotifications.length === 0 ? (
               <div className="p-6 text-center text-sm text-slate-500">
                 No recent alerts.
               </div>
             ) : (
-              notifications.map((n) => (
+              safeNotifications.map((n) => (
                 <div
                   key={n.id}
                   onClick={() => handleMarkAsRead(n.id)}
