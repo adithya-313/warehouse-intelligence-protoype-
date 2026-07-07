@@ -291,3 +291,19 @@ class ExogenousCovariateModel(Base):
     __table_args__ = (
         UniqueConstraint('pincode', 'timestamp', 'symptom_keyword', name='uix_pincode_time_keyword'),
     )
+
+
+class NotificationModel(Base):
+    """
+    Persistent ledger for all system alerts (Disease Waves, Stockouts, etc.)
+    Ensures alerts are not lost upon page refresh.
+    """
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String, index=True, nullable=False)
+    title = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    alert_type = Column(String, nullable=False) # e.g., "DISEASE_WAVE", "SYSTEM"
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
