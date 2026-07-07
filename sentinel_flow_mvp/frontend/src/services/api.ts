@@ -215,7 +215,8 @@ export const api = {
 
   async fetchNotifications(): Promise<NotificationResponse[]> {
     try {
-      const response = await fetch(`/api/v1/notifications/`, {
+      // Removed trailing slash to prevent FastAPI 307 redirect and CORS preflight failure
+      const response = await fetch(`/api/v1/notifications`, {
         headers: { 'X-Tenant-ID': DEFAULT_TENANT },
         cache: 'no-store'
       });
