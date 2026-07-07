@@ -5,8 +5,10 @@ from typing import Dict, Any, Tuple
 from tenacity import retry, stop_after_attempt, wait_exponential
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut
+from app.core.config import get_application_settings
 
 logger = logging.getLogger(__name__)
+settings = get_application_settings()
 
 class CovariateParser:
     """
@@ -39,8 +41,9 @@ class CovariateParser:
         except GeocoderTimedOut:
             logger.warning(f"Geocoding timed out for {pincode}")
             
-        # Fallback to Bangalore coordinates if geocoding fails (Graceful Degradation)
-        return 12.9716, 77.5946, "Bengaluru"
+        # Fallback to configured epicenter (Kochi) if geocoding fails (Graceful Degradation)
+        logger.warning(f"Using fallback coordinates for {settings.FALLBACK_CITY}")
+        return settings.FALLBACK_LAT, settings.FALLBACK_LON, settings.FALLBACK_CITY
 
     @staticmethod
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
