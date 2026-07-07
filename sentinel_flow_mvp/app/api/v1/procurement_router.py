@@ -7,7 +7,7 @@ from sqlalchemy import func, desc
 
 from app.infrastructure.database import get_database_session
 from app.infrastructure.models import (
-    PurchaseOrderModel, SupplierModel, ExogenousCovariateModel, MedicationModel
+    PurchaseOrderModel, SupplierModel, ExogenousCovariateModel, MedicationModel, NotificationModel
 )
 from app.api.dependencies import get_current_tenant
 
@@ -69,6 +69,24 @@ def get_disease_wave_alerts(
 
             # Fallback to any supplier if no history exists
             supplier_id = best_supplier.supplier_id if best_supplier else "SUPP-001"
+
+            # Check if we already notified them today to prevent spam
+            today = datetime.now(timezone.utc).date()
+            existing_notif = db.query(NotificationModel).filter(
+                NotificationModel.tenant_id == tenant_id,
+                NotificationModel.alert_type == "DISEASE_WAVE",
+                func.date(NotificationModel.created_at) == today
+            ).first()
+
+            if not existing_notif:
+                new_notif = NotificationModel(
+                    tenant_id=tenant_id,
+                    title=f"Disease Wave: {med.sku_id}",
+                    message=f"High localized search trends detected. Preemptive stock recommended.",
+                    alert_type="DISEASE_WAVE"
+                )
+                db.add(new_notif)
+                db.commit()
 
             alerts.append(DiseaseWaveAlert(
                 sku_id=med.sku_id,
