@@ -181,6 +181,7 @@ class PurchaseOrderModel(Base):
     __tablename__ = "purchase_orders"
 
     po_id = Column(String, primary_key=True, index=True)
+    tenant_id = Column(String, index=True, nullable=True, default="system_admin")
     
     # Links to the supplier/distributor who is supposed to deliver this
     supplier_id = Column(String, ForeignKey("suppliers.supplier_id"), nullable=False)

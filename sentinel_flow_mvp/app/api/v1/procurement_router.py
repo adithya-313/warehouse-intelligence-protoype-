@@ -123,10 +123,11 @@ def create_auto_purchase_order(
             message="Existing pending order found. No new order created."
         )
 
-    # 2. Create new PO
+    # 2. Create new PO (Patched to include tenant_id)
     import uuid
     new_po = PurchaseOrderModel(
         po_id=str(uuid.uuid4()), # Need a string PO id
+        tenant_id=tenant_id, # <-- CRITICAL FIX
         supplier_id=request.supplier_id,
         sku_id=request.sku_id,
         ordered_qty=request.quantity,
