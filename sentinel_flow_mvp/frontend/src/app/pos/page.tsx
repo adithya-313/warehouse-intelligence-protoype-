@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { usePOSStore } from '@/store/posStore';
 import CopilotPanel from '@/components/pos/CopilotPanel';
 import { PreemptiveWarningBanner } from "@/components/PreemptiveWarningBanner";
+import { NotificationBell } from "@/components/NotificationBell";
 
 export default function POSDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,6 +56,7 @@ export default function POSDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
+            <NotificationBell />
             {/* DESIGN TOKEN: Neural Pulse (AI Button) */}
             <motion.button 
               whileHover={{ scale: 1.02 }}
