@@ -95,6 +95,11 @@ class ApplicationSettings(BaseSettings):
         description="Directory to store adapter weight files.",
     )
 
+    # Geographic Fallbacks (Defaulting to Kochi, Kerala for initial launch)
+    FALLBACK_LAT: float = Field(default=9.9312, description="Fallback latitude")
+    FALLBACK_LON: float = Field(default=76.2673, description="Fallback longitude")
+    FALLBACK_CITY: str = Field(default="Kochi", description="Fallback city")
+
 @lru_cache
 def get_application_settings() -> ApplicationSettings:
     """Get the cached application settings.
