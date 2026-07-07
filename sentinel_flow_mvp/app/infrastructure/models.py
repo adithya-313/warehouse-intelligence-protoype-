@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Date, Index, Numeric, text, Text, JSON
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Date, Index, Numeric, text, Text, JSON, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -31,6 +31,9 @@ class Tenant(Base):
     
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     is_active = Column(Boolean, default=True)
+
+    # Pincode is required to fetch localized weather and search trends
+    pincode = Column(String, index=True, nullable=True)
 
 
 class SupplierModel(Base):
@@ -262,3 +265,29 @@ class TreatmentPlan(Base):
     projected_depletion_date = Column(DateTime, nullable=False, index=True)
 
     is_active = Column(Boolean, default=True)
+
+
+# --- NEW MODEL ---
+class ExogenousCovariateModel(Base):
+    """
+    Stores external data (weather, search trends) by pincode and time.
+    Used by the ML Engine to predict demand spikes (e.g., rain -> fever meds).
+    """
+    __tablename__ = "exogenous_covariates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pincode = Column(String, index=True, nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    
+    # Weather Metrics
+    humidity_percent = Column(Float, nullable=True)
+    rain_mm = Column(Float, nullable=True)
+    
+    # Search Trend Metrics
+    symptom_keyword = Column(String, nullable=True) # e.g., "dengue symptoms"
+    trend_score = Column(Float, nullable=True) # 0 to 100 scale
+
+    # Idempotency: Prevent duplicate entries for the same location, time, and keyword
+    __table_args__ = (
+        UniqueConstraint('pincode', 'timestamp', 'symptom_keyword', name='uix_pincode_time_keyword'),
+    )
