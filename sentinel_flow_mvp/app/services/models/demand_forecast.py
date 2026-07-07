@@ -109,7 +109,29 @@ class DemandForecastingModule(BasePredictionModule):
                 # Truncate left
                 inventory_data = inventory_data[-90:]
 
-            context_tensor = torch.tensor(inventory_data, dtype=torch.float32).view(1, 90)
+            # 1. Extract historical inventory (Univariate baseline)
+            inventory_tensor = torch.tensor(inventory_data, dtype=torch.float32)
+            seq_len = inventory_tensor.shape[0]
+
+            # 2. Extract Covariates (Graceful degradation if missing)
+            covariates = request.covariates or {}
+            humidity = covariates.get("humidity_percent", 50.0)
+            trend_score = covariates.get("trend_score", 0.0)
+
+            # 3. Broadcast covariates across the time dimension
+            humidity_tensor = torch.full((seq_len,), humidity, dtype=torch.float32)
+            trend_tensor = torch.full((seq_len,), trend_score, dtype=torch.float32)
+
+            # 4. Construct Multivariate Tensor for Chronos-2
+            # Stack into shape: [num_features, seq_len] -> [3, seq_len]
+            multivariate_context = torch.stack([
+                inventory_tensor,
+                humidity_tensor,
+                trend_tensor
+            ])
+
+            # 5. Add batch dimension: [batch_size, num_features, seq_len] -> [1, 3, seq_len]
+            multivariate_context = multivariate_context.unsqueeze(0)
 
             swap_in_latency_ms = 0.0
             compute_latency_ms = 0.0
@@ -154,21 +176,29 @@ class DemandForecastingModule(BasePredictionModule):
                         pass
 
                 try:
-                    # Execute chronos prediction (predicts next 5 steps)
+                    # Execute chronos prediction (predicts next 30 steps)
                     t0_compute = time.perf_counter()
-                    forecast = await asyncio.to_thread(pipeline.predict, context_tensor, prediction_length=5)
+                    forecast = await asyncio.to_thread(
+                        pipeline.predict, 
+                        context=multivariate_context, 
+                        prediction_length=30,
+                        num_samples=20
+                    )
                     compute_latency_ms = (time.perf_counter() - t0_compute) * 1000.0
                     
-                    if isinstance(forecast[0], torch.Tensor):
+                    # 7. Aggregate results (Median)
+                    # Extract the primary feature (inventory) forecast from the output
+                    if isinstance(forecast, torch.Tensor):
                         try:
-                            forecast_trajectory = forecast[0].median(dim=0).values.tolist()
+                            forecast_trajectory = torch.median(forecast[0, 0, :], dim=0).values.tolist()
                         except Exception:
-                            forecast_trajectory = forecast[0].mean(dim=0).tolist()
+                            forecast_trajectory = forecast[0, 0, :].tolist()
                     else:
+                        # Fallback if numpy array returned
                         try:
-                            forecast_trajectory = np.median(forecast[0], axis=0).tolist()
+                            forecast_trajectory = np.median(forecast[0, 0, :], axis=0).tolist()
                         except Exception:
-                            forecast_trajectory = np.mean(forecast[0], axis=0).tolist()
+                            forecast_trajectory = forecast[0, 0, :].tolist()
                             
                     forecast_trajectory = [float(x) for x in forecast_trajectory]
                     predicted_demand = float(forecast_trajectory[0])
