@@ -127,7 +127,6 @@ def create_auto_purchase_order(
     import uuid
     new_po = PurchaseOrderModel(
         po_id=str(uuid.uuid4()), # Need a string PO id
-        tenant_id=tenant_id, # <-- CRITICAL FIX
         supplier_id=request.supplier_id,
         sku_id=request.sku_id,
         ordered_qty=request.quantity,
