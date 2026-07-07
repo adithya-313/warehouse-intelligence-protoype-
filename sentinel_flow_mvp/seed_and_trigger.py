@@ -5,10 +5,16 @@ from datetime import datetime, timezone
 # Ensure the app is in the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sentinel_flow_mvp.app.infrastructure.database import SessionLocal
-from sentinel_flow_mvp.app.infrastructure.models import (
-    Tenant, SupplierModel, MedicationModel, ExogenousCovariateModel
-)
+try:
+    from sentinel_flow_mvp.app.infrastructure.database import SessionLocal
+    from sentinel_flow_mvp.app.infrastructure.models import (
+        Tenant, SupplierModel, MedicationModel, ExogenousCovariateModel
+    )
+except ModuleNotFoundError:
+    from app.infrastructure.database import SessionLocal
+    from app.infrastructure.models import (
+        Tenant, SupplierModel, MedicationModel, ExogenousCovariateModel
+    )
 
 def seed_and_trigger():
     db = SessionLocal()
