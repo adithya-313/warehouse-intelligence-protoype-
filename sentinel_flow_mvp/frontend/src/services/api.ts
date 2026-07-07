@@ -190,6 +190,7 @@ export const api = {
     try {
       const response = await fetch(`/api/v1/procurement/disease-wave-alerts`, {
         headers: { 'X-Tenant-ID': DEFAULT_TENANT },
+        cache: 'no-store'
       });
       if (!response.ok) return [];
       return await response.json();
@@ -216,6 +217,7 @@ export const api = {
     try {
       const response = await fetch(`/api/v1/notifications/`, {
         headers: { 'X-Tenant-ID': DEFAULT_TENANT },
+        cache: 'no-store'
       });
       if (!response.ok) return [];
       return await response.json();
