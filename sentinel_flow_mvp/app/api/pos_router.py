@@ -139,21 +139,33 @@ def process_checkout(
     totalTransactionAmount = 0.0
 
     try:
-        # 2. Iterate through each item in the cart to validate stock and calculate totals
+        # 2. Create the empty receipt header FIRST so it has a row in the DB.
+        #    We don't know the total yet, so we use 0 temporarily.
+        newReceiptRecord = SaleReceiptModel(
+            id=generatedReceiptId,
+            total_amount_inr=0
+        )
+        db.add(newReceiptRecord)
+
+        # We MUST flush the session here to push the parent receipt into Postgres temporarily.
+        # This allows the child line items to reference its ID without triggering a Foreign Key violation.
+        db.flush()
+
+        # 3. Iterate through each item in the cart to validate stock and calculate totals
         for cartItem in payload.items:
             # We explicitly fetch the specific batch the user wants to buy
             currentBatchInventory = db.query(MedicationBatchModel).filter(
                 MedicationBatchModel.batch_id == cartItem.batch_id
             ).with_for_update().first() # with_for_update prevents other users from buying this exact batch at the exact same millisecond
 
-            # 3. Defensive check: Ensure the batch exists
+            # 4. Defensive check: Ensure the batch exists
             if not currentBatchInventory:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Batch {cartItem.batch_id} not found in inventory."
                 )
 
-            # 4. Optimistic Concurrency: Check if we have enough stock before deducting
+            # 5. Optimistic Concurrency: Check if we have enough stock before deducting
             if currentBatchInventory.available_quantity < cartItem.quantity:
                 insufficientStockException = f"Insufficient stock for {cartItem.sku_id}. Requested: {cartItem.quantity}, Available: {currentBatchInventory.available_quantity}"
                 raise HTTPException(
@@ -161,14 +173,14 @@ def process_checkout(
                     detail=insufficientStockException
                 )
 
-            # 5. Deduct the inventory quantity safely
+            # 6. Deduct the inventory quantity safely
             currentBatchInventory.available_quantity -= cartItem.quantity
             
-            # 6. Calculate the financial contribution of this line item
+            # 7. Calculate the financial contribution of this line item
             lineItemTotalCost = cartItem.quantity * cartItem.price
             totalTransactionAmount += lineItemTotalCost
 
-            # 7. Record the specific line item sold
+            # 8. Record the specific line item sold — receipt_id is safe now because we flushed
             newLineItemRecord = SaleLineItemModel(
                 receipt_id=generatedReceiptId,
                 batch_id=cartItem.batch_id,
@@ -177,14 +189,10 @@ def process_checkout(
             )
             db.add(newLineItemRecord)
 
-        # 8. Record the master receipt header now that we know the final total amount
-        newReceiptRecord = SaleReceiptModel(
-            id=generatedReceiptId,
-            total_amount_inr=totalTransactionAmount
-        )
-        db.add(newReceiptRecord)
+        # 9. Update the receipt header with the final calculated total
+        newReceiptRecord.total_amount_inr = totalTransactionAmount
 
-        # 9. Pragmatic Outbox Pattern: Save an event for background workers (Kafka/Analytics)
+        # 10. Pragmatic Outbox Pattern: Save an event for background workers (Kafka/Analytics)
         # By saving this inside the exact same database transaction, we guarantee we never
         # drop events if the server crashes right after the sale.
         outboxPayload = {
@@ -207,14 +215,14 @@ def process_checkout(
         )
         db.add(newOutboxEvent)
 
-        # 10. The ACID Guarantee: Commit ALL database writes at once.
+        # 11. The ACID Guarantee: Commit ALL database writes at once.
         # If any step above failed, the session would rollback automatically.
         db.commit()
 
-        # 11. The Courier: Trigger the background task to relay the outbox events to Kafka
+        # 12. The Courier: Trigger the background task to relay the outbox events to Kafka
         background_tasks.add_task(relay_outbox_events_to_kafka, db)
 
-        # 12. Return success to the frontend
+        # 13. Return success to the frontend
         return CheckoutResponseSchema(
             receipt_id=generatedReceiptId,
             message="Checkout completed successfully and outbox event registered."
