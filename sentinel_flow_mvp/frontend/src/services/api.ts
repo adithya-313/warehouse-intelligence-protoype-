@@ -236,6 +236,26 @@ export const api = {
     if (!response.ok) throw new Error("Failed to mark notification as read");
     return await response.json();
   },
+
+  async searchInventory(q: string): Promise<any[]> {
+    try {
+      const headers: Record<string, string> = {
+        'X-Tenant-ID': DEFAULT_TENANT,
+      };
+      if (_apiKey) {
+        headers['X-API-Key'] = _apiKey;
+      }
+      const response = await fetch(`/api/v1/inventory/search?q=${encodeURIComponent(q)}`, {
+        headers,
+        cache: 'no-store'
+      });
+      if (!response.ok) return [];
+      return await response.json();
+    } catch (error) {
+      console.error("Failed to search inventory:", error);
+      return [];
+    }
+  },
 };
 
 /**
