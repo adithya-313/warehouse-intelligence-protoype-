@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bot, Settings, BarChart3, ShoppingBag, ArrowRight, Barcode, ScanLine } from 'lucide-react';
+import { Search, Bot, Settings, BarChart3, ShoppingBag, ArrowRight, Barcode, ScanLine, CheckCircle2 } from 'lucide-react';
+import { toast, Toaster } from 'sonner';
 import { cn } from '@/lib/utils';
 import { usePOSStore } from '@/store/posStore';
 import CopilotPanel from '@/components/pos/CopilotPanel';
@@ -110,12 +111,24 @@ export default function POSDashboard() {
     setProcessing(true);
     try {
       const response = await api.submitCheckout(cart);
-      console.log(`Checkout successful! Receipt ID: ${response.receipt_id}`);
+      // Show a beautiful success toast with the receipt ID for the pharmacist's confirmation.
+      // Beginner Note: The toast auto-disappears after a few seconds — no need for the user to dismiss it.
+      const shortId = response.receipt_id.slice(-5);
+      toast.success(
+        <div className="flex items-center gap-3">
+          <CheckCircle2 className="text-emerald-500 w-6 h-6 shrink-0" />
+          <div>
+            <p className="font-bold text-slate-900">Checkout Complete!</p>
+            <p className="text-sm text-slate-500">Receipt ID: ...{shortId}</p>
+          </div>
+        </div>,
+        { duration: 4000 }
+      );
       // Once successfully saved to the database, we clear the frontend UI cart.
       clearCart();
     } catch (error) {
-      console.error("Checkout process failed:", error);
-      alert(error instanceof Error ? error.message : "An unknown error occurred during checkout.");
+      const message = error instanceof Error ? error.message : "An unknown error occurred during checkout.";
+      toast.error(message, { duration: 5000 });
     } finally {
       setProcessing(false);
     }
@@ -124,6 +137,9 @@ export default function POSDashboard() {
   return (
     <div className="relative min-h-screen bg-[#fdfbfb] text-slate-800 selection:bg-blue-100">
       
+      {/* Sonner Toast Renderer — renders above everything else */}
+      <Toaster position="top-right" richColors closeButton />
+
       {/* ETHEREAL BIOLOGICAL ORBS */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none flex items-center justify-center z-0">
         <motion.div 
