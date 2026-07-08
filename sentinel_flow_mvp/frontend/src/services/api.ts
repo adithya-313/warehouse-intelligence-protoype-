@@ -31,7 +31,7 @@ export interface NotificationResponse {
 }
 
 export interface AutoPOResponse {
-  po_id: number;
+  po_id: string;
   status: string;
   message: string;
 }

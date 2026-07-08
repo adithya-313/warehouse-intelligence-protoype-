@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { api } from '../services/api'; // Maintain your original API service import
+"use client";
 
-export default function NotificationBell() {
-  const [notifications, setNotifications] = useState<any[]>([]);
+import React, { useState, useEffect } from 'react';
+import { api, NotificationResponse } from '../services/api';
+
+export function NotificationBell() {
+  const [notifications, setNotifications] = useState<NotificationResponse[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -52,11 +54,10 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {/* Dropdown - Forced Absolute Overlay with Z-[9999] Stacking */}
+      {/* Dropdown — uses z-50 from the design token system (parent stack is z-10) */}
       {isOpen && (
         <div 
-          className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-2xl border border-gray-100 flex flex-col pointer-events-auto"
-          style={{ zIndex: 99999, position: 'absolute' }}
+          className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-2xl border border-gray-100 flex flex-col pointer-events-auto z-50"
         >
           <div className="p-4 border-b border-gray-100 bg-gray-50 rounded-t-lg">
             <h3 className="text-sm font-semibold text-gray-900">Notification Center</h3>
