@@ -100,9 +100,7 @@ class ApplicationSettings(BaseSettings):
     FALLBACK_LON: float = Field(default=76.2673, description="Fallback longitude")
     FALLBACK_CITY: str = Field(default="Kochi", description="Fallback city")
 
-    @property
-    def REDIS_URL(self) -> str:
-        return self.redis_url
+    REDIS_URL: str = "redis://redis:6379/0"
 
 @lru_cache
 def get_application_settings() -> ApplicationSettings:
