@@ -49,7 +49,7 @@ export function NotificationBell() {
           
           <div className="max-h-96 overflow-y-auto custom-scrollbar">
             {safeNotifications.length === 0 ? (
-              <div className="p-6 text-center text-sm text-slate-500">
+              <div className="p-4 text-gray-500">
                 No recent alerts.
               </div>
             ) : (
@@ -63,14 +63,14 @@ export function NotificationBell() {
                   )}
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <span className="font-semibold text-sm text-slate-800">
+                    <span className="font-semibold text-sm text-gray-900">
                       {n.title}
                     </span>
                     {!n.is_read && (
                       <span className="w-2 h-2 bg-blue-500 rounded-full mt-1.5"></span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-600 leading-relaxed">
+                  <p className="text-xs text-gray-600 leading-relaxed">
                     {n.message}
                   </p>
                   <span className="text-[10px] text-slate-400 mt-2 block">

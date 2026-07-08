@@ -32,7 +32,10 @@ export function PreemptiveWarningBanner() {
     }
   };
 
-  if (alerts.length === 0) return null;
+  const visibleAlerts = alerts.filter((a: any) => 
+    a.alert_type === 'DISEASE_WAVE' || (a.title && a.title.includes('Wave')) || a.sku_id
+  );
+  if (visibleAlerts.length === 0) return null;
 
   return (
     <AnimatePresence>
@@ -50,14 +53,14 @@ export function PreemptiveWarningBanner() {
                   <AlertTriangle className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                     Epidemiological Wave Detected
                     <span className="text-xs font-semibold px-2 py-1 bg-rose-100 text-rose-700 rounded-full">
                       {(alert.probability_score * 100).toFixed(0)}% Probability
                     </span>
                   </h3>
-                  <p className="text-sm text-slate-600 mt-1">{alert.warning_message}</p>
-                  <p className="text-sm font-medium text-slate-700 mt-1">
+                  <p className="text-sm text-gray-900 mt-1">{alert.warning_message}</p>
+                  <p className="text-sm font-medium text-gray-900 mt-1">
                     Recommended Action: Procure {alert.expected_volume} units of {alert.sku_name}.
                   </p>
                 </div>
