@@ -16,6 +16,7 @@ export default function POSDashboard() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   useEffect(() => {
     setMounted(true);
@@ -28,12 +29,25 @@ export default function POSDashboard() {
   
   const totalAmount = cart.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
 
+  const selectItem = (item: any) => {
+    addItem({
+      batch_id: item.batch_id,
+      sku_id: item.sku_id,
+      name: item.name,
+      price: item.price
+    });
+    setSearchQuery('');
+    setSearchResults([]);
+    setHighlightedIndex(-1);
+  };
+
   useEffect(() => {
     if (searchQuery.trim().length < 2) {
       setSearchResults([]);
       return;
     }
 
+    setHighlightedIndex(-1);
     setIsSearching(true);
     const delayDebounceFn = setTimeout(() => {
       api.searchInventory(searchQuery)
@@ -152,6 +166,32 @@ export default function POSDashboard() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onBlur={() => {
+                    // Delayed dismiss so onMouseDown on a result fires first
+                    setTimeout(() => {
+                      setSearchResults([]);
+                      setHighlightedIndex(-1);
+                    }, 200);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setHighlightedIndex((prev) =>
+                        prev < searchResults.length - 1 ? prev + 1 : 0
+                      );
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setHighlightedIndex((prev) =>
+                        prev > 0 ? prev - 1 : searchResults.length - 1
+                      );
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const idx = highlightedIndex >= 0 ? highlightedIndex : 0;
+                      if (searchResults[idx]) {
+                        selectItem(searchResults[idx]);
+                      }
+                    }
+                  }}
                   placeholder="Scan barcode or type medicine name..."
                   className="flex-1 bg-transparent border-none text-xl text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-0 font-medium"
                 />
@@ -197,20 +237,13 @@ export default function POSDashboard() {
                     transition={{ duration: 0.2 }}
                     className="absolute left-0 right-0 mt-2 bg-white/95 backdrop-blur-xl border border-slate-100 shadow-[0_16px_48px_rgba(0,0,0,0.08)] rounded-2xl z-50 overflow-hidden max-h-60 overflow-y-auto"
                   >
-                    {searchResults.map((item) => (
+                    {searchResults.map((item, idx) => (
                       <div
                         key={item.batch_id}
-                        onClick={() => {
-                          addItem({
-                            batch_id: item.batch_id,
-                            sku_id: item.sku_id,
-                            name: item.name,
-                            price: item.price
-                          });
-                          setSearchQuery('');
-                          setSearchResults([]);
-                        }}
-                        className="flex justify-between items-center p-4 hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-50 last:border-none"
+                        onMouseDown={() => selectItem(item)}
+                        className={`flex justify-between items-center p-4 cursor-pointer transition-colors border-b border-slate-50 last:border-none ${
+                          idx === highlightedIndex ? 'bg-blue-50' : 'hover:bg-slate-50'
+                        }`}
                       >
                         <div>
                           <div className="font-bold text-slate-800 text-sm">{item.name}</div>
