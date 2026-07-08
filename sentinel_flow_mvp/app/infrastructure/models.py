@@ -307,3 +307,50 @@ class NotificationModel(Base):
     alert_type = Column(String, nullable=False) # e.g., "DISEASE_WAVE", "SYSTEM"
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+# ==========================================
+# PHASE 17: POS CHECKOUT & PRAGMATIC OUTBOX
+# ==========================================
+
+class SaleReceiptModel(Base):
+    """
+    Beginner Note: This model acts as the header for a single customer checkout transaction.
+    It records when the sale occurred and the total amount collected.
+    """
+    __tablename__ = "sale_receipts"
+
+    id = Column(String, primary_key=True, index=True)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    total_amount_inr = Column(Numeric(10, 2), nullable=False)
+
+
+class SaleLineItemModel(Base):
+    """
+    Beginner Note: This model records every specific item purchased during the checkout.
+    It links back to the SaleReceiptModel and deducts from MedicationBatchModel.
+    """
+    __tablename__ = "sale_line_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    receipt_id = Column(String, ForeignKey("sale_receipts.id"), nullable=False, index=True)
+    batch_id = Column(String, ForeignKey("medication_batches.batch_id"), nullable=False)
+    
+    quantity_sold = Column(Integer, nullable=False)
+    price_per_unit = Column(Numeric(10, 2), nullable=False)
+
+
+class OutboxEventModel(Base):
+    """
+    Beginner Note: This is the core of the Pragmatic Transactional Outbox pattern.
+    Instead of directly calling external services (which might fail and cause data inconsistency),
+    we save an 'event' in the exact same database transaction as the sale.
+    A background worker will later read this table and send data to Kafka/Analytics reliably.
+    """
+    __tablename__ = "outbox_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_type = Column(String, nullable=False, index=True) # e.g., 'checkout_completed'
+    payload = Column(JSONB, nullable=False) # Stores the exact details of the sale in JSON format
+    status = Column(String, default="pending", index=True) # 'pending', 'processing', 'completed', 'failed'
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -5,6 +5,15 @@ from app.services.kafka_producer import publish_medication_sold
 from app.infrastructure.database import get_database_session
 from app.services.fefo_engine import get_optimal_fefo_batch
 from app.services.recommendation_engine import get_clinical_cross_sells, get_high_margin_generics
+from app.infrastructure.models import (
+    SaleReceiptModel, 
+    SaleLineItemModel, 
+    OutboxEventModel,
+    MedicationBatchModel
+)
+from pydantic import BaseModel
+from typing import List
+import uuid
 import logging
 
 router = APIRouter()
@@ -67,3 +76,123 @@ async def get_smart_recommendations(
         "cross_sells": cross_sells,
         "generic_alternatives": generics
     }
+
+# Beginner Note: This defines the exact structure of incoming data we expect from the frontend cart.
+class CheckoutItemSchema(BaseModel):
+    batch_id: str
+    sku_id: str
+    quantity: int
+    price: float
+
+class CheckoutRequestSchema(BaseModel):
+    items: List[CheckoutItemSchema]
+
+class CheckoutResponseSchema(BaseModel):
+    receipt_id: str
+    message: str
+
+@router.post("/checkout", response_model=CheckoutResponseSchema)
+def process_checkout(
+    payload: CheckoutRequestSchema,
+    db: Session = Depends(get_database_session)
+):
+    """
+    Process a POS checkout using the Pragmatic Transactional Outbox pattern.
+    Guarantees ACID compliance (all steps succeed, or nothing is saved).
+    """
+    from fastapi import status
+    # 1. Generate a unique ID for the entire sale receipt
+    generatedReceiptId = str(uuid.uuid4())
+    totalTransactionAmount = 0.0
+
+    try:
+        # 2. Iterate through each item in the cart to validate stock and calculate totals
+        for cartItem in payload.items:
+            # We explicitly fetch the specific batch the user wants to buy
+            currentBatchInventory = db.query(MedicationBatchModel).filter(
+                MedicationBatchModel.batch_id == cartItem.batch_id
+            ).with_for_update().first() # with_for_update prevents other users from buying this exact batch at the exact same millisecond
+
+            # 3. Defensive check: Ensure the batch exists
+            if not currentBatchInventory:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Batch {cartItem.batch_id} not found in inventory."
+                )
+
+            # 4. Optimistic Concurrency: Check if we have enough stock before deducting
+            if currentBatchInventory.available_quantity < cartItem.quantity:
+                insufficientStockException = f"Insufficient stock for {cartItem.sku_id}. Requested: {cartItem.quantity}, Available: {currentBatchInventory.available_quantity}"
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=insufficientStockException
+                )
+
+            # 5. Deduct the inventory quantity safely
+            currentBatchInventory.available_quantity -= cartItem.quantity
+            
+            # 6. Calculate the financial contribution of this line item
+            lineItemTotalCost = cartItem.quantity * cartItem.price
+            totalTransactionAmount += lineItemTotalCost
+
+            # 7. Record the specific line item sold
+            newLineItemRecord = SaleLineItemModel(
+                receipt_id=generatedReceiptId,
+                batch_id=cartItem.batch_id,
+                quantity_sold=cartItem.quantity,
+                price_per_unit=cartItem.price
+            )
+            db.add(newLineItemRecord)
+
+        # 8. Record the master receipt header now that we know the final total amount
+        newReceiptRecord = SaleReceiptModel(
+            id=generatedReceiptId,
+            total_amount_inr=totalTransactionAmount
+        )
+        db.add(newReceiptRecord)
+
+        # 9. Pragmatic Outbox Pattern: Save an event for background workers (Kafka/Analytics)
+        # By saving this inside the exact same database transaction, we guarantee we never
+        # drop events if the server crashes right after the sale.
+        outboxPayload = {
+            "receipt_id": generatedReceiptId,
+            "total_amount": totalTransactionAmount,
+            "items": [
+                {
+                    "batch_id": item.batch_id,
+                    "sku_id": item.sku_id,
+                    "quantity": item.quantity,
+                    "price": item.price
+                } for item in payload.items
+            ]
+        }
+        
+        newOutboxEvent = OutboxEventModel(
+            event_type="checkout_completed",
+            payload=outboxPayload,
+            status="pending"
+        )
+        db.add(newOutboxEvent)
+
+        # 10. The ACID Guarantee: Commit ALL database writes at once.
+        # If any step above failed, the session would rollback automatically.
+        db.commit()
+
+        # 11. Return success to the frontend
+        return CheckoutResponseSchema(
+            receipt_id=generatedReceiptId,
+            message="Checkout completed successfully and outbox event registered."
+        )
+
+    except HTTPException:
+        # If it's our own intentional validation error (like Insufficient Stock),
+        # we rollback and re-raise it so FastAPI can send the exact 400 status to the frontend.
+        db.rollback()
+        raise
+    except Exception as unexpectedSystemError:
+        # If the database goes down or a weird math error happens, rollback to protect data integrity.
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred during checkout: {str(unexpectedSystemError)}"
+        )
