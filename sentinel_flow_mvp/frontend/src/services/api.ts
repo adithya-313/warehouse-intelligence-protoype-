@@ -256,6 +256,43 @@ export const api = {
       return [];
     }
   },
+
+  // Beginner Note: This function sends the user's cart items to the backend checkout endpoint.
+  // We explicitly inject the required X-Tenant-ID and X-API-Key headers to pass the backend authentication guards.
+  async submitCheckout(cartItems: any[]): Promise<{ receipt_id: string, message: string }> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Tenant-ID': DEFAULT_TENANT,
+    };
+    
+    // Inject the global API key if it's set
+    if (_apiKey) {
+      headers['X-API-Key'] = _apiKey;
+    }
+
+    // Format the payload exactly as the backend expects (CheckoutRequestSchema)
+    const checkoutPayload = {
+      items: cartItems.map(item => ({
+        batch_id: item.batch_id,
+        sku_id: item.sku_id,
+        quantity: item.quantity,
+        price: item.price
+      }))
+    };
+
+    const response = await fetch(`/api/v1/pos/checkout`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(checkoutPayload)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`Checkout failed: ${errorData}`);
+    }
+
+    return await response.json();
+  },
 };
 
 /**

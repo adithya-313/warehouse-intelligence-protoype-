@@ -57,6 +57,9 @@ export default function POSDashboard() {
   const addItem = usePOSStore((state: any) => state.addItem);
   const decrementItem = usePOSStore((state: any) => state.decrementItem);
   const removeItem = usePOSStore((state: any) => state.removeItem);
+  const clearCart = usePOSStore((state: any) => state.clearCart);
+  const isProcessing = usePOSStore((state: any) => state.isProcessing);
+  const setProcessing = usePOSStore((state: any) => state.setProcessing);
   
   const totalAmount = cart.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
 
@@ -98,6 +101,25 @@ export default function POSDashboard() {
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery]);
+
+  // Beginner Note: This function handles the entire checkout flow.
+  // It locks the UI, submits the cart to the backend, and clears it upon success.
+  const executeCheckout = async () => {
+    if (cart.length === 0) return;
+    
+    setProcessing(true);
+    try {
+      const response = await api.submitCheckout(cart);
+      console.log(`Checkout successful! Receipt ID: ${response.receipt_id}`);
+      // Once successfully saved to the database, we clear the frontend UI cart.
+      clearCart();
+    } catch (error) {
+      console.error("Checkout process failed:", error);
+      alert(error instanceof Error ? error.message : "An unknown error occurred during checkout.");
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   return (
     <div className="relative min-h-screen bg-[#fdfbfb] text-slate-800 selection:bg-blue-100">
@@ -387,10 +409,11 @@ export default function POSDashboard() {
                 <motion.button 
                   whileHover={{ scale: 1.02, backgroundPosition: "100% center" }}
                   whileTap={{ scale: 0.98 }}
-                  disabled={!mounted || cart.length === 0}
+                  disabled={!mounted || cart.length === 0 || isProcessing}
+                  onClick={executeCheckout}
                   className="w-full py-5 bg-gradient-to-r from-slate-900 via-slate-700 to-slate-900 bg-[length:200%_auto] text-white rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-[inset_0_1px_1px_rgba(255,255,255,0.25),0_12px_24px_rgba(15,23,42,0.2)] border border-slate-800"
                 >
-                  Complete Checkout <ArrowRight size={20} />
+                  {isProcessing ? "Processing..." : "Complete Checkout"} <ArrowRight size={20} />
                 </motion.button>
               </div>
             </div>
