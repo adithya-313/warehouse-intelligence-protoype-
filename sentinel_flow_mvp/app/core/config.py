@@ -60,8 +60,8 @@ class ApplicationSettings(BaseSettings):
     WEATHER_API_KEY: str | None = Field(default=None, description="Weather API Key")
     TRENDS_API_KEY: str | None = Field(default=None, description="Search Trends API Key")
 
-    redis_url: str = Field(
-        default="redis://localhost:6379/0",
+    REDIS_URL: str = Field(
+        default="redis://redis:6379/0",
         description="The Redis connection URL for Celery broker and pub/sub",
     )
 
@@ -100,7 +100,7 @@ class ApplicationSettings(BaseSettings):
     FALLBACK_LON: float = Field(default=76.2673, description="Fallback longitude")
     FALLBACK_CITY: str = Field(default="Kochi", description="Fallback city")
 
-    REDIS_URL: str = "redis://redis:6379/0"
+    # REDIS_URL defined above as a proper Pydantic Field
 
 @lru_cache
 def get_application_settings() -> ApplicationSettings:

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy.dialects.postgresql import insert
 import redis
 
-from app.core.celery_app import celery_app
+from app.core.celery_app import celery_application as celery_app
 from app.infrastructure.database import SessionLocal
 from app.infrastructure.models import Tenant, ExogenousCovariateModel
 from app.services.covariates.parsers import CovariateParser
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 settings = get_application_settings()
 
 # Initialize Redis client for caching (using standard config)
-redis_client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+redis_client = redis.Redis.from_url(settings.REDIS_URL, decode_responses=True)
 
 @celery_app.task(name="fetch_exogenous_covariates_task")
 def fetch_exogenous_covariates_task():
