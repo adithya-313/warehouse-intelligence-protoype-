@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from app.domain.schemas import MedicationSoldEvent
 from app.services.kafka_producer import publish_medication_sold
@@ -9,10 +9,12 @@ from app.infrastructure.models import (
     SaleReceiptModel, 
     SaleLineItemModel, 
     OutboxEventModel,
-    MedicationBatchModel
+    MedicationBatchModel,
+    Patient
 )
+from app.api.dependencies import get_current_tenant
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 import uuid
 import logging
 
@@ -77,6 +79,35 @@ async def get_smart_recommendations(
         "generic_alternatives": generics
     }
 
+@router.get("/patient/lookup/{phone_number}", response_model=PatientLookupResponse)
+def lookup_patient_by_phone(
+    phone_number: str,
+    db: Session = Depends(get_database_session),
+    tenant_id: str = Depends(get_current_tenant)
+):
+    """
+    Beginner Note: The frontend calls this endpoint when the pharmacist types a phone number.
+    If the patient already exists in our system, we return their name and ID so the UI
+    can display a 'Returning Patient' badge. Otherwise we return 404 so the frontend
+    knows to reveal the "Customer Name" input field for a new registration.
+    """
+    matchingPatient = db.query(Patient).filter(
+        Patient.phone_number == phone_number,
+        Patient.tenant_id == tenant_id
+    ).first()
+
+    if not matchingPatient:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No patient found with phone {phone_number}"
+        )
+
+    return PatientLookupResponse(
+        patient_id=matchingPatient.patient_id,
+        name=matchingPatient.name,
+        phone_number=matchingPatient.phone_number
+    )
+
 # Beginner Note: This defines the exact structure of incoming data we expect from the frontend cart.
 class CheckoutItemSchema(BaseModel):
     batch_id: str
@@ -86,10 +117,21 @@ class CheckoutItemSchema(BaseModel):
 
 class CheckoutRequestSchema(BaseModel):
     items: List[CheckoutItemSchema]
+    # Progressive Disclosure fields: the pharmacist may optionally enter a customer phone number
+    # at checkout. If provided, the backend will look up or create a patient profile,
+    # link the sale receipt to that patient, and inject the identity into the outbox event
+    # payload for downstream messaging (e.g., automated refill reminders via WhatsApp).
+    customer_phone: Optional[str] = None
+    customer_name: Optional[str] = None
 
 class CheckoutResponseSchema(BaseModel):
     receipt_id: str
     message: str
+
+class PatientLookupResponse(BaseModel):
+    patient_id: str
+    name: str
+    phone_number: str
 
 async def relay_outbox_events_to_kafka(db_session: Session):
     """
@@ -127,31 +169,51 @@ async def relay_outbox_events_to_kafka(db_session: Session):
 def process_checkout(
     payload: CheckoutRequestSchema,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_database_session)
+    db: Session = Depends(get_database_session),
+    tenant_id: str = Depends(get_current_tenant)
 ):
     """
     Process a POS checkout using the Pragmatic Transactional Outbox pattern.
     Guarantees ACID compliance (all steps succeed, or nothing is saved).
     """
-    from fastapi import status
     # 1. Generate a unique ID for the entire sale receipt
     generatedReceiptId = str(uuid.uuid4())
     totalTransactionAmount = 0.0
+    resolvedPatientId = None
 
     try:
-        # 2. Create the empty receipt header FIRST so it has a row in the DB.
-        #    We don't know the total yet, so we use 0 temporarily.
+        # 2. PATIENT UPSERT (Progressive Disclosure):
+        #    If the pharmacist entered a phone number, we look up or create a patient profile
+        #    so the receipt can be linked for future automated refill messaging.
+        if payload.customer_phone:
+            existingPatientRecord = db.query(Patient).filter(
+                Patient.phone_number == payload.customer_phone,
+                Patient.tenant_id == tenant_id
+            ).first()
+
+            if existingPatientRecord:
+                resolvedPatientId = existingPatientRecord.patient_id
+            else:
+                newlyCreatedPatient = Patient(
+                    patient_id=str(uuid.uuid4()),
+                    tenant_id=tenant_id,
+                    name=payload.customer_name or "Unknown",
+                    phone_number=payload.customer_phone
+                )
+                db.add(newlyCreatedPatient)
+                db.flush()
+                resolvedPatientId = newlyCreatedPatient.patient_id
+
+        # 3. Create the empty receipt header FIRST so it has a row in the DB.
         newReceiptRecord = SaleReceiptModel(
             id=generatedReceiptId,
-            total_amount_inr=0
+            total_amount_inr=0,
+            patient_id=resolvedPatientId
         )
         db.add(newReceiptRecord)
-
-        # We MUST flush the session here to push the parent receipt into Postgres temporarily.
-        # This allows the child line items to reference its ID without triggering a Foreign Key violation.
         db.flush()
 
-        # 3. Iterate through each item in the cart to validate stock and calculate totals
+        # 4. Iterate through each item in the cart to validate stock and calculate totals
         for cartItem in payload.items:
             # We explicitly fetch the specific batch the user wants to buy
             currentBatchInventory = db.query(MedicationBatchModel).filter(
@@ -198,6 +260,9 @@ def process_checkout(
         outboxPayload = {
             "receipt_id": generatedReceiptId,
             "total_amount": totalTransactionAmount,
+            "patient_id": resolvedPatientId,
+            "customer_phone": payload.customer_phone,
+            "customer_name": payload.customer_name,
             "items": [
                 {
                     "batch_id": item.batch_id,

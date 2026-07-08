@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Bot, Settings, BarChart3, ShoppingBag, ArrowRight, Barcode, ScanLine, CheckCircle2 } from 'lucide-react';
@@ -48,6 +48,11 @@ export default function POSDashboard() {
   const [isSearching, setIsSearching] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  // Progressive Disclosure: controls whether we show the "Customer Name" input
+  // after a phone number was typed but no match was found.
+  const [showNameInput, setShowNameInput] = useState(false);
+  // Debounce timer reference so we don't spam the backend on every keystroke
+  const phoneLookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -61,6 +66,10 @@ export default function POSDashboard() {
   const clearCart = usePOSStore((state: any) => state.clearCart);
   const isProcessing = usePOSStore((state: any) => state.isProcessing);
   const setProcessing = usePOSStore((state: any) => state.setProcessing);
+  const customerPhone = usePOSStore((state: any) => state.customerPhone);
+  const customerName = usePOSStore((state: any) => state.customerName);
+  const customerId = usePOSStore((state: any) => state.customerId);
+  const setCustomer = usePOSStore((state: any) => state.setCustomer);
   
   const totalAmount = cart.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
 
@@ -103,6 +112,25 @@ export default function POSDashboard() {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery]);
 
+  // Beginner Note: This handler is called when the pharmacist types in the "Customer Phone" input.
+  // When they hit 10 digits, we debounce and check if this patient already exists.
+  const handleCustomerPhoneChange = async (phone: string) => {
+    setShowNameInput(false);
+    setCustomer(phone, '', '');
+
+    if (phone.length === 10) {
+      if (phoneLookupTimer.current) clearTimeout(phoneLookupTimer.current);
+      phoneLookupTimer.current = setTimeout(async () => {
+        const result = await api.lookupPatient(phone);
+        if (result) {
+          setCustomer(phone, result.name, result.patient_id);
+        } else {
+          setShowNameInput(true);
+        }
+      }, 400);
+    }
+  };
+
   // Beginner Note: This function handles the entire checkout flow.
   // It locks the UI, submits the cart to the backend, and clears it upon success.
   const executeCheckout = async () => {
@@ -110,7 +138,7 @@ export default function POSDashboard() {
     
     setProcessing(true);
     try {
-      const response = await api.submitCheckout(cart);
+      const response = await api.submitCheckout(cart, customerPhone || undefined, customerName || undefined);
       // Show a beautiful success toast with the receipt ID for the pharmacist's confirmation.
       // Beginner Note: The toast auto-disappears after a few seconds — no need for the user to dismiss it.
       const shortId = response.receipt_id.slice(-5);
@@ -343,7 +371,38 @@ export default function POSDashboard() {
           >
             <div className="h-full w-full bg-white/70 backdrop-blur-3xl rounded-[calc(2.5rem-1px)] flex flex-col overflow-hidden relative">
               <div className="p-8 border-b border-slate-100/50">
-                <h2 className="text-xl font-bold text-slate-800 tracking-tight">Current Order</h2>
+                <h2 className="text-xl font-bold text-slate-800 tracking-tight mb-4">Current Order</h2>
+                {/* Progressive Disclosure: Optional Customer Identity */}
+                {/* Beginner Note: The pharmacist can optionally type a phone number here.
+                    If the patient exists, we show a "Returning Patient" badge and link the
+                    receipt to them for automated refill reminders. If not found, we reveal
+                    a name field to register them on the fly. */}
+                <div className="space-y-2">
+                  <input
+                    type="tel"
+                    placeholder="Customer Phone (Optional)"
+                    maxLength={10}
+                    value={customerPhone}
+                    onChange={(e) => handleCustomerPhoneChange(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition-all"
+                  />
+                  {customerId && customerName && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-sm">
+                      <span className="text-emerald-600 font-medium">Returning Patient:</span>
+                      <span className="text-emerald-800 font-bold">{customerName}</span>
+                    </div>
+                  )}
+                  {showNameInput && (
+                    <input
+                      type="text"
+                      placeholder="Enter Customer Name"
+                      value={customerName}
+                      onChange={(e) => setCustomer(customerPhone, e.target.value, '')}
+                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-300 transition-all"
+                      autoFocus
+                    />
+                  )}
+                </div>
               </div>
               
               <div className="flex-1 p-8 overflow-y-auto">

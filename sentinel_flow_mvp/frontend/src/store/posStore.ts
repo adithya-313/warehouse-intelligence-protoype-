@@ -21,6 +21,10 @@ interface POSState {
   isProcessing: boolean;
   isCopilotOpen: boolean;
   chatHistory: ChatMessage[];
+  // Progressive Customer Identity
+  customerPhone: string;
+  customerName: string;
+  customerId: string;
   // Actions
   addItem: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
   decrementItem: (batch_id: string) => void;
@@ -30,6 +34,7 @@ interface POSState {
   getTotal: () => number;
   toggleCopilot: () => void;
   addChatMessage: (msg: ChatMessage) => void;
+  setCustomer: (phone: string, name: string, id: string) => void;
 }
 
 // Beginner Note: Zustand is a lightning-fast state manager. It allows any component
@@ -39,6 +44,10 @@ export const usePOSStore = create<POSState>((set, get) => ({
   isProcessing: false,
   isCopilotOpen: false,
   chatHistory: [],
+  // Progressive Customer Identity — starts empty for anonymous sales
+  customerPhone: '',
+  customerName: '',
+  customerId: '',
 
   toggleCopilot: () => set((state) => ({ isCopilotOpen: !state.isCopilotOpen })),
   addChatMessage: (msg) => set((state) => ({ chatHistory: [...state.chatHistory, msg] })),
@@ -96,9 +105,11 @@ export const usePOSStore = create<POSState>((set, get) => ({
     cart: state.cart.filter(item => item.batch_id !== batch_id)
   })),
 
-  clearCart: () => set({ cart: [] }),
+  clearCart: () => set({ cart: [], customerPhone: '', customerName: '', customerId: '' }),
   
   setProcessing: (status) => set({ isProcessing: status }),
+
+  setCustomer: (phone, name, id) => set({ customerPhone: phone, customerName: name, customerId: id }),
 
   getTotal: () => {
     return get().cart.reduce((total, item) => total + (item.price * item.quantity), 0);

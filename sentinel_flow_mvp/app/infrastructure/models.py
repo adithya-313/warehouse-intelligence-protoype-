@@ -316,13 +316,17 @@ class NotificationModel(Base):
 class SaleReceiptModel(Base):
     """
     Beginner Note: This model acts as the header for a single customer checkout transaction.
-    It records when the sale occurred and the total amount collected.
+    It records when the sale occurred, the total amount collected, and optionally
+    links back to a known patient so we can send automated refill reminders.
     """
     __tablename__ = "sale_receipts"
 
     id = Column(String, primary_key=True, index=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     total_amount_inr = Column(Numeric(10, 2), nullable=False)
+
+    # Optional foreign key to link this receipt to a known patient for refill messaging
+    patient_id = Column(String, ForeignKey("patients.patient_id"), nullable=True, index=True)
 
 
 class SaleLineItemModel(Base):

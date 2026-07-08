@@ -259,7 +259,13 @@ export const api = {
 
   // Beginner Note: This function sends the user's cart items to the backend checkout endpoint.
   // We explicitly inject the required X-Tenant-ID and X-API-Key headers to pass the backend authentication guards.
-  async submitCheckout(cartItems: any[]): Promise<{ receipt_id: string, message: string }> {
+  // We also forward the optional customer identity so the backend can upsert the patient profile
+  // within the same ACID transaction and link the receipt for future refill reminders.
+  async submitCheckout(
+    cartItems: any[],
+    customerPhone?: string,
+    customerName?: string
+  ): Promise<{ receipt_id: string, message: string }> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-Tenant-ID': DEFAULT_TENANT,
@@ -277,7 +283,9 @@ export const api = {
         sku_id: item.sku_id,
         quantity: item.quantity,
         price: item.price
-      }))
+      })),
+      customer_phone: customerPhone || null,
+      customer_name: customerName || null
     };
 
     const response = await fetch(`/api/v1/pos/checkout`, {
@@ -292,6 +300,22 @@ export const api = {
     }
 
     return await response.json();
+  },
+
+  // Beginner Note: This function is called by the POS progressive disclosure UI when the
+  // pharmacist types a phone number. It checks if a patient with that number already exists.
+  // If found, the UI shows a "Returning Patient" badge. If not found (404), the UI
+  // reveals a name input field for a new patient registration.
+  async lookupPatient(phone: string): Promise<{ patient_id: string, name: string, phone_number: string } | null> {
+    try {
+      const response = await fetch(`/api/v1/pos/patient/lookup/${encodeURIComponent(phone)}`, {
+        headers: { 'X-Tenant-ID': DEFAULT_TENANT },
+      });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch {
+      return null;
+    }
   },
 };
 
