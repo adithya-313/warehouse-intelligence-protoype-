@@ -18,7 +18,7 @@ export default function POSDashboard() {
   const totalAmount = cart.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
 
   return (
-    <div className="relative min-h-screen bg-[#fdfbfb] text-slate-800 overflow-hidden selection:bg-blue-100">
+    <div className="relative min-h-screen bg-[#fdfbfb] text-slate-800 selection:bg-blue-100">
       
       {/* ETHEREAL BIOLOGICAL ORBS */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none flex items-center justify-center z-0">
