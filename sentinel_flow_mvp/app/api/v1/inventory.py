@@ -31,6 +31,7 @@ def search_inventory(
         )
         .join(MedicationModel, MedicationBatchModel.sku_id == MedicationModel.sku_id)
         .filter(MedicationModel.sku_id.ilike(f"%{q}%"))
+        .limit(10)
         .all()
     )
     
