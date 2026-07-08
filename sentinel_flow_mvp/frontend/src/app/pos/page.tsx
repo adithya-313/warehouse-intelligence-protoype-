@@ -11,39 +11,18 @@ import { PreemptiveWarningBanner } from "@/components/PreemptiveWarningBanner";
 import { NotificationBell } from "@/components/NotificationBell";
 import { api } from '@/services/api';
 
-// Beginner Note: This component renders an individual search result row.
-// It includes an isolated quantity pre-selector so the user can choose how many to add.
-function SearchDropdownItem({ item, isHighlighted, onSelect }: { item: any, isHighlighted: boolean, onSelect: (item: any, quantity: number) => void }) {
-  // We keep a local state for the quantity the user wants to add, starting at 1.
-  const [preSelectedQuantity, setPreSelectedQuantity] = useState(1);
-
-  // This handles the user clicking the row to finalize the selection.
-  const finalizeSelection = (e: React.MouseEvent) => {
-    // We prevent default so the main search input doesn't lose focus immediately.
+// Beginner Note: A single-click search result row. Clicking adds 1 unit to the cart.
+// Quantity adjustments happen inside the "Current Order" cart sidebar.
+function SearchDropdownItem({ item, isHighlighted, onSelect }: { item: any, isHighlighted: boolean, onSelect: (item: any) => void }) {
+  // The click handler adds the item with quantity 1 (the Zustand store default).
+  const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    onSelect(item, preSelectedQuantity);
-  };
-
-  // Helper functions for the + and - buttons
-  const increaseQuantity = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (preSelectedQuantity < item.available_quantity) {
-      setPreSelectedQuantity(preSelectedQuantity + 1);
-    }
-  };
-
-  const decreaseQuantity = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (preSelectedQuantity > 1) {
-      setPreSelectedQuantity(preSelectedQuantity - 1);
-    }
+    onSelect(item);
   };
 
   return (
     <div
-      onMouseDown={finalizeSelection}
+      onMouseDown={handleClick}
       className={`flex justify-between items-center p-4 cursor-pointer transition-colors border-b border-slate-50 last:border-none ${
         isHighlighted ? 'bg-blue-50' : 'hover:bg-slate-50'
       }`}
@@ -53,23 +32,6 @@ function SearchDropdownItem({ item, isHighlighted, onSelect }: { item: any, isHi
         <div className="text-xs text-slate-400">Batch: {item.batch_id} | Location: {item.shelf_location || "UNASSIGNED"}</div>
       </div>
       <div className="flex items-center gap-4 text-right">
-        {/* Quantity Pre-selector Block */}
-        <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1 shadow-inner border border-slate-200/50">
-          <button 
-            onMouseDown={decreaseQuantity}
-            className="w-6 h-6 flex items-center justify-center bg-white rounded-md text-slate-600 hover:text-rose-600 shadow-sm transition-colors"
-          >
-            -
-          </button>
-          <span className="text-sm font-bold w-6 text-center text-slate-700">{preSelectedQuantity}</span>
-          <button 
-            onMouseDown={increaseQuantity}
-            className="w-6 h-6 flex items-center justify-center bg-white rounded-md text-slate-600 hover:text-emerald-600 shadow-sm transition-colors"
-          >
-            +
-          </button>
-        </div>
-
         <div>
           <div className="font-semibold text-slate-900 text-sm">₹{item.price.toFixed(2)}</div>
           <div className="text-xs text-emerald-600 font-medium">{item.available_quantity} available</div>
@@ -98,14 +60,14 @@ export default function POSDashboard() {
   
   const totalAmount = cart.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
 
-  // Beginner Note: This function adds the selected medication to the global Zustand cart state.
-  const selectItem = (item: any, selectedQuantity: number = 1) => {
+  // Beginner Note: Adds the selected medication to the global Zustand cart state.
+  // Quantity defaults to 1 — adjust inside the cart sidebar.
+  const selectItem = (item: any) => {
     addItem({
       batch_id: item.batch_id,
       sku_id: item.sku_id,
       name: item.name,
-      price: item.price,
-      quantity: selectedQuantity
+      price: item.price
     });
     setSearchQuery('');
     setSearchResults([]);
