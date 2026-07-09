@@ -79,6 +79,11 @@ async def get_smart_recommendations(
         "generic_alternatives": generics
     }
 
+class PatientLookupResponse(BaseModel):
+    patient_id: str
+    name: str
+    phone_number: str
+
 @router.get("/patient/lookup/{phone_number}", response_model=PatientLookupResponse)
 def lookup_patient_by_phone(
     phone_number: str,
@@ -127,11 +132,6 @@ class CheckoutRequestSchema(BaseModel):
 class CheckoutResponseSchema(BaseModel):
     receipt_id: str
     message: str
-
-class PatientLookupResponse(BaseModel):
-    patient_id: str
-    name: str
-    phone_number: str
 
 async def relay_outbox_events_to_kafka(db_session: Session):
     """
