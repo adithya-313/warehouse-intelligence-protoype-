@@ -206,7 +206,7 @@ export default function POSDashboard() {
           <div className="flex items-center gap-3">
             <Link 
               href="/history"
-              className="px-4 py-2 text-sm font-medium text-white/70 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-full transition-all duration-200 backdrop-blur-md"
+              className="px-4 py-2 text-sm font-medium text-slate-600/80 hover:text-slate-900 bg-slate-100/50 hover:bg-slate-100 border border-slate-200/60 rounded-full transition-all duration-200 backdrop-blur-md"
             >
               Transaction Ledger
             </Link>
