@@ -9,7 +9,7 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['-apple-system', 'BlinkMacSystemFont', '"San Francisco"', '"Helvetica Neue"', 'sans-serif'],
+        sans: ['var(--font-inter)', '-apple-system', 'BlinkMacSystemFont', '"San Francisco"', '"Helvetica Neue"', 'sans-serif'],
       },
     },
   },
