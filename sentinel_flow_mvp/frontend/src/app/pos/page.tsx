@@ -209,12 +209,14 @@ export default function POSDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link 
-              href="/history"
-              className="px-4 py-2 text-sm font-medium text-slate-600/80 hover:text-slate-900 bg-slate-100/50 hover:bg-slate-100 border border-slate-200/60 rounded-full transition-all duration-200 backdrop-blur-md inline-flex items-center gap-2"
-            >
-              <History size={16} className="text-slate-500" />
-              History
+            <Link href="/history">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="px-5 py-2.5 bg-white/60 hover:bg-white border border-gray-200/50 text-slate-600 rounded-2xl text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
+              >
+                <History size={18} /> History
+              </motion.button>
             </Link>
             <NotificationBell />
             {/* DESIGN TOKEN: Neural Pulse (AI Button) */}
