@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { api, TransactionHistoryItem } from '@/services/api';
+import { api } from '@/services/api';
+import type { TransactionHistoryItem } from '@/services/api';
 import Link from 'next/link';
 import { ArrowLeft, Clock } from 'lucide-react';
 import ScreenAtmosphere from '@/components/ui/core/ScreenAtmosphere';
