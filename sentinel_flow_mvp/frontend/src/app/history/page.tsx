@@ -39,8 +39,12 @@ export default function HistoryPage() {
     <div className="min-h-screen bg-[#0a0a0a] text-white/90 p-8">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center gap-4 mb-8">
-          <Link href="/pos" className="p-2 rounded-full hover:bg-white/10 transition-colors">
-            <ArrowLeft className="w-5 h-5 text-white/70" />
+          <Link 
+            href="/pos" 
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white/70 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-full transition-all duration-200 backdrop-blur-md"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to POS
           </Link>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Clock className="w-6 h-6 text-emerald-400" />

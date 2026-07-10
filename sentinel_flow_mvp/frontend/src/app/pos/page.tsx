@@ -204,6 +204,12 @@ export default function POSDashboard() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Link 
+              href="/history"
+              className="px-4 py-2 text-sm font-medium text-white/70 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-full transition-all duration-200 backdrop-blur-md"
+            >
+              Transaction Ledger
+            </Link>
             <NotificationBell />
             {/* DESIGN TOKEN: Neural Pulse (AI Button) */}
             <motion.button 
