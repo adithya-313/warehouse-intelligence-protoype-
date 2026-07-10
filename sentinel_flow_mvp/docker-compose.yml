@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest
@@ -106,15 +104,18 @@ services:
         condition: service_started
 
   frontend:
-    build: ./frontend
-    container_name: sentinel_frontend
+    build: 
+      context: ./frontend
     ports:
       - "3000:3000"
+    # This command installs dependencies inside the container and binds to 0.0.0.0
+    command: sh -c "npm install && npx next dev -H 0.0.0.0"
+    volumes:
+      - ./frontend:/app
+      - /app/.next
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
-    depends_on:
-      api:
-        condition: service_started
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
 
 volumes:
   sentinel_pg_data:
