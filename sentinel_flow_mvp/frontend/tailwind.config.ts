@@ -9,14 +9,7 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: [
-          '"SF Pro Display"',
-          '-apple-system', 
-          'BlinkMacSystemFont', 
-          '"Segoe UI"', 
-          'Roboto', 
-          'sans-serif'
-        ],
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"San Francisco"', '"Helvetica Neue"', 'sans-serif'],
       },
     },
   },

@@ -67,7 +67,7 @@ export default function LedgerRow({ transaction }: LedgerRowProps) {
       // 4. Spotlight Background (Inline Style overrides Tailwind when active)
       style={{
         background: isHovering
-          ? `radial-gradient(400px circle at ${mousePos.x}px ${mousePos.y}px, rgba(15,23,42,0.04), transparent 50%)`
+          ? `radial-gradient(400px circle at ${mousePos.x}px ${mousePos.y}px, rgba(0,0,0,0.04), transparent 50%)`
           : 'transparent',
       }}
       className="border-b border-slate-100/50 last:border-0 cursor-default"

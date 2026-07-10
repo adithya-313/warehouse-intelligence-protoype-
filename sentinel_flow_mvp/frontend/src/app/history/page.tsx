@@ -36,12 +36,12 @@ export default function HistoryPage() {
         <div className="flex items-center gap-4 mb-8">
           <Link 
             href="/pos" 
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white/70 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-full transition-all duration-200 backdrop-blur-md"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full transition-all duration-200 backdrop-blur-md"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to POS
           </Link>
-          <h1 className="text-2xl font-bold flex items-center gap-2 text-white/90">
+          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-900">
             <Clock className="w-6 h-6 text-emerald-400" />
             Transaction Ledger
           </h1>
@@ -57,7 +57,7 @@ export default function HistoryPage() {
             </tr>
           ) : transactions.length === 0 ? (
             <tr>
-              <td colSpan={5} className="py-12 text-center text-white/40">
+              <td colSpan={5} className="py-12 text-center text-slate-400">
                 No transactions found.
               </td>
             </tr>
