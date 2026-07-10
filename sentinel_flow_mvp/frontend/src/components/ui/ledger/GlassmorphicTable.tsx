@@ -97,13 +97,13 @@ function DataRow({
       transition={{ delay: index * 0.04, duration: 0.35, ease: 'easeOut' }}
       className="border-b border-white/5 last:border-0 hover:bg-white/[0.08] transition-colors"
     >
-      <td className="px-6 py-4 whitespace-nowrap text-white/70 text-sm">
+      <td className="text-sm text-gray-100 py-4 border-b border-white/5 whitespace-nowrap">
         {formatDate(tx.timestamp)}
       </td>
-      <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-emerald-400/80">
+      <td className="text-sm text-gray-100 py-4 border-b border-white/5 whitespace-nowrap text-emerald-400 font-mono">
         {tx.id.split('-')[0]}...
       </td>
-      <td className="px-6 py-4 whitespace-nowrap">
+      <td className="text-sm text-gray-100 py-4 border-b border-white/5 whitespace-nowrap">
         {tx.customer_name === 'Anonymous' ? (
           <span className="px-3 py-1 bg-white/5 text-white/40 rounded-full text-xs font-medium border border-white/10">
             Anonymous
@@ -114,10 +114,10 @@ function DataRow({
           </span>
         )}
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-white/60 text-sm">
+      <td className="text-sm text-gray-100 py-4 border-b border-white/5 whitespace-nowrap">
         {tx.customer_phone || '—'}
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-right font-bold text-emerald-400">
+      <td className="text-sm text-gray-100 py-4 border-b border-white/5 whitespace-nowrap text-right text-emerald-400 font-mono">
         ₹{tx.total_amount_inr.toFixed(2)}
       </td>
     </motion.tr>
@@ -172,15 +172,15 @@ export default function GlassmorphicTable({
       </div>
 
       {/* Glassmorphic table container */}
-      <div className="rounded-xl border border-white/10 overflow-hidden bg-white/5 backdrop-blur-xl shadow-lg shadow-black/10">
+      <div className="relative z-10 w-full rounded-2xl bg-black/40 backdrop-blur-3xl border border-white/10 shadow-2xl p-6">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="border-b border-white/10 text-white/50 text-sm uppercase tracking-wider">
-              <th className="px-6 py-4 font-medium">Date / Time</th>
-              <th className="px-6 py-4 font-medium">Receipt ID</th>
-              <th className="px-6 py-4 font-medium">Customer Name</th>
-              <th className="px-6 py-4 font-medium">Phone Number</th>
-              <th className="px-6 py-4 font-medium text-right">Total Amount</th>
+            <tr>
+              <th className="text-xs font-semibold text-gray-400 tracking-wider uppercase border-b border-white/10 pb-4">Date / Time</th>
+              <th className="text-xs font-semibold text-gray-400 tracking-wider uppercase border-b border-white/10 pb-4">Receipt ID</th>
+              <th className="text-xs font-semibold text-gray-400 tracking-wider uppercase border-b border-white/10 pb-4">Customer Name</th>
+              <th className="text-xs font-semibold text-gray-400 tracking-wider uppercase border-b border-white/10 pb-4">Phone Number</th>
+              <th className="text-xs font-semibold text-gray-400 tracking-wider uppercase border-b border-white/10 pb-4 text-right">Total Amount</th>
             </tr>
           </thead>
           <tbody>

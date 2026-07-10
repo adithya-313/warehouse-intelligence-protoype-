@@ -25,7 +25,7 @@ export default function HistoryPage() {
   }, []);
 
   return (
-    <div className="relative min-h-screen overflow-hidden">
+    <div className="relative min-h-screen w-full overflow-hidden bg-black text-white antialiased selection:bg-purple-500/30">
       <SpatialBackground />
       <main className="relative z-10 container mx-auto p-6">
         <GlassmorphicTable

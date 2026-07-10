@@ -157,14 +157,7 @@ function FluidMesh() {
  */
 const SpatialBackground = memo(function SpatialBackground() {
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: -1,
-        pointerEvents: 'none',
-      }}
-    >
+    <div className="fixed inset-0 z-[-10] pointer-events-none bg-slate-950 blur-[120px]">
       <Canvas
         camera={{ position: [0, 0, 5], fov: 50 }}
         dpr={[1, 1.5]} // Cap DPR for performance on high-DPI screens
