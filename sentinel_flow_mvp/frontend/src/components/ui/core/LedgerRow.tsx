@@ -67,12 +67,12 @@ export default function LedgerRow({ transaction }: LedgerRowProps) {
       // 4. Spotlight Background (Inline Style overrides Tailwind when active)
       style={{
         background: isHovering
-          ? `radial-gradient(400px circle at ${mousePos.x}px ${mousePos.y}px, rgba(255,255,255,0.06), transparent 50%)`
+          ? `radial-gradient(400px circle at ${mousePos.x}px ${mousePos.y}px, rgba(15,23,42,0.04), transparent 50%)`
           : 'transparent',
       }}
-      className="border-b border-white/5 last:border-0 cursor-default"
+      className="border-b border-slate-100/50 last:border-0 cursor-default"
     >
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-200">
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
         {formatDate(transaction.timestamp)}
       </td>
       
@@ -80,21 +80,21 @@ export default function LedgerRow({ transaction }: LedgerRowProps) {
         The Receipt ID is rendered in a monospace font to ensure perfectly 
         aligned vertical presentation of alphanumeric hashes.
       */}
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-emerald-400 font-mono">
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-mono">
         {transaction.id.split('-')[0]}...
       </td>
       
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-200">
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
         {transaction.customer_name === "Anonymous" ? (
-          <span className="px-3 py-1 bg-white/5 text-white/40 rounded-full text-xs font-medium border border-white/10">
+          <span className="px-3 py-1 bg-slate-50 text-slate-400 rounded-full text-xs font-medium border border-slate-200/50">
             Anonymous
           </span>
         ) : (
-          <span className="font-medium text-gray-100">{transaction.customer_name}</span>
+          <span className="font-medium text-slate-800">{transaction.customer_name}</span>
         )}
       </td>
       
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
         {transaction.customer_phone || "—"}
       </td>
       
@@ -102,7 +102,7 @@ export default function LedgerRow({ transaction }: LedgerRowProps) {
         The monetary value demands high contrast. We anchor it to the right 
         for immediate numerical scannability.
       */}
-      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-emerald-400 font-mono">
+      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-slate-900 font-mono">
         ₹{transaction.total_amount_inr.toFixed(2)}
       </td>
     </motion.tr>

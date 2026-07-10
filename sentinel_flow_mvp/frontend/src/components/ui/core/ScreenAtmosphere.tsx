@@ -18,7 +18,7 @@ import React, { ReactNode } from 'react';
  */
 export default function ScreenAtmosphere({ children }: { children: ReactNode }) {
   return (
-    <div className="relative min-h-screen w-full bg-[#0a0a0a] text-white selection:bg-purple-500/30 overflow-hidden">
+    <div className="relative min-h-screen w-full bg-[#fdfbfb] text-slate-800 selection:bg-blue-100 overflow-hidden">
       
       {/* 
         Layer 2: The Cinematic Grain Overlay

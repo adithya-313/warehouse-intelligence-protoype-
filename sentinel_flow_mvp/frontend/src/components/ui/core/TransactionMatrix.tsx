@@ -26,23 +26,23 @@ interface TransactionMatrixProps {
  */
 export default function TransactionMatrix({ children }: TransactionMatrixProps) {
   return (
-    <div className="w-full rounded-2xl bg-white/[0.02] backdrop-blur-3xl border border-white/10 shadow-2xl p-6 overflow-hidden">
+    <div className="w-full rounded-2xl bg-white/70 backdrop-blur-3xl border border-slate-100/50 shadow-[0_16px_48px_rgba(0,0,0,0.05)] p-6 overflow-hidden">
       <table className="w-full text-left border-collapse">
         <thead>
           <tr>
-            <th className="text-xs font-semibold text-gray-400 tracking-wider uppercase border-b border-white/10 pb-4 px-6">
+            <th className="text-xs font-semibold text-slate-500 tracking-wider uppercase border-b border-slate-100/50 pb-4 px-6">
               Date / Time
             </th>
-            <th className="text-xs font-semibold text-gray-400 tracking-wider uppercase border-b border-white/10 pb-4 px-6">
+            <th className="text-xs font-semibold text-slate-500 tracking-wider uppercase border-b border-slate-100/50 pb-4 px-6">
               Receipt ID
             </th>
-            <th className="text-xs font-semibold text-gray-400 tracking-wider uppercase border-b border-white/10 pb-4 px-6">
+            <th className="text-xs font-semibold text-slate-500 tracking-wider uppercase border-b border-slate-100/50 pb-4 px-6">
               Customer Name
             </th>
-            <th className="text-xs font-semibold text-gray-400 tracking-wider uppercase border-b border-white/10 pb-4 px-6">
+            <th className="text-xs font-semibold text-slate-500 tracking-wider uppercase border-b border-slate-100/50 pb-4 px-6">
               Phone Number
             </th>
-            <th className="text-xs font-semibold text-gray-400 tracking-wider uppercase border-b border-white/10 pb-4 px-6 text-right">
+            <th className="text-xs font-semibold text-slate-500 tracking-wider uppercase border-b border-slate-100/50 pb-4 px-6 text-right">
               Total Amount
             </th>
           </tr>
