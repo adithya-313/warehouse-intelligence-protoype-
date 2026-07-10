@@ -11,13 +11,13 @@ export function DynamicCapsule({ isOpen, receiptId }: DynamicCapsuleProps) {
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          initial={{ y: -100, opacity: 0, scale: 0.8, x: '-50%' }}
-          animate={{ y: 0, opacity: 1, scale: 1, x: '-50%' }}
-          exit={{ y: -100, opacity: 0, scale: 0.8, x: '-50%' }}
-          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-          className="fixed top-6 left-1/2 z-[100] flex items-center gap-3 px-5 py-3 rounded-full bg-white/70 dark:bg-black/70 backdrop-blur-md border border-slate-200/50 dark:border-slate-800/50 shadow-lg"
+          initial={{ opacity: 0, scale: 0.8, y: -20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.8, y: -10 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-5 py-3 rounded-full bg-emerald-950/40 backdrop-blur-xl border border-emerald-500/20 shadow-[0_0_40px_-10px_rgba(16,185,129,0.3)]"
         >
-          <div className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/10 text-emerald-500">
+          <div className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/10 text-emerald-400">
             <svg
               className="w-4 h-4"
               fill="none"
@@ -36,19 +36,14 @@ export function DynamicCapsule({ isOpen, receiptId }: DynamicCapsuleProps) {
             </svg>
           </div>
           
-          <motion.div
-            initial={{ opacity: 0, width: 0 }}
-            animate={{ opacity: 1, width: 'auto' }}
-            transition={{ duration: 0.3, delay: 0.4 }}
-            className="flex flex-col overflow-hidden whitespace-nowrap"
-          >
-            <span className="text-sm font-bold text-slate-900 dark:text-white leading-tight">
+          <div className="flex flex-col whitespace-nowrap">
+            <span className="text-sm font-bold text-emerald-50 leading-tight">
               Checkout Complete
             </span>
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 leading-tight">
+            <span className="text-xs font-medium text-emerald-400/70 leading-tight">
               Receipt: {receiptId}
             </span>
-          </motion.div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
