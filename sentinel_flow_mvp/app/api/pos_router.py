@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import uuid
 import logging
+from datetime import datetime
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -132,6 +133,13 @@ class CheckoutRequestSchema(BaseModel):
 class CheckoutResponseSchema(BaseModel):
     receipt_id: str
     message: str
+
+class ReceiptHistoryResponse(BaseModel):
+    id: str
+    timestamp: datetime
+    total_amount_inr: float
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
 
 async def relay_outbox_events_to_kafka(db_session: Session):
     """
@@ -305,3 +313,35 @@ def process_checkout(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred during checkout: {str(unexpectedSystemError)}"
         )
+
+@router.get("/history", response_model=List[ReceiptHistoryResponse])
+def get_transaction_history(
+    db: Session = Depends(get_database_session),
+    tenant_id: str = Depends(get_current_tenant)
+):
+    """
+    Returns a history of recent POS transactions.
+    Left joins with the Patient table since anonymous transactions have a null patient_id.
+    """
+    results = db.query(
+        SaleReceiptModel.id,
+        SaleReceiptModel.timestamp,
+        SaleReceiptModel.total_amount_inr,
+        Patient.name.label("patient_name"),
+        Patient.phone_number.label("patient_phone")
+    ).outerjoin(
+        Patient, SaleReceiptModel.patient_id == Patient.patient_id
+    ).order_by(
+        SaleReceiptModel.timestamp.desc()
+    ).limit(50).all()
+
+    history = []
+    for row in results:
+        history.append(ReceiptHistoryResponse(
+            id=row.id,
+            timestamp=row.timestamp,
+            total_amount_inr=row.total_amount_inr,
+            customer_name=row.patient_name if row.patient_name else "Anonymous",
+            customer_phone=row.patient_phone
+        ))
+    return history

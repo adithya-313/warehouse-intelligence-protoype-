@@ -317,7 +317,28 @@ export const api = {
       return null;
     }
   },
+  
+  async fetchTransactionHistory(): Promise<TransactionHistoryItem[]> {
+    try {
+      const response = await fetch('/api/v1/pos/history', {
+        headers: { 'X-Tenant-ID': DEFAULT_TENANT },
+        cache: 'no-store'
+      });
+      if (!response.ok) throw new Error("Failed to fetch transaction history");
+      return await response.json();
+    } catch {
+      return [];
+    }
+  }
 };
+
+export interface TransactionHistoryItem {
+  id: string;
+  timestamp: string;
+  total_amount_inr: number;
+  customer_name: string | null;
+  customer_phone: string | null;
+}
 
 /**
  * Fetches the risk dashboard data from the backend API.
