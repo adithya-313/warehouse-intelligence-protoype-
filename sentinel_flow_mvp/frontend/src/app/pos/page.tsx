@@ -10,6 +10,7 @@ import { usePOSStore } from '@/store/posStore';
 import CopilotPanel from '@/components/pos/CopilotPanel';
 import { PreemptiveWarningBanner } from "@/components/PreemptiveWarningBanner";
 import { NotificationBell } from "@/components/NotificationBell";
+import { DynamicCapsule } from "@/components/DynamicCapsule";
 import { api } from '@/services/api';
 
 // Beginner Note: A single-click search result row. Clicking adds 1 unit to the cart.
@@ -48,6 +49,9 @@ export default function POSDashboard() {
   const [isSearching, setIsSearching] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  // Dynamic Capsule success state
+  const [checkoutSuccess, setCheckoutSuccess] = useState(false);
+  const [receiptId, setReceiptId] = useState('');
   // Progressive Disclosure: controls whether we show the "Customer Name" input
   // after a phone number was typed but no match was found.
   const [showNameInput, setShowNameInput] = useState(false);
@@ -139,19 +143,15 @@ export default function POSDashboard() {
     setProcessing(true);
     try {
       const response = await api.submitCheckout(cart, customerPhone || undefined, customerName || undefined);
-      // Show a beautiful success toast with the receipt ID for the pharmacist's confirmation.
-      // Beginner Note: The toast auto-disappears after a few seconds — no need for the user to dismiss it.
-      const shortId = response.receipt_id.slice(-5);
-      toast.success(
-        <div className="flex items-center gap-3">
-          <CheckCircle2 className="text-emerald-500 w-6 h-6 shrink-0" />
-          <div>
-            <p className="font-bold text-slate-900">Checkout Complete!</p>
-            <p className="text-sm text-slate-500">Receipt ID: ...{shortId}</p>
-          </div>
-        </div>,
-        { duration: 4000 }
-      );
+      
+      // Capture receipt ID (use the actual one or mock a short one if missing)
+      const shortId = response.receipt_id ? response.receipt_id.slice(-5) : "805F";
+      setReceiptId(`...${shortId}`);
+      
+      // Trigger Dynamic Capsule animation
+      setCheckoutSuccess(true);
+      setTimeout(() => setCheckoutSuccess(false), 3500);
+      
       // Once successfully saved to the database, we clear the frontend UI cart.
       clearCart();
     } catch (error) {
@@ -164,7 +164,7 @@ export default function POSDashboard() {
 
   return (
     <div className="relative min-h-screen bg-[#fdfbfb] text-slate-800 selection:bg-blue-100">
-      
+      <DynamicCapsule isOpen={checkoutSuccess} receiptId={receiptId} />
       {/* Sonner Toast Renderer — renders above everything else */}
       <Toaster position="top-right" richColors closeButton />
 
