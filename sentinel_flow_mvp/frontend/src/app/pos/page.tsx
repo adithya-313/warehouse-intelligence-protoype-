@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bot, Settings, BarChart3, ShoppingBag, ArrowRight, Barcode, ScanLine, CheckCircle2 } from 'lucide-react';
+import { Search, Bot, Settings, BarChart3, ShoppingBag, ArrowRight, Barcode, ScanLine, CheckCircle2, History } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { cn } from '@/lib/utils';
 import { usePOSStore } from '@/store/posStore';
@@ -163,7 +163,12 @@ export default function POSDashboard() {
   };
 
   return (
-    <div className="relative min-h-screen bg-[#fdfbfb] text-slate-800 selection:bg-blue-100">
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="relative min-h-screen bg-[#fdfbfb] text-slate-800 selection:bg-blue-100"
+    >
       <DynamicCapsule isOpen={checkoutSuccess} receiptId={receiptId} />
       {/* Sonner Toast Renderer — renders above everything else */}
       <Toaster position="top-right" richColors closeButton />
@@ -206,9 +211,10 @@ export default function POSDashboard() {
           <div className="flex items-center gap-3">
             <Link 
               href="/history"
-              className="px-4 py-2 text-sm font-medium text-slate-600/80 hover:text-slate-900 bg-slate-100/50 hover:bg-slate-100 border border-slate-200/60 rounded-full transition-all duration-200 backdrop-blur-md"
+              className="px-4 py-2 text-sm font-medium text-slate-600/80 hover:text-slate-900 bg-slate-100/50 hover:bg-slate-100 border border-slate-200/60 rounded-full transition-all duration-200 backdrop-blur-md inline-flex items-center gap-2"
             >
-              Transaction Ledger
+              <History size={16} className="text-slate-500" />
+              History
             </Link>
             <NotificationBell />
             {/* DESIGN TOKEN: Neural Pulse (AI Button) */}
@@ -505,6 +511,6 @@ export default function POSDashboard() {
 
       {/* COPILOT OVERLAY */}
       <CopilotPanel />
-    </div>
+    </motion.div>
   );
 }

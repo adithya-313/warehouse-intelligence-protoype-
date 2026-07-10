@@ -7,20 +7,18 @@ import { ArrowLeft } from 'lucide-react';
 
 interface BackButtonProps {
   href: string;
-  label?: string;
 }
 
-export default function BackButton({ href, label = 'Back' }: BackButtonProps) {
+export default function BackButton({ href }: BackButtonProps) {
   return (
     <Link href={href}>
-      <motion.span
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full transition-all duration-200 backdrop-blur-md cursor-pointer"
+      <motion.div
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        className="p-3 bg-white/60 backdrop-blur-md border border-white/80 shadow-sm rounded-2xl text-slate-500 hover:text-slate-800 hover:bg-white transition-colors flex items-center justify-center group will-change-transform cursor-pointer"
       >
-        <ArrowLeft className="w-4 h-4" />
-        {label}
-      </motion.span>
+        <ArrowLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
+      </motion.div>
     </Link>
   );
 }

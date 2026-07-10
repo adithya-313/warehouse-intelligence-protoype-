@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { api } from '@/services/api';
 import type { TransactionHistoryItem } from '@/services/api';
-import { Clock } from 'lucide-react';
 import ScreenAtmosphere from '@/components/ui/core/ScreenAtmosphere';
 import TransactionMatrix from '@/components/ui/core/TransactionMatrix';
 import LedgerRow from '@/components/ui/core/LedgerRow';
@@ -30,13 +30,17 @@ export default function HistoryPage() {
 
   return (
     <ScreenAtmosphere>
-      <div className="relative z-10 container mx-auto px-6 py-12 max-w-6xl">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className="relative z-10 container mx-auto px-6 py-12 max-w-6xl"
+      >
         
         {/* Sleek, Minimal Header */}
         <div className="flex items-center gap-4 mb-8">
-          <BackButton href="/pos" label="Back to POS" />
-          <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-900">
-            <Clock className="w-6 h-6 text-emerald-400" />
+          <BackButton href="/pos" />
+          <h1 className="text-2xl font-bold text-slate-900">
             Transaction History
           </h1>
         </div>
@@ -62,7 +66,7 @@ export default function HistoryPage() {
           )}
         </TransactionMatrix>
 
-      </div>
+      </motion.div>
     </ScreenAtmosphere>
   );
 }
