@@ -7,6 +7,7 @@ from app.infrastructure.models import Tenant
 
 router = APIRouter()
 
+@router.get("", response_model=TenantSettingsResponse)
 @router.get("/", response_model=TenantSettingsResponse)
 def get_tenant_settings(
     db: Session = Depends(get_database_session),
@@ -24,6 +25,7 @@ def get_tenant_settings(
         whatsapp_phone_id=tenant.whatsapp_phone_id
     )
 
+@router.put("", response_model=TenantSettingsResponse)
 @router.put("/", response_model=TenantSettingsResponse)
 def update_tenant_settings(
     payload: TenantSettingsUpdate,

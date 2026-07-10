@@ -161,6 +161,7 @@ def create_application() -> FastAPI:
         version=application_settings.application_version,
         debug=application_settings.debug_mode,
         lifespan=application_lifespan,
+        redirect_slashes=False,
     )
 
     # CORS — allow the Next.js frontend (localhost:3000) to call the API
