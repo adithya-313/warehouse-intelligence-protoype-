@@ -1,5 +1,8 @@
 import './globals.css';
 import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 export const metadata: Metadata = {
   title: 'Sentinel POS',
@@ -13,7 +16,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="font-sans antialiased bg-[#fdfbfb] text-slate-900 overflow-x-hidden min-h-screen">
+      <body className={`${inter.className} font-sans antialiased bg-[#fdfbfb] text-slate-900 overflow-x-hidden min-h-screen`}>
         {children}
       </body>
     </html>

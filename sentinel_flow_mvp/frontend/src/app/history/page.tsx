@@ -3,11 +3,11 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '@/services/api';
 import type { TransactionHistoryItem } from '@/services/api';
-import Link from 'next/link';
-import { ArrowLeft, Clock } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import ScreenAtmosphere from '@/components/ui/core/ScreenAtmosphere';
 import TransactionMatrix from '@/components/ui/core/TransactionMatrix';
 import LedgerRow from '@/components/ui/core/LedgerRow';
+import BackButton from '@/components/ui/BackButton';
 
 export default function HistoryPage() {
   const [transactions, setTransactions] = useState<TransactionHistoryItem[]>([]);
@@ -34,16 +34,10 @@ export default function HistoryPage() {
         
         {/* Sleek, Minimal Header */}
         <div className="flex items-center gap-4 mb-8">
-          <Link 
-            href="/pos" 
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full transition-all duration-200 backdrop-blur-md"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to POS
-          </Link>
+          <BackButton href="/pos" label="Back to POS" />
           <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-900">
             <Clock className="w-6 h-6 text-emerald-400" />
-            Transaction Ledger
+            Transaction History
           </h1>
         </div>
 
