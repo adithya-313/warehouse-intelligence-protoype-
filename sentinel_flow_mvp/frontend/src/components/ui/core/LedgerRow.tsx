@@ -59,7 +59,8 @@ export default function LedgerRow({ transaction, isExpanded, onToggle }: LedgerR
     });
   };
 
-  const badge = paymentBadge[transaction.payment_method];
+  const method = transaction.payment_method || 'CASH';
+  const badge = paymentBadge[method] ?? paymentBadge.CASH;
 
   return (
     <>
@@ -119,50 +120,58 @@ export default function LedgerRow({ transaction, isExpanded, onToggle }: LedgerR
         </td>
       </motion.tr>
 
-      {/* Fluid Inline Accordion */}
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.tr
-            key={`${transaction.id}-expanded`}
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="overflow-hidden"
-          >
-            <td colSpan={5} className="p-0">
-              <div className="bg-slate-50 border-t border-slate-100 p-6">
-                {/* Method Badge */}
-                <div className="flex items-center gap-3 mb-4">
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${badge.bg} ${badge.text}`}>
-                    {badge.label}
-                  </span>
-                  <span className="text-xs text-slate-400 font-mono">{transaction.id}</span>
-                </div>
+      {/* Fluid Inline Accordion — wrapped entirely inside <td> for valid table DOM */}
+      <tr>
+        <td colSpan={5} className="p-0 border-0">
+          <AnimatePresence>
+            {isExpanded && (
+              <motion.div
+                key={`${transaction.id}-expanded`}
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                className="overflow-hidden bg-slate-50 border-b border-slate-100"
+              >
+                <div className="p-6">
+                  {/* Method Badge */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${badge.bg} ${badge.text}`}>
+                      {badge.label}
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono">{transaction.id}</span>
+                  </div>
 
-                {/* Items List */}
-                <div className="space-y-2">
-                  {transaction.items.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-sm">
-                      <span className="text-slate-600 truncate max-w-md">{item.name}</span>
-                      <div className="flex items-center gap-4 flex-shrink-0">
-                        <span className="text-slate-400">x{item.quantity}</span>
-                        <span className="text-slate-900 font-medium w-20 text-right">₹{item.total.toFixed(2)}</span>
+                  {/* Items List */}
+                  <div className="space-y-2">
+                    {transaction.items && transaction.items.length > 0 ? (
+                      transaction.items.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <span className="text-slate-600 truncate max-w-md">{item.name}</span>
+                          <div className="flex items-center gap-4 flex-shrink-0">
+                            <span className="text-slate-400">x{item.quantity}</span>
+                            <span className="text-slate-900 font-medium w-20 text-right">₹{item.total.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-slate-500 italic">
+                        Legacy transaction: No itemized receipt available.
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    )}
+                  </div>
 
-                {/* Total */}
-                <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-200/60 text-sm">
-                  <span className="font-semibold text-slate-700">Total</span>
-                  <span className="font-bold text-slate-900">₹{transaction.total_amount_inr.toFixed(2)}</span>
+                  {/* Total */}
+                  <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-200/60 text-sm">
+                    <span className="font-semibold text-slate-700">Total</span>
+                    <span className="font-bold text-slate-900">₹{transaction.total_amount_inr.toFixed(2)}</span>
+                  </div>
                 </div>
-              </div>
-            </td>
-          </motion.tr>
-        )}
-      </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </td>
+      </tr>
     </>
   );
 }
