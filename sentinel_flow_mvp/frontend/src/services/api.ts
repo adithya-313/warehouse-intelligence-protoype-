@@ -328,7 +328,12 @@ export const api = {
         cache: 'no-store'
       });
       if (!response.ok) throw new Error("Failed to fetch transaction history");
-      return await response.json();
+      const data: any[] = await response.json();
+      return data.map(tx => ({
+        ...tx,
+        items: tx.items || [],
+        payment_method: tx.payment_method || 'CASH',
+      }));
     } catch {
       return [];
     }
