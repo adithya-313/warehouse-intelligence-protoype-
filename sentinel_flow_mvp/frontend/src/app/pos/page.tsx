@@ -3,15 +3,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bot, Settings, BarChart3, ShoppingBag, ArrowRight, Barcode, ScanLine, CheckCircle2, History, Banknote, QrCode, CreditCard } from 'lucide-react';
+import { Search, Bot, Settings, BarChart3, ShoppingBag, Barcode, History, Banknote, QrCode, CreditCard } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
-import { cn } from '@/lib/utils';
 import { usePOSStore } from '@/store/posStore';
 import CopilotPanel from '@/components/pos/CopilotPanel';
 import { PreemptiveWarningBanner } from "@/components/PreemptiveWarningBanner";
 import { NotificationBell } from "@/components/NotificationBell";
 import { DynamicCapsule } from "@/components/DynamicCapsule";
-import { api, PaymentMethod } from '@/services/api';
+import { api, PaymentMethod, fetchRecommendations, RecommendationResponse } from '@/services/api';
+import ClinicalCompanion from '@/components/pos/ClinicalCompanion';
 
 // Beginner Note: A single-click search result row. Clicking adds 1 unit to the cart.
 // Quantity adjustments happen inside the "Current Order" cart sidebar.
@@ -58,10 +58,6 @@ export default function POSDashboard() {
   // Debounce timer reference so we don't spam the backend on every keystroke
   const phoneLookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   const toggleCopilot = usePOSStore((state: any) => state.toggleCopilot);
   const cart = usePOSStore((state: any) => state.cart) || [];
   const addItem = usePOSStore((state: any) => state.addItem);
@@ -74,6 +70,30 @@ export default function POSDashboard() {
   const customerName = usePOSStore((state: any) => state.customerName);
   const customerId = usePOSStore((state: any) => state.customerId);
   const setCustomer = usePOSStore((state: any) => state.setCustomer);
+
+  const [recommendations, setRecommendations] = useState<RecommendationResponse | null>(null);
+  const [loadingRecs, setLoadingRecs] = useState(false);
+  const lastSkuRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (cart.length === 0) {
+      setRecommendations(null);
+      lastSkuRef.current = null;
+      return;
+    }
+    const lastItem = cart[cart.length - 1];
+    if (lastItem.sku_id === lastSkuRef.current) return;
+    lastSkuRef.current = lastItem.sku_id;
+    setLoadingRecs(true);
+    fetchRecommendations(lastItem.sku_id)
+      .then(setRecommendations)
+      .catch(() => setRecommendations(null))
+      .finally(() => setLoadingRecs(false));
+  }, [cart]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   const totalAmount = cart.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
 
@@ -363,16 +383,13 @@ export default function POSDashboard() {
               </AnimatePresence>
             </div>
 
-            {/* Empty State / Inventory Area */}
-            <div className="flex-1 rounded-[2rem] p-[1px] bg-gradient-to-br from-white/40 to-white/10">
-              <div className="h-full w-full bg-white/40 backdrop-blur-xl rounded-[calc(2rem-1px)] flex flex-col items-center justify-center text-center p-10">
-                <div className="w-20 h-20 bg-white/60 rounded-3xl flex items-center justify-center mb-6 shadow-sm border border-white">
-                  <ScanLine size={32} className="text-slate-300" />
-                </div>
-                <h3 className="text-xl font-semibold text-slate-700 mb-2">Ready for next patient</h3>
-                <p className="text-slate-400 max-w-sm">The system is listening. Scan a product to instantly add it to the active transaction.</p>
-              </div>
-            </div>
+            {/* CLINICAL COMPANION CANVAS */}
+            <ClinicalCompanion
+              loading={loadingRecs}
+              crossSells={recommendations?.cross_sells || []}
+              genericAlts={recommendations?.generic_alternatives || []}
+              onAddItem={(item) => addItem({ batch_id: item.batch_id, sku_id: item.sku_id, name: item.name, price: item.price })}
+            />
           </motion.div>
 
           {/* RIGHT COLUMN: THE RECEIPT (CART) */}
