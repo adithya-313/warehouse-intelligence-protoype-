@@ -324,6 +324,7 @@ class SaleReceiptModel(Base):
     id = Column(String, primary_key=True, index=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     total_amount_inr = Column(Numeric(10, 2), nullable=False)
+    payment_method = Column(String(10), nullable=False, server_default=text("'CASH'"))
 
     # Optional foreign key to link this receipt to a known patient for refill messaging
     patient_id = Column(String, ForeignKey("patients.patient_id"), nullable=True, index=True)
@@ -339,7 +340,8 @@ class SaleLineItemModel(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     receipt_id = Column(String, ForeignKey("sale_receipts.id"), nullable=False, index=True)
     batch_id = Column(String, ForeignKey("medication_batches.batch_id"), nullable=False)
-    
+    name = Column(String(255), nullable=False, server_default=text("''"))
+
     quantity_sold = Column(Integer, nullable=False)
     price_per_unit = Column(Numeric(10, 2), nullable=False)
 

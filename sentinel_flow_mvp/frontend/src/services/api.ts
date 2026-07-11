@@ -264,7 +264,8 @@ export const api = {
   async submitCheckout(
     cartItems: any[],
     customerPhone?: string,
-    customerName?: string
+    customerName?: string,
+    paymentMethod?: PaymentMethod
   ): Promise<{ receipt_id: string, message: string }> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -281,9 +282,11 @@ export const api = {
       items: cartItems.map(item => ({
         batch_id: item.batch_id,
         sku_id: item.sku_id,
+        name: item.name || '',
         quantity: item.quantity,
         price: item.price
       })),
+      payment_method: paymentMethod || 'CASH',
       customer_phone: customerPhone || null,
       customer_name: customerName || null
     };
@@ -332,12 +335,24 @@ export const api = {
   }
 };
 
+export type PaymentMethod = 'CASH' | 'UPI' | 'CARD';
+
+export interface TransactionItem {
+  productId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  total: number;
+}
+
 export interface TransactionHistoryItem {
   id: string;
   timestamp: string;
   total_amount_inr: number;
+  payment_method: PaymentMethod;
   customer_name: string | null;
   customer_phone: string | null;
+  items: TransactionItem[];
 }
 
 /**

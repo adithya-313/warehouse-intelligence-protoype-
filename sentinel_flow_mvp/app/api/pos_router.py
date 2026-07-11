@@ -18,6 +18,7 @@ from typing import List, Optional
 import uuid
 import logging
 from datetime import datetime
+from enum import Enum
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -118,11 +119,13 @@ def lookup_patient_by_phone(
 class CheckoutItemSchema(BaseModel):
     batch_id: str
     sku_id: str
+    name: str = ""
     quantity: int
     price: float
 
 class CheckoutRequestSchema(BaseModel):
     items: List[CheckoutItemSchema]
+    payment_method: PaymentMethod = PaymentMethod.CASH
     # Progressive Disclosure fields: the pharmacist may optionally enter a customer phone number
     # at checkout. If provided, the backend will look up or create a patient profile,
     # link the sale receipt to that patient, and inject the identity into the outbox event
@@ -134,12 +137,26 @@ class CheckoutResponseSchema(BaseModel):
     receipt_id: str
     message: str
 
+class PaymentMethod(str, Enum):
+    CASH = "CASH"
+    UPI = "UPI"
+    CARD = "CARD"
+
+class TransactionItemResponse(BaseModel):
+    productId: str
+    name: str
+    price: float
+    quantity: int
+    total: float
+
 class ReceiptHistoryResponse(BaseModel):
     id: str
     timestamp: datetime
     total_amount_inr: float
+    payment_method: PaymentMethod = PaymentMethod.CASH
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
+    items: List[TransactionItemResponse] = []
 
 async def relay_outbox_events_to_kafka(db_session: Session):
     """
@@ -216,6 +233,7 @@ def process_checkout(
         newReceiptRecord = SaleReceiptModel(
             id=generatedReceiptId,
             total_amount_inr=0,
+            payment_method=payload.payment_method.value,
             patient_id=resolvedPatientId
         )
         db.add(newReceiptRecord)
@@ -254,6 +272,7 @@ def process_checkout(
             newLineItemRecord = SaleLineItemModel(
                 receipt_id=generatedReceiptId,
                 batch_id=cartItem.batch_id,
+                name=cartItem.name,
                 quantity_sold=cartItem.quantity,
                 price_per_unit=cartItem.price
             )
@@ -323,10 +342,11 @@ def get_transaction_history(
     Returns a history of recent POS transactions.
     Left joins with the Patient table since anonymous transactions have a null patient_id.
     """
-    results = db.query(
+    receipts = db.query(
         SaleReceiptModel.id,
         SaleReceiptModel.timestamp,
         SaleReceiptModel.total_amount_inr,
+        SaleReceiptModel.payment_method,
         Patient.name.label("patient_name"),
         Patient.phone_number.label("patient_phone")
     ).outerjoin(
@@ -336,12 +356,29 @@ def get_transaction_history(
     ).limit(50).all()
 
     history = []
-    for row in results:
+    for receipt in receipts:
+        line_items = db.query(
+            SaleLineItemModel
+        ).filter(
+            SaleLineItemModel.receipt_id == receipt.id
+        ).all()
+
         history.append(ReceiptHistoryResponse(
-            id=row.id,
-            timestamp=row.timestamp,
-            total_amount_inr=row.total_amount_inr,
-            customer_name=row.patient_name if row.patient_name else "Anonymous",
-            customer_phone=row.patient_phone
+            id=receipt.id,
+            timestamp=receipt.timestamp,
+            total_amount_inr=receipt.total_amount_inr,
+            payment_method=receipt.payment_method,
+            customer_name=receipt.patient_name if receipt.patient_name else "Anonymous",
+            customer_phone=receipt.patient_phone,
+            items=[
+                TransactionItemResponse(
+                    productId=item.batch_id,
+                    name=item.name or item.batch_id,
+                    price=float(item.price_per_unit),
+                    quantity=item.quantity_sold,
+                    total=float(item.quantity_sold * item.price_per_unit)
+                )
+                for item in line_items
+            ]
         ))
     return history

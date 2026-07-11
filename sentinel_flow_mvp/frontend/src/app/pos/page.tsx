@@ -142,7 +142,7 @@ export default function POSDashboard() {
     
     setProcessing(true);
     try {
-      const response = await api.submitCheckout(cart, customerPhone || undefined, customerName || undefined);
+      const response = await api.submitCheckout(cart, customerPhone || undefined, customerName || undefined, 'CASH');
       
       // Capture receipt ID (use the actual one or mock a short one if missing)
       const shortId = response.receipt_id ? response.receipt_id.slice(-5) : "805F";
