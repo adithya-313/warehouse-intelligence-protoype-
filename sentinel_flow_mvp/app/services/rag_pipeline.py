@@ -238,8 +238,8 @@ USER QUERY:
 
     # STEP 4: GENERATION (Call Gemini)
     try:
-        # We use gemini-2.5-flash for high speed and low latency (fixed invalid model name)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        # We use gemini-1.5-flash for high speed and low latency (fixed invalid model name)
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         # Temperature = 0.0 forces the AI to be deterministic and analytical, not creative.
         response = model.generate_content(
