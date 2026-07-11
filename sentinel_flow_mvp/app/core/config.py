@@ -1,7 +1,15 @@
 """Environment variables and configuration management.
 
 This module provides centralized configuration management for the application.
-All environment variables are loaded from a .env file using pydantic settings.
+Non-sensitive settings are loaded from a ``.env`` file using pydantic-settings.
+Sensitive values (API keys, tokens) are overlaid from the secrets vault
+(``.secrets.json`` by default) so they are never committed to version control.
+
+The priority order for any given key is:
+    1. Environment variable (highest — used in production/Kubernetes)
+    2. ``.env`` file (local development)
+    3. Secrets vault (``.secrets.json`` file — local development)
+    4. Pydantic field default (lowest)
 """
 
 from functools import lru_cache
@@ -101,6 +109,27 @@ class ApplicationSettings(BaseSettings):
     FALLBACK_CITY: str = Field(default="Kochi", description="Fallback city")
 
     # REDIS_URL defined above as a proper Pydantic Field
+
+    def model_post_init(self, __context) -> None:
+        """Overlay secrets from the vault after loading from ``.env``.
+
+        This allows running the application without ``GEMINI_API_KEY`` or
+        ``WEATHER_API_KEY`` in ``.env`` — they are pulled from the vault file
+        instead. Environment variables still take precedence because pydantic-
+        settings evaluates them first.
+        """
+        _VAULT_KEYS = ("GEMINI_API_KEY", "WEATHER_API_KEY", "TRENDS_API_KEY", "API_KEY")
+        try:
+            from app.core.vault import get_vault
+
+            vault = get_vault()
+            for key in _VAULT_KEYS:
+                if not getattr(self, key, None):
+                    vault_value = vault.get(key)
+                    if vault_value:
+                        object.__setattr__(self, key, vault_value)
+        except Exception:
+            pass  # Vault unavailable — use whatever .env provided
 
 @lru_cache
 def get_application_settings() -> ApplicationSettings:

@@ -37,3 +37,6 @@ next-env.d.ts
 
 # Application log / cache
 graphify-out/
+
+# Secrets vault (contains API keys, tokens)
+.secrets.json

@@ -20,6 +20,7 @@ class NotificationResponse(BaseModel):
     created_at: datetime
 
 @router.get("", response_model=List[NotificationResponse])
+@router.get("/", response_model=List[NotificationResponse])
 def get_notifications(tenant_id: str = Depends(get_current_tenant), db: Session = Depends(get_database_session)):
     return db.query(NotificationModel).filter(
         NotificationModel.tenant_id == tenant_id
