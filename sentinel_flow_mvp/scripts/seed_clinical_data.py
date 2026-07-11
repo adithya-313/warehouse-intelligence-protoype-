@@ -36,6 +36,40 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def get_pubmedbert_embedding(text: str) -> list[float] | None:
+    """
+    Generate a 768-dimensional PubMedBERT vector.
+
+    Beginner Note: This is the REAL embedding pipeline that the RAG system
+    is designed to use. It produces semantically meaningful vectors that
+    capture medical knowledge. However, it requires sentence-transformers
+    and the full PyTorch stack, which may not be available in all envs.
+
+    If the ML stack is not available, returns None so the caller can
+    fall back to deterministic_embedding().
+    """
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        logger.info("Loading PubMedBERT model (pritamdeka/S-PubMedBert-MSN-ME)...")
+        model = SentenceTransformer(
+            "pritamdeka/S-PubMedBert-MSN-ME",
+            device="cpu",
+        )
+        embedding = model.encode(text).tolist()
+        logger.info(f"PubMedBERT embedding generated: {len(embedding)} dimensions.")
+        return embedding
+
+    except Exception as error:
+        logger.warning(
+            f"PubMedBERT embedding failed: {error}. "
+            "This is expected if PyTorch/sentence-transformers is not installed "
+            "or if there is a DLL conflict (common on Windows). "
+            "Falling back to deterministic hash-based embedding."
+        )
+        return None
+
+
 def deterministic_embedding(text: str, dimensions: int = 768) -> list[float]:
     """
     Generate a deterministic 768-dimensional vector from text content.
@@ -43,7 +77,7 @@ def deterministic_embedding(text: str, dimensions: int = 768) -> list[float]:
     Beginner Note: In production, this should be replaced with a real
     PubMedBERT embedding (768 dimensions) for accurate semantic search.
     However, the actual model loading (sentence_transformers) requires
-    a full PyTorch/TorchAudio installation that is not available on
+    a full PyTorch/TorchAudio installation that may not be available on
     all development machines.
 
     This fallback uses SHA-256 to seed a deterministic random generator
@@ -51,30 +85,31 @@ def deterministic_embedding(text: str, dimensions: int = 768) -> list[float]:
     semantically meaningful, it allows the vector search pipeline to
     function during development and testing.
 
-    To generate proper embeddings after deployment:
-        pip install sentence-transformers
+    To upgrade to real embeddings after deployment:
         python -c "
     from sentence_transformers import SentenceTransformer
     model = SentenceTransformer('pritamdeka/S-PubMedBert-MSN-ME')
-    emb = model.encode('your text here').tolist()
-    print(emb)
+    from app.infrastructure.database import SessionLocal
+    from app.infrastructure.models import ClinicalKnowledgeBase
+    db = SessionLocal()
+    for row in db.query(ClinicalKnowledgeBase).all():
+        row.embedding = model.encode(row.content).tolist()
+    db.commit()
+    print('All embeddings regenerated with PubMedBERT.')
     "
     """
-    # Use SHA-256 hash of the text to seed a deterministic RNG
     hash_bytes = hashlib.sha256(text.encode("utf-8")).digest()
 
     # Generate random floats using the hash as seed
     random_values = []
     for i in range(dimensions):
-        # Create a unique seed for each dimension using hash + position
         dimension_hash = hashlib.sha256(
             hash_bytes + str(i).encode("utf-8")
         ).digest()
-        # Convert the first 4 bytes of the hash to a float in [0, 1)
         int_value = int.from_bytes(dimension_hash[:4], "big")
         random_values.append(int_value / (2**32))
 
-    # Normalize to unit length (L2 norm = 1) so cosine distance is meaningful
+    # Normalize to unit length (L2 norm = 1)
     magnitude = math.sqrt(sum(v * v for v in random_values))
     normalized = [v / magnitude for v in random_values]
 
@@ -271,8 +306,14 @@ def seed_clinical_knowledge_base() -> int:
                 f"content_length={len(doc['content'])} chars"
             )
 
-            # Generate a deterministic 768-dimensional vector
-            embedding = deterministic_embedding(doc["content"])
+            # Generate a 768-dimensional vector embedding.
+            # We try PubMedBERT first (semantically meaningful), then
+            # fall back to deterministic hash if the ML stack isn't
+            # available on this machine.
+            embedding = get_pubmedbert_embedding(doc["content"])
+            if embedding is None:
+                logger.info("Using deterministic hash embedding as fallback.")
+                embedding = deterministic_embedding(doc["content"])
 
             # Create the ORM record.
             # Note: content_fts is GENERATED ALWAYS AS — PostgreSQL will
