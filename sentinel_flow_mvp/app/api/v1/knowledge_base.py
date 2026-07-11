@@ -4,7 +4,7 @@ from app.infrastructure.database import get_database_session
 from app.domain.schemas import KnowledgeIngestionRequest, KnowledgeIngestionResponse, SemanticSearchRequest, SemanticSearchResponse, RAGQueryRequest, RAGQueryResponse
 from app.workers.embedding_tasks import generate_and_store_embedding
 from app.services.semantic_search import execute_clinical_search
-from app.services.rag_pipeline import generate_clinical_response
+from app.services.rag_pipeline import route_and_process_query
 
 router = APIRouter()
 
@@ -20,7 +20,7 @@ async def ingest_clinical_knowledge(payload: KnowledgeIngestionRequest):
         content=payload.content,
         metadata=payload.metadata_payload
     )
-    
+
     return KnowledgeIngestionResponse(
         message="Clinical knowledge queued for vector embedding.",
         task_id=task.id
@@ -42,7 +42,7 @@ async def search_clinical_knowledge(
         sku_id=payload.sku_id,
         top_k=payload.top_k
     )
-    
+
     return SemanticSearchResponse(
         query=payload.query,
         results=search_data["results"],
@@ -55,15 +55,17 @@ async def ask_clinical_assistant(
     db: Session = Depends(get_database_session)
 ):
     """
-    Context-Constrained AI Assistant Endpoint.
-    Takes a natural language query, retrieves clinical context, and generates a safe answer.
+    Adaptive AI Assistant Endpoint.
+    Routes each query through the Adaptive Routing system:
+      - Objective queries (price, stock, MRP) → answered from database instantly.
+      - Clinical/subjective queries → answered via Gemini RAG with clinical context.
     """
-    rag_data = generate_clinical_response(
+    rag_data = route_and_process_query(
         db=db,
         query=payload.query,
         sku_id=payload.sku_id
     )
-    
+
     return RAGQueryResponse(
         query=payload.query,
         answer=rag_data["answer"],
