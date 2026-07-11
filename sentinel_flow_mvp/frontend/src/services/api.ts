@@ -340,6 +340,26 @@ export const api = {
   }
 };
 
+export interface CrossSellItem {
+  recommended_sku: string;
+  confidence_score: number;
+}
+
+export interface GenericAlternative {
+  sku_id: string;
+  batch_id: string;
+  profit_score: number;
+  mrp: number;
+  cost: number;
+}
+
+export interface RecommendationResponse {
+  status: string;
+  scanned_sku: string;
+  cross_sells: CrossSellItem[];
+  generic_alternatives: GenericAlternative[];
+}
+
 export type PaymentMethod = 'CASH' | 'UPI' | 'CARD';
 
 export interface TransactionItem {
@@ -413,4 +433,13 @@ export async function fetchSystemStats(): Promise<SystemStatsResponse> {
   });
   if (!response.ok) throw new Error("Failed to fetch system stats");
   return SystemStatsSchema.parse(await response.json());
+}
+
+export async function fetchRecommendations(skuId: string): Promise<RecommendationResponse> {
+  const response = await fetch(`/api/v1/pos/recommendations/${encodeURIComponent(skuId)}`, {
+    headers: { 'X-Tenant-ID': DEFAULT_TENANT },
+    cache: 'no-store'
+  });
+  if (!response.ok) throw new Error(`Failed to fetch recommendations: ${response.status}`);
+  return response.json();
 }

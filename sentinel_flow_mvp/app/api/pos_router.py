@@ -62,7 +62,24 @@ async def get_fefo_routing(
         "routing": routing_info
     }
 
-@router.get("/recommendations/{sku_id}")
+class CrossSellItem(BaseModel):
+    recommended_sku: str
+    confidence_score: float
+
+class GenericAlternative(BaseModel):
+    sku_id: str
+    batch_id: str
+    profit_score: float
+    mrp: float
+    cost: float
+
+class RecommendationResponse(BaseModel):
+    status: str
+    scanned_sku: str
+    cross_sells: List[CrossSellItem]
+    generic_alternatives: List[GenericAlternative]
+
+@router.get("/recommendations/{sku_id}", response_model=RecommendationResponse)
 async def get_smart_recommendations(
     sku_id: str, 
     db: Session = Depends(get_database_session)
@@ -74,12 +91,12 @@ async def get_smart_recommendations(
     cross_sells = get_clinical_cross_sells(sku_id)
     generics = get_high_margin_generics(db, sku_id)
     
-    return {
-        "status": "success",
-        "scanned_sku": sku_id,
-        "cross_sells": cross_sells,
-        "generic_alternatives": generics
-    }
+    return RecommendationResponse(
+        status="success",
+        scanned_sku=sku_id,
+        cross_sells=[CrossSellItem(**item) for item in cross_sells],
+        generic_alternatives=[GenericAlternative(**item) for item in generics]
+    )
 
 class PatientLookupResponse(BaseModel):
     patient_id: str
@@ -123,6 +140,11 @@ class CheckoutItemSchema(BaseModel):
     quantity: int
     price: float
 
+class PaymentMethod(str, Enum):
+    CASH = "CASH"
+    UPI = "UPI"
+    CARD = "CARD"
+
 class CheckoutRequestSchema(BaseModel):
     items: List[CheckoutItemSchema]
     payment_method: PaymentMethod = PaymentMethod.CASH
@@ -136,11 +158,6 @@ class CheckoutRequestSchema(BaseModel):
 class CheckoutResponseSchema(BaseModel):
     receipt_id: str
     message: str
-
-class PaymentMethod(str, Enum):
-    CASH = "CASH"
-    UPI = "UPI"
-    CARD = "CARD"
 
 class TransactionItemResponse(BaseModel):
     productId: str
