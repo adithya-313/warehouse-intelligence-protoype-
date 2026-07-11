@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bot, Settings, BarChart3, ShoppingBag, ArrowRight, Barcode, ScanLine, CheckCircle2, History } from 'lucide-react';
+import { Search, Bot, Settings, BarChart3, ShoppingBag, ArrowRight, Barcode, ScanLine, CheckCircle2, History, Banknote, QrCode, CreditCard } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { cn } from '@/lib/utils';
 import { usePOSStore } from '@/store/posStore';
@@ -11,7 +11,7 @@ import CopilotPanel from '@/components/pos/CopilotPanel';
 import { PreemptiveWarningBanner } from "@/components/PreemptiveWarningBanner";
 import { NotificationBell } from "@/components/NotificationBell";
 import { DynamicCapsule } from "@/components/DynamicCapsule";
-import { api } from '@/services/api';
+import { api, PaymentMethod } from '@/services/api';
 
 // Beginner Note: A single-click search result row. Clicking adds 1 unit to the cart.
 // Quantity adjustments happen inside the "Current Order" cart sidebar.
@@ -137,12 +137,12 @@ export default function POSDashboard() {
 
   // Beginner Note: This function handles the entire checkout flow.
   // It locks the UI, submits the cart to the backend, and clears it upon success.
-  const executeCheckout = async () => {
+  const executeCheckout = async (method: PaymentMethod) => {
     if (cart.length === 0) return;
     
     setProcessing(true);
     try {
-      const response = await api.submitCheckout(cart, customerPhone || undefined, customerName || undefined, 'CASH');
+      const response = await api.submitCheckout(cart, customerPhone || undefined, customerName || undefined, method);
       
       // Capture receipt ID (use the actual one or mock a short one if missing)
       const shortId = response.receipt_id ? response.receipt_id.slice(-5) : "805F";
@@ -494,16 +494,32 @@ export default function POSDashboard() {
                   <span className="text-5xl font-black text-slate-900 tracking-tighter">₹{mounted ? totalAmount.toFixed(2) : "0.00"}</span>
                 </div>
                 
-                {/* DESIGN TOKEN: Liquid Titanium (Checkout Button) */}
-                <motion.button 
-                  whileHover={{ scale: 1.02, backgroundPosition: "100% center" }}
-                  whileTap={{ scale: 0.98 }}
-                  disabled={!mounted || cart.length === 0 || isProcessing}
-                  onClick={executeCheckout}
-                  className="w-full py-5 bg-gradient-to-r from-slate-900 via-slate-700 to-slate-900 bg-[length:200%_auto] text-white rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-[inset_0_1px_1px_rgba(255,255,255,0.25),0_12px_24px_rgba(15,23,42,0.2)] border border-slate-800"
-                >
-                  {isProcessing ? "Processing..." : "Complete Checkout"} <ArrowRight size={20} />
-                </motion.button>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    onClick={() => executeCheckout('CASH')}
+                    disabled={!mounted || cart.length === 0 || isProcessing}
+                    className="flex flex-col items-center justify-center gap-2 py-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-emerald-200/50"
+                  >
+                    <Banknote size={22} />
+                    <span className="text-sm font-semibold">Cash</span>
+                  </button>
+                  <button
+                    onClick={() => executeCheckout('UPI')}
+                    disabled={!mounted || cart.length === 0 || isProcessing}
+                    className="flex flex-col items-center justify-center gap-2 py-4 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-blue-200/50"
+                  >
+                    <QrCode size={22} />
+                    <span className="text-sm font-semibold">UPI</span>
+                  </button>
+                  <button
+                    onClick={() => executeCheckout('CARD')}
+                    disabled={!mounted || cart.length === 0 || isProcessing}
+                    className="flex flex-col items-center justify-center gap-2 py-4 rounded-xl bg-violet-50 hover:bg-violet-100 text-violet-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-violet-200/50"
+                  >
+                    <CreditCard size={22} />
+                    <span className="text-sm font-semibold">Card</span>
+                  </button>
+                </div>
               </div>
             </div>
           </motion.div>
