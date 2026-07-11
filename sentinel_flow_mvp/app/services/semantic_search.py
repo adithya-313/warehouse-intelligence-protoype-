@@ -59,24 +59,28 @@ def execute_clinical_search(
     # for "fever medication" will also match documents about "antipyretic
     # treatment" because those words have similar vector representations.
 
-    model = get_embedding_model()
-    query_vector = model.encode(query).tolist()
+    try:
+        model = get_embedding_model()
+        query_vector = model.encode(query).tolist()
 
-    # Build the vector search query using pgvector's cosine distance operator.
-    # Cosine distance ranges from 0.0 (identical direction) to 2.0 (opposite).
-    # We convert it to similarity with: similarity = 1.0 - distance
-    vector_query = db.query(
-        ClinicalKnowledgeBase,
-        ClinicalKnowledgeBase.embedding.cosine_distance(query_vector).label("distance")
-    )
+        # Build the vector search query using pgvector's cosine distance operator.
+        # Cosine distance ranges from 0.0 (identical direction) to 2.0 (opposite).
+        # We convert it to similarity with: similarity = 1.0 - distance
+        vector_query = db.query(
+            ClinicalKnowledgeBase,
+            ClinicalKnowledgeBase.embedding.cosine_distance(query_vector).label("distance")
+        )
 
-    if sku_id:
-        vector_query = vector_query.filter(ClinicalKnowledgeBase.sku_id == sku_id)
+        if sku_id:
+            vector_query = vector_query.filter(ClinicalKnowledgeBase.sku_id == sku_id)
 
-    # Get top 10 results from vector search (we ask for more than top_k
-    # because the keyword search might surface different relevant results
-    # that we want to consider in the fusion step).
-    vector_raw_results = vector_query.order_by("distance").limit(10).all()
+        # Get top 10 results from vector search (we ask for more than top_k
+        # because the keyword search might surface different relevant results
+        # that we want to consider in the fusion step).
+        vector_raw_results = vector_query.order_by("distance").limit(10).all()
+    except Exception as e:
+        logger.warning("Vector model unavailable. Falling back to pure keyword search.")
+        vector_raw_results = []
 
     # =====================================================================
     # STEP 2: KEYWORD SEARCH (Exact Word Match via PostgreSQL tsvector)
