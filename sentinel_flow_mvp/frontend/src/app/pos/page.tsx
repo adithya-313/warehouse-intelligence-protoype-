@@ -78,6 +78,7 @@ export default function POSDashboard() {
   useEffect(() => {
     if (cart.length === 0) {
       setRecommendations(null);
+      setLoadingRecs(false);
       lastSkuRef.current = null;
       return;
     }
@@ -86,7 +87,9 @@ export default function POSDashboard() {
     lastSkuRef.current = lastItem.sku_id;
     setLoadingRecs(true);
     fetchRecommendations(lastItem.sku_id)
-      .then(setRecommendations)
+      .then((data) => {
+        if (lastSkuRef.current === data.scanned_sku) setRecommendations(data);
+      })
       .catch(() => setRecommendations(null))
       .finally(() => setLoadingRecs(false));
   }, [cart]);
@@ -384,12 +387,25 @@ export default function POSDashboard() {
             </div>
 
             {/* CLINICAL COMPANION CANVAS */}
-            <ClinicalCompanion
-              loading={loadingRecs}
-              crossSells={recommendations?.cross_sells || []}
-              genericAlts={recommendations?.generic_alternatives || []}
-              onAddItem={(item) => addItem({ batch_id: item.batch_id, sku_id: item.sku_id, name: item.name, price: item.price })}
-            />
+              <ClinicalCompanion
+                loading={loadingRecs}
+                crossSells={recommendations?.cross_sells || []}
+                genericAlts={recommendations?.generic_alternatives || []}
+                onAddItem={async (item) => {
+                  let finalPrice = item.price;
+                  // If price is missing (0), we fetch the real price from the catalog
+                  if (finalPrice === 0) {
+                    try {
+                      const searchData = await api.searchInventory(item.sku_id);
+                      const realItem = searchData.find((i: any) => i.sku_id === item.sku_id);
+                      finalPrice = realItem ? realItem.price : 99.99; // Fallback default
+                    } catch (e) {
+                      finalPrice = 99.99; // Fallback default if API fails
+                    }
+                  }
+                  addItem({ batch_id: item.batch_id, sku_id: item.sku_id, name: item.name, price: finalPrice });
+                }}
+              />
           </motion.div>
 
           {/* RIGHT COLUMN: THE RECEIPT (CART) */}

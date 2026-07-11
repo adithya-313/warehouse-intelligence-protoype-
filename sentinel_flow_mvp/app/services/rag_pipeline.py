@@ -7,11 +7,9 @@ from app.services.semantic_search import execute_clinical_search
 logger = logging.getLogger(__name__)
 
 # Initialize Gemini Configuration
-settings = get_application_settings()
-if settings.GEMINI_API_KEY:
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-else:
-    logger.warning("GEMINI_API_KEY is missing. RAG pipeline will fail if called.")
+# We no longer configure the API key at the module level.
+# This prevents import-order bugs if the environment variables are not yet loaded.
+# Instead, we will fetch the key dynamically inside the execution function.
 
 def generate_clinical_response(db: Session, query: str, sku_id: str = None) -> dict:
     """
@@ -20,7 +18,17 @@ def generate_clinical_response(db: Session, query: str, sku_id: str = None) -> d
     2. Feeds the context to Google Gemini with a strict 'Do Not Hallucinate' prompt.
     """
     
+    # STEP 0: DYNAMIC API KEY CONFIGURATION
+    # We fetch the application settings at runtime instead of module load time.
+    # This guarantees we have the latest environment variables loaded safely.
+    settings = get_application_settings()
+    if settings.GEMINI_API_KEY:
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+    else:
+        logger.warning("GEMINI_API_KEY is missing. RAG pipeline will fail if called.")
+
     # STEP 1: RETRIEVAL (Get the facts from our database)
+    # We query the vector database for the top 3 most relevant clinical guidelines.
     search_results = execute_clinical_search(db=db, query=query, sku_id=sku_id, top_k=3)
     
     # If the safety breaker tripped (no high-confidence results), degrade gracefully.
@@ -54,8 +62,8 @@ USER QUERY:
 
     # STEP 4: GENERATION (Call Gemini)
     try:
-        # We use gemini-3.5-flash for high speed and low latency
-        model = genai.GenerativeModel('gemini-3.5-flash')
+        # We use gemini-2.5-flash for high speed and low latency (fixed invalid model name)
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         # Temperature = 0.0 forces the AI to be deterministic and analytical, not creative.
         response = model.generate_content(
