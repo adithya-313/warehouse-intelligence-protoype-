@@ -88,7 +88,7 @@ async def get_smart_recommendations(
     Surfaces clinical cross-sells (via Graph Engine) and high-margin generic 
     alternatives (via API matching) to maximize pharmacy profit at checkout.
     """
-    cross_sells = get_clinical_cross_sells(sku_id)
+    cross_sells = get_clinical_cross_sells(db, sku_id)
     generics = get_high_margin_generics(db, sku_id)
     
     return RecommendationResponse(

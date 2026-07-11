@@ -5,30 +5,64 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# --- 1. The Lightweight Graph Engine (Cross-Selling) ---
-# Beginner Note: A Graph is just a web of connections. Nodes are medicines. 
-# Edges are the lines connecting them. The 'weight' of the line is how often they are bought together.
-co_purchase_graph = nx.Graph()
-
-# Mocking some historical data for the MVP. In production, a background worker 
-# would constantly update these weights based on actual Kafka POS events.
-co_purchase_graph.add_edge("SKU_AMOX", "SKU_PROB", weight=0.90)
-co_purchase_graph.add_edge("SKU_VIAG", "SKU_COND", weight=0.85)
-co_purchase_graph.add_edge("DOLO-650", "SKU_VITC", weight=0.70)
-
-def get_clinical_cross_sells(sku_id: str, top_k: int = 2):
+def get_clinical_cross_sells(db: Session, sku_id: str, top_k: int = 2):
     """
-    Finds medicines frequently bought with the scanned item using Graph connections.
+    Finds medicines frequently bought with the scanned item using Market Basket Analysis.
     """
-    if sku_id not in co_purchase_graph:
+    from app.infrastructure.models import SaleLineItemModel, MedicationBatchModel
+    
+    # 1. Market Basket Analysis - Step A: Find all receipts that contain the target SKU.
+    # We join SaleLineItemModel with MedicationBatchModel because the line item only holds the batch_id,
+    # and we need to match against the parent sku_id.
+    receipts_with_sku = db.query(SaleLineItemModel.receipt_id).join(
+        MedicationBatchModel, SaleLineItemModel.batch_id == MedicationBatchModel.batch_id
+    ).filter(
+        MedicationBatchModel.sku_id == sku_id
+    ).all()
+    
+    # We extract just the receipt IDs into a simple list.
+    target_receipt_ids = [row.receipt_id for row in receipts_with_sku]
+    
+    # If this item has never been sold, we can't recommend anything based on sales history.
+    if not target_receipt_ids:
         return []
         
-    # Get all connected medicines and sort them by the 'weight' (confidence score)
-    neighbors = co_purchase_graph[sku_id].items()
-    sorted_neighbors = sorted(neighbors, key=lambda x: x[1]['weight'], reverse=True)
+    # 2. Market Basket Analysis - Step B: Find all OTHER items sold on those exact same receipts.
+    # We query the line items again, filtering by the receipt IDs we just found,
+    # but we EXCLUDE the original sku_id so we don't recommend the item to itself.
+    co_purchased_items = db.query(MedicationBatchModel.sku_id).join(
+        SaleLineItemModel, SaleLineItemModel.batch_id == MedicationBatchModel.batch_id
+    ).filter(
+        SaleLineItemModel.receipt_id.in_(target_receipt_ids),
+        MedicationBatchModel.sku_id != sku_id
+    ).all()
     
-    # Return the top K recommendations
-    return [{"recommended_sku": n[0], "confidence_score": n[1]['weight']} for n in sorted_neighbors[:top_k]]
+    # 3. Market Basket Analysis - Step C: Count the frequencies of the co-purchased items.
+    # We use a dictionary to tally how many times each item was bought alongside our target item.
+    frequency_map = {}
+    for item in co_purchased_items:
+        co_sku = item.sku_id
+        if co_sku in frequency_map:
+            frequency_map[co_sku] += 1
+        else:
+            frequency_map[co_sku] = 1
+            
+    # 4. Calculate Confidence Scores and Format Results
+    # The total number of receipts where the target item was sold represents 100% (the denominator).
+    # We divide the co-purchase count by the total receipts to get the confidence percentage.
+    total_receipts_count = len(target_receipt_ids)
+    results = []
+    
+    for co_sku, count in frequency_map.items():
+        confidence_score = count / total_receipts_count
+        results.append({
+            "recommended_sku": co_sku,
+            "confidence_score": confidence_score
+        })
+        
+    # Finally, we sort the recommendations from highest confidence to lowest, and return the top K.
+    results.sort(key=lambda x: x["confidence_score"], reverse=True)
+    return results[:top_k]
 
 
 # --- 2. The Generic Conversion Engine (Margin Maximization) ---
