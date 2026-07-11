@@ -367,7 +367,7 @@ def get_transaction_history(
             id=receipt.id,
             timestamp=receipt.timestamp,
             total_amount_inr=receipt.total_amount_inr,
-            payment_method=receipt.payment_method,
+            payment_method=receipt.payment_method or "CASH",
             customer_name=receipt.patient_name if receipt.patient_name else "Anonymous",
             customer_phone=receipt.patient_phone,
             items=[

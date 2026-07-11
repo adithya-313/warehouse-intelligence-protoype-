@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '@/services/api';
 import type { TransactionHistoryItem } from '@/services/api';
+export const dynamic = 'force-dynamic';
+
 import ScreenAtmosphere from '@/components/ui/core/ScreenAtmosphere';
 import TransactionMatrix from '@/components/ui/core/TransactionMatrix';
 import LedgerRow from '@/components/ui/core/LedgerRow';
