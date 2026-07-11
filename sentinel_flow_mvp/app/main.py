@@ -81,10 +81,26 @@ async def application_lifespan(application: FastAPI):
     logger.info("SENTINEL-FLOW: Application Startup")
     logger.info("=" * 60)
 
-    # Step 0: Create all database tables (including pgvector clinical_knowledge_base)
-    logger.info("Initializing database tables...")
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables created successfully.")
+    # Step 0: Database Schema Management — Alembic takes the wheel.
+    #
+    # Previously, we called Base.metadata.create_all(bind=engine) here to auto-create
+    # any missing tables at startup. However, this approach has a critical flaw:
+    # it creates tables IMPLICITLY without tracking changes over time. If a junior
+    # developer adds a column to models.py, the column appears in the running
+    # database the next time the container restarts — with NO migration record.
+    # This makes rollbacks impossible and creates drift between environments.
+    #
+    # Alembic now owns schema management. All tables must be created through
+    # migration revisions (alembic revision --autogenerate && alembic upgrade head).
+    # The Base.metadata.create_all() call below is commented out so that
+    # schema changes are EXPLICIT, version-controlled, and reversible.
+    #
+    # To apply pending migrations at deployment, run:
+    #   alembic upgrade head
+    #
+    # logger.info("Initializing database tables...")
+    # Base.metadata.create_all(bind=engine)
+    # logger.info("Database tables created successfully.")
 
     # Step 0a: Expand the anyio thread pool for synchronous route offloading
     # FastAPI offloads sync def routes to anyio's thread pool (default 40 tokens).

@@ -5,6 +5,26 @@ from sqlalchemy import pool
 
 from alembic import context
 
+# ---------------------------------------------------------------------------
+# First, we need to tell our migration tool about the custom PostgreSQL
+# "vector" data type that pgvector provides. Alembic works by comparing the
+# real database schema against our SQLAlchemy model definitions. If we do
+# NOT register the Vector type, Alembic will crash whenever it encounters
+# a "vector" column during autogenerate because it doesn't know how to
+# represent that type in Python.
+#
+# The fix: import the Vector class and register it into the PostgreSQL
+# dialect's type map so Alembic can recognize, compare, and generate
+# migration code for vector(768) columns.
+# ---------------------------------------------------------------------------
+# Import pgvector's custom "Vector" type so Alembic can detect and compare
+# the vector(768) column on the ClinicalKnowledgeBase model during autogenerate.
+# We also register it with the PostgreSQL dialect's internal type name map
+# so Alembic knows how to represent "vector" columns in migration scripts.
+from pgvector.sqlalchemy import Vector
+from sqlalchemy.dialects.postgresql.base import ischema_names
+ischema_names["vector"] = Vector
+
 # Import settings and metadata
 from app.core.config import get_application_settings
 from app.infrastructure.models import Base
@@ -26,6 +46,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        compare_type=True,
     )
 
     with context.begin_transaction():
@@ -45,7 +66,9 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
         )
 
         with context.begin_transaction():

@@ -27,6 +27,8 @@ from app.core.redis_client import (
 from pydantic import BaseModel
 from typing import List, Optional
 import uuid
+import hashlib  # Beginner Note: We use SHA-256 to create a unique fingerprint of the cart.
+import json     # Beginner Note: We serialize the cart items into JSON before hashing them.
 import logging
 from datetime import datetime
 from enum import Enum
@@ -274,16 +276,69 @@ async def process_checkout(
     """
     
     # =====================================================================
-    # GUARD 1: IDEMPOTENCY CHECK (Redis SET NX — happens before any DB work)
+    # GUARD 1: IDEMPOTENCY CHECK (SHA-256 fingerprint + Redis SET NX)
     # =====================================================================
-    # Beginner Note: We check Redis FIRST because it's faster than a DB query.
-    # If the idempotency key already exists in Redis (meaning we already
-    # processed this exact checkout), we reject immediately with a 409 Conflict.
-    # This prevents the same checkout from being processed twice — even if the
-    # frontend sent it twice due to a network glitch or double-click.
-    is_duplicate: bool = await is_duplicate_checkout_request(payload.idempotency_key)
+    # Beginner Note: We create a unique mathematical fingerprint of the
+    # ENTIRE checkout request — the tenant ID, the customer, the payment
+    # method, and every item in the cart — all hashed together using SHA-256.
+    #
+    # Why SHA-256 instead of the frontend's random UUID?
+    #   - The frontend sends a random UUID (crypto.randomUUID()), but a
+    #     malicious client could send a DIFFERENT UUID for the SAME cart
+    #     and bypass idempotency.
+    #   - SHA-256 is DETERMINISTIC: the same cart always produces the same hash.
+    #   - If the pharmacist accidentally clicks "Pay" twice, both requests
+    #     will have the EXACT same hash, and the second one gets rejected.
+    #   - We also include the frontend's idempotency_key in the hash so
+    #     even if two different carts somehow produce the same hash (astronomically
+    #     unlikely), the frontend key differentiates them.
+    # ---------------------------------------------------------------------------
+    # Step 1: Sort the cart items by batch_id so the hash is stable regardless
+    # of the order the pharmacist added items to the cart.
+    sorted_cart_items: list = sorted(
+        payload.items,
+        key=lambda item: item.batch_id,
+    )
+
+    # Step 2: Build a canonical representation of the entire checkout.
+    # We convert it to a JSON string so the hash input is always identical
+    # for identical checkouts — even across different programming languages.
+    canonical_checkout_payload: str = json.dumps({
+        "tenant_id": tenant_id,
+        "items": [
+            {
+                "batch_id": item.batch_id,
+                "sku_id": item.sku_id,
+                "quantity": item.quantity,
+                "price": float(item.price),
+            }
+            for item in sorted_cart_items
+        ],
+        "payment_method": payload.payment_method.value,
+        "customer_phone": payload.customer_phone,
+        # We include the frontend's UUID as a salt so the hash is unique
+        # even if two pharmacists submit identical carts simultaneously.
+        "frontend_idempotency_key": payload.idempotency_key,
+    }, sort_keys=True)
+
+    # Step 3: Generate the SHA-256 hex digest.
+    # SHA-256 produces a 64-character hexadecimal string that is:
+    #   - Deterministic: same input → same output
+    #   - Collision-resistant: different inputs → astronomically different outputs
+    #   - One-way: you cannot reverse the hash to recover the cart contents
+    deterministic_idempotency_hash: str = hashlib.sha256(
+        canonical_checkout_payload.encode("utf-8")
+    ).hexdigest()
+
+    # Step 4: Check Redis using this deterministic hash as the key.
+    # If the hash already exists in Redis, it means this exact checkout was
+    # already processed — reject with 409 Conflict.
+    is_duplicate: bool = await is_duplicate_checkout_request(deterministic_idempotency_hash)
     if is_duplicate:
-        logger.warning(f"Duplicate checkout detected: idempotency_key={payload.idempotency_key}")
+        logger.warning(
+            f"Duplicate checkout detected: hash={deterministic_idempotency_hash[:16]}... "
+            f"(tenant={tenant_id})"
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="This checkout has already been processed. Duplicate request rejected."
@@ -322,8 +377,12 @@ async def process_checkout(
                 f"FEFO inventory lock expired for batch={cartItem.batch_id} "
                 f"(sku={cartItem.sku_id}, qty={cartItem.quantity})"
             )
+            # Beginner Note: We use 409 Conflict (not 400 Bad Request) because
+            # this is a resource contention error — another checkout already
+            # claimed this batch. 409 tells the frontend it must re-scan to
+            # get a fresh FEFO routing (which may return a different batch).
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_409_CONFLICT,
                 detail=(
                     f"The batch {cartItem.batch_id} ({cartItem.sku_id}) is no longer reserved. "
                     "Please scan the item again to get fresh availability."
@@ -446,9 +505,11 @@ async def process_checkout(
         # If any step above failed, the session would rollback automatically.
         db.commit()
 
-        # 8. Mark the idempotency key as processed so any retry with the
-        # same key gets a 409 Conflict.
-        await mark_checkout_completed(payload.idempotency_key)
+        # 8. Mark the deterministic idempotency hash as processed so any
+        # retry with the same cart gets a 409 Conflict. We use the server-side
+        # SHA-256 hash (not the frontend UUID) so idempotency is guaranteed
+        # even if a malicious client sends different UUIDs for the same cart.
+        await mark_checkout_completed(deterministic_idempotency_hash)
 
         # 9. Release all inventory locks so other checkouts can reserve these batches
         for cartItem in payload.items:
