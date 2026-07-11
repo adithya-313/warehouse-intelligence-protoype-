@@ -59,6 +59,13 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@timescaledb:5432/sentinel_db
       - REDIS_URL=redis://redis:6379/0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       timescaledb:
         condition: service_healthy
@@ -73,6 +80,13 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@timescaledb:5432/sentinel_db
       - REDIS_URL=redis://redis:6379/0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       timescaledb:
         condition: service_healthy
@@ -111,12 +125,7 @@ services:
       - "3000:3000"
     stdin_open: true
     tty: true
-    # Override node:20-alpine's docker-entrypoint.sh so our command runs as PID 1 directly.
     entrypoint: ""
-    # Run Next.js dev server directly, bound to all interfaces for Docker host access.
-    # Source code is synced from the host for hot reload.
-    # node_modules is isolated in a named volume to preserve Linux-compiled binaries
-    # and prevent the host's Windows-compiled node_modules from corrupting the container.
     command: sh -c "npx next dev -H 0.0.0.0"
     volumes:
       - ./frontend:/app
