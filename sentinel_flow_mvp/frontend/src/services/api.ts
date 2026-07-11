@@ -277,6 +277,12 @@ export const api = {
       headers['X-API-Key'] = _apiKey;
     }
 
+    // Generate a cryptographically unique idempotency key for every checkout attempt.
+    // Beginner Note: This UUID is stored in Redis on the backend. If the pharmacist
+    // accidentally clicks "Pay" twice, the second request has the SAME key and the
+    // backend returns 409 Conflict — preventing a double charge.
+    const checkoutIdempotencyKey: string = crypto.randomUUID();
+
     // Format the payload exactly as the backend expects (CheckoutRequestSchema)
     const checkoutPayload = {
       items: cartItems.map(item => ({
@@ -287,6 +293,7 @@ export const api = {
         price: item.price
       })),
       payment_method: paymentMethod || 'CASH',
+      idempotency_key: checkoutIdempotencyKey,
       customer_phone: customerPhone || null,
       customer_name: customerName || null
     };

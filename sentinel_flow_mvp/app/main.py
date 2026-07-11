@@ -33,6 +33,7 @@ from app.api.dependencies import verify_api_key
 
 from app.api.v1 import audit, federated, ingestion, patients, risk, stream_router, stats, knowledge_base, settings, inventory
 from app.services.kafka_producer import start_kafka_producer, stop_kafka_producer
+from app.core.redis_client import get_redis_client, close_redis_client
 from app.api.pos_router import router as pos_router
 from app.api.erp_router import router as erp_router
 from app.api.supplier_router import router as supplier_router
@@ -128,6 +129,10 @@ async def application_lifespan(application: FastAPI):
     logger.info(f"Registered modules: {list(prediction_orchestrator._module_registry.keys())}")
     logger.info("=" * 60)
 
+    # Initialize the Redis connection pool so the checkout idempotency,
+    # velocity limiter, and FEFO inventory locks can work immediately.
+    await get_redis_client()
+
     await start_kafka_producer()
 
     # Yield control to the application - this is where the app runs
@@ -139,6 +144,7 @@ async def application_lifespan(application: FastAPI):
     logger.info("=" * 60)
 
     await stop_kafka_producer()
+    await close_redis_client()
 
     logger.info("Cleaning up prediction orchestrator...")
     prediction_orchestrator._module_registry.clear()
