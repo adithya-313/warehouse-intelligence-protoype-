@@ -12,6 +12,7 @@ import BackButton from '@/components/ui/BackButton';
 export default function HistoryPage() {
   const [transactions, setTransactions] = useState<TransactionHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadHistory() {
@@ -61,7 +62,12 @@ export default function HistoryPage() {
             </tr>
           ) : (
             transactions.map(tx => (
-              <LedgerRow key={tx.id} transaction={tx} />
+              <LedgerRow
+                key={tx.id}
+                transaction={tx}
+                isExpanded={expandedId === tx.id}
+                onToggle={() => setExpandedId(expandedId === tx.id ? null : tx.id)}
+              />
             ))
           )}
         </TransactionMatrix>
