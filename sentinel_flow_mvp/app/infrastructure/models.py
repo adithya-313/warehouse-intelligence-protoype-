@@ -128,8 +128,8 @@ class MedicationModel(Base):
     sku_id = Column(String, primary_key=True, index=True)
     
     # ARRAY allows us to store multiple ingredients or classes in a single column
-    apis = Column(ARRAY(String), nullable=False) # Active Pharmaceutical Ingredients
-    therapeutic_classes = Column(ARRAY(String), nullable=False)
+    apis = Column(ARRAY(Text), nullable=False) # Active Pharmaceutical Ingredients
+    therapeutic_classes = Column(ARRAY(Text), nullable=False)
     
     # Regulatory scheduling (e.g., 'Schedule H', 'Schedule H1', 'OTC')
     cdsco_schedule = Column(String, nullable=False)

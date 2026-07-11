@@ -12,8 +12,9 @@ co_purchase_graph = nx.Graph()
 
 # Mocking some historical data for the MVP. In production, a background worker 
 # would constantly update these weights based on actual Kafka POS events.
-co_purchase_graph.add_edge("SKU-AMOXICILLIN", "SKU-PROBIOTIC", weight=0.85)
-co_purchase_graph.add_edge("SKU-METFORMIN", "SKU-B12-VITAMIN", weight=0.72)
+co_purchase_graph.add_edge("SKU_AMOX", "SKU_PROB", weight=0.90)
+co_purchase_graph.add_edge("SKU_VIAG", "SKU_COND", weight=0.85)
+co_purchase_graph.add_edge("DOLO-650", "SKU_VITC", weight=0.70)
 
 def get_clinical_cross_sells(sku_id: str, top_k: int = 2):
     """
