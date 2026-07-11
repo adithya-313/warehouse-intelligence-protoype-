@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from app.domain.schemas import MedicationSoldEvent
 from app.services.kafka_producer import publish_medication_sold
 from app.infrastructure.database import get_database_session
@@ -210,7 +210,8 @@ def process_checkout(
         # 2. PATIENT UPSERT (Progressive Disclosure):
         #    If the pharmacist entered a phone number, we look up or create a patient profile
         #    so the receipt can be linked for future automated refill messaging.
-        if payload.customer_phone:
+        #    Defensively handle empty strings from the frontend.
+        if payload.customer_phone and payload.customer_phone.strip():
             existingPatientRecord = db.query(Patient).filter(
                 Patient.phone_number == payload.customer_phone,
                 Patient.tenant_id == tenant_id
@@ -339,37 +340,34 @@ def get_transaction_history(
     tenant_id: str = Depends(get_current_tenant)
 ):
     """
-    Returns a history of recent POS transactions.
-    Left joins with the Patient table since anonymous transactions have a null patient_id.
+    Returns a history of recent POS transactions with eager-loaded line items.
     """
-    receipts = db.query(
-        SaleReceiptModel.id,
-        SaleReceiptModel.timestamp,
-        SaleReceiptModel.total_amount_inr,
-        SaleReceiptModel.payment_method,
-        Patient.name.label("patient_name"),
-        Patient.phone_number.label("patient_phone")
-    ).outerjoin(
-        Patient, SaleReceiptModel.patient_id == Patient.patient_id
+    receipts = db.query(SaleReceiptModel).options(
+        selectinload(SaleReceiptModel.lines)
     ).order_by(
         SaleReceiptModel.timestamp.desc()
     ).limit(50).all()
 
+    # Batch-load patient data for all receipts
+    patient_ids = [r.patient_id for r in receipts if r.patient_id]
+    patient_map = {}
+    if patient_ids:
+        patients = db.query(Patient).filter(Patient.patient_id.in_(patient_ids)).all()
+        patient_map = {p.patient_id: p for p in patients}
+
     history = []
     for receipt in receipts:
-        line_items = db.query(
-            SaleLineItemModel
-        ).filter(
-            SaleLineItemModel.receipt_id == receipt.id
-        ).all()
+        patient = patient_map.get(receipt.patient_id)
+        customer_name = patient.name if patient else "Anonymous"
+        customer_phone = patient.phone_number if patient else None
 
         history.append(ReceiptHistoryResponse(
             id=receipt.id,
             timestamp=receipt.timestamp,
-            total_amount_inr=receipt.total_amount_inr,
+            total_amount_inr=float(receipt.total_amount_inr),
             payment_method=receipt.payment_method or "CASH",
-            customer_name=receipt.patient_name if receipt.patient_name else "Anonymous",
-            customer_phone=receipt.patient_phone,
+            customer_name=customer_name,
+            customer_phone=customer_phone,
             items=[
                 TransactionItemResponse(
                     productId=item.batch_id,
@@ -378,7 +376,7 @@ def get_transaction_history(
                     quantity=item.quantity_sold,
                     total=float(item.quantity_sold * item.price_per_unit)
                 )
-                for item in line_items
+                for item in receipt.lines
             ]
         ))
     return history

@@ -329,6 +329,8 @@ class SaleReceiptModel(Base):
     # Optional foreign key to link this receipt to a known patient for refill messaging
     patient_id = Column(String, ForeignKey("patients.patient_id"), nullable=True, index=True)
 
+    lines = relationship("SaleLineItemModel", back_populates="receipt")
+
 
 class SaleLineItemModel(Base):
     """
@@ -344,6 +346,8 @@ class SaleLineItemModel(Base):
 
     quantity_sold = Column(Integer, nullable=False)
     price_per_unit = Column(Numeric(10, 2), nullable=False)
+
+    receipt = relationship("SaleReceiptModel", back_populates="lines")
 
 
 class OutboxEventModel(Base):
