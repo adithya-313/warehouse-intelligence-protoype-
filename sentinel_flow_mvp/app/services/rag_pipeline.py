@@ -12,10 +12,13 @@ Think of it as a traffic cop at an intersection:
 """
 
 import logging
-import google.generativeai as genai
 from sqlalchemy.orm import Session
 from app.core.config import get_application_settings
-from app.services.semantic_search import execute_clinical_search
+# Lazy import: execute_clinical_search is imported inside the function
+# to avoid loading sentence_transformers (and its heavy torch/torchaudio
+# dependencies) at module level. This keeps the module importable even
+# when the full ML stack is not available.
+# from app.services.semantic_search import execute_clinical_search
 from app.infrastructure.models import MedicationBatchModel
 
 logger = logging.getLogger(__name__)
@@ -190,6 +193,8 @@ def generate_clinical_response(
     # STEP 0: DYNAMIC API KEY CONFIGURATION
     # We fetch the application settings at runtime instead of module load time.
     # This guarantees we have the latest environment variables loaded safely.
+    # Lazy import: google.generativeai is only imported when RAG is actually used.
+    import google.generativeai as genai
     settings = get_application_settings()
     if settings.GEMINI_API_KEY:
         genai.configure(api_key=settings.GEMINI_API_KEY)
@@ -198,6 +203,8 @@ def generate_clinical_response(
 
     # STEP 1: RETRIEVAL (Get the facts from our database)
     # We query the vector database for the top 3 most relevant clinical guidelines.
+    # Lazy import: Only load sentence_transformers when clinical RAG is actually needed.
+    from app.services.semantic_search import execute_clinical_search
     search_results = execute_clinical_search(db=db, query=query, sku_id=sku_id, top_k=3)
 
     # If the safety breaker tripped (no high-confidence results), degrade gracefully.
