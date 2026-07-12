@@ -234,6 +234,7 @@ export default function POSDashboard() {
           <div className="flex items-center gap-3">
             <Link href="/history">
               <motion.button
+                suppressHydrationWarning={true}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 className="px-5 py-2.5 bg-white/60 hover:bg-white border border-gray-200/50 text-slate-600 rounded-2xl text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
@@ -244,6 +245,7 @@ export default function POSDashboard() {
             <NotificationBell />
             {/* DESIGN TOKEN: Neural Pulse (AI Button) */}
             <motion.button 
+              suppressHydrationWarning={true}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={toggleCopilot}
@@ -260,6 +262,7 @@ export default function POSDashboard() {
 
             <Link href="/suppliers">
               <motion.button 
+                suppressHydrationWarning={true}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 className="px-5 py-2.5 bg-white/60 hover:bg-white border border-gray-200/50 text-slate-600 rounded-2xl text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
@@ -269,6 +272,7 @@ export default function POSDashboard() {
             </Link>
             <Link href="/admin/settings">
               <motion.button 
+                suppressHydrationWarning={true}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 className="p-2.5 bg-white/60 hover:bg-white border border-gray-200/50 text-slate-400 hover:text-slate-600 rounded-2xl transition-colors shadow-sm"

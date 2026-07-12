@@ -5,6 +5,7 @@ from app.domain.schemas import KnowledgeIngestionRequest, KnowledgeIngestionResp
 from app.workers.embedding_tasks import generate_and_store_embedding
 from app.services.semantic_search import execute_clinical_search, find_clinical_substitutes
 from app.services.rag_pipeline import route_and_process_query
+import re
 
 router = APIRouter()
 
@@ -60,6 +61,36 @@ async def ask_clinical_assistant(
       - Objective queries (price, stock, MRP) → answered from database instantly.
       - Clinical/subjective queries → answered via Gemini RAG with clinical context.
     """
+    query_lower = payload.query.lower()
+    if "substitute" in query_lower or "alternative" in query_lower:
+        # ---------------------------------------------------------------------
+        # STORY COMMENT:
+        # We intercept queries asking for a "substitute" or "alternative".
+        # We use a regex (re.search) to find a SKU code (e.g., AMOXI-500 or PAN-40).
+        # The regex r"([a-zA-Z]+-\d+)" looks for letters, a hyphen, and numbers.
+        # This allows us to bridge the chat UI directly to the vector database,
+        # bypassing the expensive LLM entirely and returning real-time relation data.
+        # ---------------------------------------------------------------------
+        sku_match = re.search(r"([A-Z]+-\d+)", payload.query, re.IGNORECASE)
+        if sku_match:
+            sku = sku_match.group(1).upper()
+            substitutes = find_clinical_substitutes(db, target_sku=sku, threshold=0.80)
+            
+            if substitutes:
+                # Format the returned substitutes into a clean string
+                lines = [f"Found alternatives for {sku}:"]
+                for sub in substitutes:
+                    lines.append(f"Found alternative: {sub['sku_id']} - Stock: {sub['available_stock']} - Price: ₹{sub['lowest_price']:.2f}")
+                formatted_response = "\n".join(lines)
+            else:
+                formatted_response = f"No suitable clinical substitutes found for {sku} above 80% similarity threshold."
+                
+            return RAGQueryResponse(
+                query=payload.query,
+                answer=formatted_response,
+                context_used=[]
+            )
+
     rag_data = route_and_process_query(
         db=db,
         query=payload.query,
