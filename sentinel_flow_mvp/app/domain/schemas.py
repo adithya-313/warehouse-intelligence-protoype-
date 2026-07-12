@@ -863,6 +863,105 @@ class RAGQueryResponse(BaseModel):
     context_used: list[SearchResultItem] = Field(..., description="The exact database records used to generate the answer.")
 
 
+# --- Phase 9: Cross-Model Hybrid Substitute Schemas ---
+# Beginner Note: These schemas define the contract for our "Substitute Finder"
+# feature. When a pharmacist scans a medicine that is out of stock, we use
+# AI-powered vector similarity to find chemically equivalent alternatives
+# that we DO have in stock.
+
+class SubstituteRequestSchema(BaseModel):
+    """Contract for requesting substitute recommendations.
+
+    A pharmacist sends us the SKU of the medicine they CANNOT dispense,
+    and we find the closest chemical alternatives that ARE in stock.
+
+    Attributes:
+        target_sku: The SKU ID of the medication the pharmacist wants to substitute.
+        threshold: Minimum similarity score (0.0 to 1.0). Default 0.80 means
+                   we only show substitutes that are at least 80% chemically similar.
+                   A junior pharmacist can lower this threshold (e.g., 0.70) if
+                   the patient is willing to accept a less precise match.
+    """
+    target_sku: str = Field(
+        ...,
+        description="The SKU of the medication we need to find a substitute for",
+    )
+    threshold: float = Field(
+        default=0.80,
+        ge=0.0,
+        le=1.0,
+        description="Minimum vector similarity threshold (0.0 to 1.0, default 0.80)",
+    )
+
+
+class SubstituteItemSchema(BaseModel):
+    """A single substitute recommendation with pricing and stock info.
+
+    Beginner Note: This is what we show the pharmacist on the screen.
+    It combines AI-powered similarity (matching_score) with real-world
+    inventory data (stock_qty, unit_price_inr) so they can make an
+    informed decision about which substitute to offer the patient.
+
+    Attributes:
+        sku_id: The SKU ID of the substitute medication.
+        brand_name: The brand name (e.g., 'Pan 40').
+        generic_class: The generic/chemical name (e.g., 'Pantoprazole').
+        matching_score: How chemically similar the substitute is (0.0 to 1.0).
+        stock_qty: How many units we physically have across all batches.
+        unit_price_inr: The cheapest price across all batches (in Indian Rupees).
+    """
+    sku_id: str = Field(
+        ...,
+        description="The substitute SKU identifier",
+    )
+    brand_name: str = Field(
+        ...,
+        description="Brand name of the substitute (e.g., 'Pan 40')",
+    )
+    generic_class: str = Field(
+        ...,
+        description="Generic/chemical name (e.g., 'Pantoprazole')",
+    )
+    matching_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Vector similarity score — how chemically close this substitute is",
+    )
+    stock_qty: int = Field(
+        ...,
+        ge=0,
+        description="Total available stock across all batches of this SKU",
+    )
+    unit_price_inr: float = Field(
+        ...,
+        ge=0.0,
+        description="Lowest retail price across all batches (in INR)",
+    )
+
+
+class SubstituteResponseSchema(BaseModel):
+    """Contract for the substitute finder response.
+
+    Attributes:
+        status: Always 'success' on a valid request (even if no substitutes found).
+        original_sku: The SKU the pharmacist originally asked about.
+        substitutes: List of substitute candidates sorted by price (cheapest first).
+    """
+    status: str = Field(
+        default="success",
+        description="Response status indicator",
+    )
+    original_sku: str = Field(
+        ...,
+        description="The original SKU the pharmacist requested substitutes for",
+    )
+    substitutes: List[SubstituteItemSchema] = Field(
+        default_factory=list,
+        description="List of substitute recommendations, sorted by price ascending",
+    )
+
+
 class PatientCreate(BaseModel):
     patient_id: str
     tenant_id: str = Field(default="system_admin")

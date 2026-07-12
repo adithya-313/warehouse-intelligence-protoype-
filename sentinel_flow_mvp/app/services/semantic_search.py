@@ -16,8 +16,9 @@ into a single, highly-relevant result set.
 """
 
 import logging
-from sqlalchemy import text
+from sqlalchemy import text, bindparam
 from sqlalchemy.orm import Session
+from pgvector.sqlalchemy import Vector
 from app.infrastructure.models import ClinicalKnowledgeBase
 from app.workers.embedding_tasks import get_embedding_model
 
@@ -258,3 +259,189 @@ def execute_clinical_search(
         "results": formatted_results,
         "safety_warning": safety_warning
     }
+
+
+# =========================================================================
+# PHASE 9: CROSS-MODEL HYBRID ORCHESTRATOR (Substitute Finder)
+# =========================================================================
+
+def find_clinical_substitutes(
+    db: Session,
+    target_sku: str,
+    threshold: float = 0.80,
+) -> list[dict]:
+    """
+    Find chemically similar substitutes for an out-of-stock medication.
+
+    Beginner Note — How this works (the "Story"):
+
+        Imagine you are a pharmacist. A patient needs "Pan 40" (Pantoprazole)
+        but we are out of stock. You need to find a DIFFERENT medicine that
+        has a similar "chemical signature" AND is physically available on
+        our shelves.
+
+        Step 1 — Find the "Chemical Signature":
+        We look up Pan 40's AI embedding (a 768-number vector that represents
+        its chemical properties) from the clinical_knowledge_base. This is
+        like finding its unique chemical fingerprint in a database.
+
+        Step 2 — Find Similar Medicines:
+        We scan EVERY other medicine in the database, comparing their
+        embeddings using cosine distance (<=> operator). A score of 1.0
+        means "chemically identical," a score of 0.0 means "completely
+        different." We only keep matches above the threshold (default 80%).
+
+        Step 3 — Join with Inventory:
+        We only want substitutes that we PHYSICALLY HAVE in stock. So we
+        join with medication_batches, SUM up all available quantities,
+        and find the cheapest batch price. We also filter out anything
+        with zero stock.
+
+        Step 4 — Sort by Price:
+        We show the cheapest substitutes FIRST because in Indian pharmacy,
+        patients often prefer the most affordable option.
+
+    Args:
+        db: Database session for executing raw SQL.
+        target_sku: The SKU of the medication we need a substitute for.
+        threshold: Minimum similarity score (0.0 to 1.0, default 0.80).
+
+    Returns:
+        A list of substitute dictionaries, each with keys:
+            sku_id, brand_name, generic_class, matching_score,
+            stock_qty, unit_price_inr.
+
+    Raises:
+        HTTPException (404): If the target SKU has no clinical knowledge data.
+    """
+
+    # =====================================================================
+    # STEP 1: Fetch the Base SKU's Vector Embedding (Chemical Signature)
+    # =====================================================================
+    # We need the AI embedding of the requested medicine to use as our
+    # "search query." We use raw SQL (text()) so junior developers can
+    # see exactly what PostgreSQL is doing. The pgvector extension stores
+    # embeddings as 768-dimensional vectors.
+    #
+    # Beginner Note: Think of this as scanning the medicine's barcode to
+    # pull up its chemical fingerprint before we start looking for matches.
+    # =====================================================================
+
+    base_vector_query = text("""
+        SELECT embedding
+        FROM clinical_knowledge_base
+        WHERE sku_id = :sku
+        LIMIT 1
+    """)
+
+    base_vector_result = db.execute(base_vector_query, {"sku": target_sku}).fetchone()
+
+    # If the SKU has no clinical knowledge record, we cannot compute
+    # substitutes because we have no "chemical signature" to compare against.
+    # This usually means the CSV ingestion (bulk_ingest.py) has not been
+    # run for this SKU yet.
+    if base_vector_result is None:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No clinical knowledge data found for SKU '{target_sku}'. "
+                "Cannot compute substitutes without a base embedding. "
+                "Please run scripts/bulk_ingest.py first."
+            ),
+        )
+
+    # Extract the embedding as a plain Python list of 768 floats.
+    # The Vector type from pgvector automatically deserializes the
+    # PostgreSQL vector column into a Python list when we access it.
+    target_embedding: list[float] = base_vector_result[0]
+
+    # =====================================================================
+    # STEP 2: Run the Hybrid Vector + Inventory Join Query
+    # =====================================================================
+    # This is where the magic happens. We write a single PostgreSQL query
+    # that does ALL of the following in one round-trip:
+    #
+    #   1. Exclude the original SKU (we don't want to recommend the same
+    #      medicine the pharmacist already said is unavailable).
+    #   2. Compute cosine similarity between each candidate medicine's
+    #      embedding and our target SKU's embedding using the <=> operator.
+    #   3. JOIN with medication_batches to get real-time stock levels.
+    #   4. Filter out medicines that have ZERO stock on the shelf.
+    #   5. GROUP BY SKU so we get one row per substitute, with stock
+    #      aggregated using SUM() and cheapest price using MIN().
+    #   6. Apply the similarity threshold so we only return what we
+    #      consider a "close enough" match.
+    #   7. Sort by price ascending — cheapest first.
+    #
+    # Beginner Note: The `metadata_payload ->> 'brand_name'` syntax is
+    # PostgreSQL's JSON extraction operator. The `->>` returns the value
+    # as TEXT. We store brand_name and generic_name in the metadata JSON
+    # because the medications table only stores the chemical structural
+    # data (apis, therapeutic_classes), not the commercial brand names.
+    # =====================================================================
+
+    # We use bindparam with type_=Vector so SQLAlchemy knows how to
+    # serialize our Python list-of-floats into the PostgreSQL vector
+    # format that the <=> operator expects. Without this, SQLAlchemy
+    # would try to send the list as a PostgreSQL ARRAY, which the
+    # pgvector <=> operator cannot understand.
+    substitute_query = text("""
+        SELECT
+            c.sku_id,
+            c.metadata_payload ->> 'brand_name' AS brand_name,
+            c.metadata_payload ->> 'generic_name' AS generic_class,
+            1 - (c.embedding <=> :target_vector) AS matching_score,
+            COALESCE(SUM(b.available_quantity), 0) AS stock_qty,
+            MIN(b.max_retail_price) AS unit_price_inr
+        FROM clinical_knowledge_base c
+        JOIN medication_batches b ON c.sku_id = b.sku_id
+        WHERE c.sku_id != :original_sku
+          AND b.available_quantity > 0
+        GROUP BY c.id, c.sku_id, c.metadata_payload, c.embedding
+        HAVING (1 - (c.embedding <=> :target_vector)) >= :threshold
+        ORDER BY unit_price_inr ASC
+    """).bindparams(
+        bindparam("target_vector", type_=Vector),
+        bindparam("original_sku", type_=type(target_sku)),
+        bindparam("threshold", type_=type(threshold)),
+    )
+
+    # Execute the query with our parameters.
+    # The target_embedding is passed as a plain Python list of floats.
+    # SQLAlchemy's bindparam(type_=Vector) handles the serialization.
+    substitute_rows = db.execute(
+        substitute_query,
+        {
+            "target_vector": target_embedding,
+            "original_sku": target_sku,
+            "threshold": threshold,
+        },
+    ).fetchall()
+
+    # =====================================================================
+    # STEP 3: Format Results into the Expected Dictionary Structure
+    # =====================================================================
+    # Each row from the database is a SQLAlchemy Row object. We access
+    # columns by name (row.brand_name, row.matching_score, etc.) and
+    # convert them into a plain dictionary that matches the
+    # SubstituteItemSchema shape.
+    #
+    # Beginner Note: We use round(matching_score, 4) to keep the score
+    # to 4 decimal places — enough precision for the pharmacist to
+    # compare substitutes without overwhelming them with digits.
+    # =====================================================================
+
+    substitutes: list[dict] = []
+
+    for row in substitute_rows:
+        substitutes.append({
+            "sku_id": row.sku_id,
+            "brand_name": row.brand_name or row.sku_id,
+            "generic_class": row.generic_class or "Unknown",
+            "matching_score": round(row.matching_score, 4),
+            "stock_qty": row.stock_qty,
+            "unit_price_inr": float(row.unit_price_inr) if row.unit_price_inr else 0.0,
+        })
+
+    return substitutes
