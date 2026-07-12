@@ -402,9 +402,21 @@ def find_clinical_substitutes(
         HAVING (1 - (c.embedding <=> :target_vector)) >= :threshold
         ORDER BY unit_price_inr ASC
     """).bindparams(
+        # Beginner Note: The target_vector bind parameter MUST use type_=Vector
+        # because pgvector's <=> operator expects a PostgreSQL 'vector' binary
+        # format, not a standard SQL array. Without explicit typing, SQLAlchemy
+        # would send the Python list as a double precision[] array, causing a
+        # "function vector <=> double precision[] does not exist" error.
         bindparam("target_vector", type_=Vector),
-        bindparam("original_sku", type_=type(target_sku)),
-        bindparam("threshold", type_=type(threshold)),
+        # For original_sku and threshold, we intentionally OMIT the type_
+        # parameter. SQLAlchemy 2.0 automatically infers the correct SQL type
+        # (VARCHAR and NUMERIC) from the Python str/float values at execution
+        # time. Previously we used type_=type(target_sku) which passed the raw
+        # Python class (str, float) instead of a SQLAlchemy type object,
+        # causing AttributeError: 'str' object has no attribute '_static_cache_key'
+        # during SQL statement cache key generation.
+        bindparam("original_sku"),
+        bindparam("threshold"),
     )
 
     # Execute the query with our parameters.
