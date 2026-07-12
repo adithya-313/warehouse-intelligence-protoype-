@@ -2,14 +2,16 @@
 
 This standalone worker script connects to the `telemetry_stream` Redis
 Stream as part of a consumer group named `telemetry_group`. It reads
-batches of up to 1000 messages, bulk-inserts them into the
-`movement_telemetry` TimescaleDB hypertable, and acknowledges each
-message via `xack` to prevent the Pending Entries List (PEL) from
-overflowing.
+batches of up to 1000 messages and acknowledges each message via `xack`
+to prevent the Pending Entries List (PEL) from overflowing.
+
+NOTE: The legacy `movement_telemetry` TimescaleDB hypertable was purged
+during Stage 3 (Alembic migration 31763ac860b3). The bulk_insert_records()
+function now discards incoming messages since there is no target table.
+If a new telemetry sink is implemented, this function should be updated.
 
 Domain-Driven Design context:
 - Consumer groups provide at-least-once delivery semantics.
-- Bulk inserts minimise database connection overhead.
 - Explicit `xack` prevents the PEL from growing indefinitely, which
   would degrade Redis memory and performance.
 """
