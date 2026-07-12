@@ -80,7 +80,7 @@ async def ask_clinical_assistant(
                 # Format the returned substitutes into a clean string
                 lines = [f"Found alternatives for {sku}:"]
                 for sub in substitutes:
-                    lines.append(f"Found alternative: {sub['sku_id']} - Stock: {sub['available_stock']} - Price: ₹{sub['lowest_price']:.2f}")
+                    lines.append(f"Found alternative: {sub['sku_id']} - Stock: {sub['stock_qty']} - Price: ₹{sub['unit_price_inr']:.2f}")
                 formatted_response = "\n".join(lines)
             else:
                 formatted_response = f"No suitable clinical substitutes found for {sku} above 80% similarity threshold."

@@ -400,6 +400,20 @@ def find_clinical_substitutes(
     # format that the <=> operator expects. Without this, SQLAlchemy
     # would try to send the list as a PostgreSQL ARRAY, which the
     # pgvector <=> operator cannot understand.
+    # Beginner Note: We group ONLY by c.id because it is the PRIMARY KEY
+    # of clinical_knowledge_base. PostgreSQL guarantees that all other
+    # columns from 'c' (sku_id, metadata_payload, embedding) are
+    # "functionally dependent" on the primary key, meaning they have
+    # exactly ONE value per id. This lets us avoid including the
+    # un-hashable data types (JSONB, vector) in the GROUP BY clause,
+    # which would cause PostgreSQL to reject them with:
+    #   "ERROR: could not identify a hash function for type jsonb"
+    #   "ERROR: could not identify a hash function for type vector"
+    #
+    # IMPORTANT: All story comments must stay OUTSIDE the text() block.
+    # PostgreSQL does not recognize '#' as a comment character — it
+    # uses '--' for line comments. Any '#' inside the SQL is treated
+    # as a syntax error ("syntax error at or near 'Note'").
     substitute_query = text("""
         SELECT
             c.sku_id,
@@ -412,32 +426,11 @@ def find_clinical_substitutes(
         JOIN medication_batches b ON c.sku_id = b.sku_id
         WHERE c.sku_id != :original_sku
           AND b.available_quantity > 0
-        # Beginner Note: We group ONLY by c.id because it is the PRIMARY KEY
-        # of clinical_knowledge_base. PostgreSQL guarantees that all other
-        # columns from 'c' (sku_id, metadata_payload, embedding) are
-        # "functionally dependent" on the primary key, meaning they have
-        # exactly ONE value per id. This lets us avoid including the
-        # un-hashable data types (JSONB, vector) in the GROUP BY clause,
-        # which would cause PostgreSQL to reject them with:
-        #   "ERROR: could not identify a hash function for type jsonb"
-        #   "ERROR: could not identify a hash function for type vector"
         GROUP BY c.id
         HAVING (1 - (c.embedding <=> :target_vector)) >= :threshold
         ORDER BY unit_price_inr ASC
     """).bindparams(
-        # Beginner Note: The target_vector bind parameter MUST use type_=Vector
-        # because pgvector's <=> operator expects a PostgreSQL 'vector' binary
-        # format, not a standard SQL array. Without explicit typing, SQLAlchemy
-        # would send the Python list as a double precision[] array, causing a
-        # "function vector <=> double precision[] does not exist" error.
         bindparam("target_vector", type_=Vector),
-        # For original_sku and threshold, we intentionally OMIT the type_
-        # parameter. SQLAlchemy 2.0 automatically infers the correct SQL type
-        # (VARCHAR and NUMERIC) from the Python str/float values at execution
-        # time. Previously we used type_=type(target_sku) which passed the raw
-        # Python class (str, float) instead of a SQLAlchemy type object,
-        # causing AttributeError: 'str' object has no attribute '_static_cache_key'
-        # during SQL statement cache key generation.
         bindparam("original_sku"),
         bindparam("threshold"),
     )

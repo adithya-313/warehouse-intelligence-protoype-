@@ -111,12 +111,23 @@ async def application_lifespan(application: FastAPI):
     # Step 1: Initialize Base Chronos Pipeline
     logger.info("Loading base Chronos-T5 model into memory...")
     try:
-        application.state.chronos_pipeline = ChronosPipeline.from_pretrained(
-            "amazon/chronos-t5-base", # Upgraded from mini to base/Chronos-2
-            device_map="auto",
-            torch_dtype=torch.bfloat16,
+        # Wrap the HuggingFace download in a 120-second timeout.
+        # On fresh containers without a HuggingFace cache, the model download
+        # can hang indefinitely due to silent network timeouts. This timeout
+        # ensures the API can start — the model is only needed for forecasting,
+        # not for the substitute finder or other knowledge-base endpoints.
+        application.state.chronos_pipeline = await asyncio.wait_for(
+            asyncio.to_thread(
+                ChronosPipeline.from_pretrained,
+                "amazon/chronos-t5-base",
+                device_map="auto",
+                torch_dtype=torch.bfloat16,
+            ),
+            timeout=120.0,
         )
         logger.info("Successfully loaded Chronos-2 Multivariate Pipeline.")
+    except asyncio.TimeoutError:
+        logger.warning("Chronos-T5 model download timed out after 120s — skipping. Forecasting will use fallback.")
     except Exception as e:
         logger.error(f"Failed to load Chronos-2 pipeline: {e}")
 
