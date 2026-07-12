@@ -15,6 +15,7 @@ from information retrieval that combines ranked lists from different search syst
 into a single, highly-relevant result set.
 """
 
+import json
 import logging
 from sqlalchemy import text, bindparam
 from sqlalchemy.orm import Session
@@ -352,9 +353,22 @@ def find_clinical_substitutes(
         )
 
     # Extract the embedding as a plain Python list of 768 floats.
-    # The Vector type from pgvector automatically deserializes the
-    # PostgreSQL vector column into a Python list when we access it.
-    target_embedding: list[float] = base_vector_result[0]
+    # Beginner Note:
+    #   When PostgreSQL returns a pgvector column through a RAW SQL query
+    #   (text()), the driver sends it as a STRING representation of the
+    #   vector, e.g., "[0.123, 0.456, ...]". This is different from the
+    #   ORM approach (used in execute_clinical_search above) where the
+    #   Vector type deserializer runs automatically.
+    #
+    #   If we do NOT deserialize the string, the bindparam(type_=Vector)
+    #   in the next query will receive a string instead of a list-of-floats.
+    #   This would cause the pgvector <=> operator to fail with:
+    #   "function vector <=> unknown does not exist".
+    #
+    #   We use json.loads() to parse the string representation into a
+    #   Python list of floats. JSON uses the same bracket-and-comma format
+    #   as PostgreSQL's vector text representation, so this is safe.
+    target_embedding: list[float] = json.loads(base_vector_result[0])
 
     # =====================================================================
     # STEP 2: Run the Hybrid Vector + Inventory Join Query
@@ -398,7 +412,16 @@ def find_clinical_substitutes(
         JOIN medication_batches b ON c.sku_id = b.sku_id
         WHERE c.sku_id != :original_sku
           AND b.available_quantity > 0
-        GROUP BY c.id, c.sku_id, c.metadata_payload, c.embedding
+        # Beginner Note: We group ONLY by c.id because it is the PRIMARY KEY
+        # of clinical_knowledge_base. PostgreSQL guarantees that all other
+        # columns from 'c' (sku_id, metadata_payload, embedding) are
+        # "functionally dependent" on the primary key, meaning they have
+        # exactly ONE value per id. This lets us avoid including the
+        # un-hashable data types (JSONB, vector) in the GROUP BY clause,
+        # which would cause PostgreSQL to reject them with:
+        #   "ERROR: could not identify a hash function for type jsonb"
+        #   "ERROR: could not identify a hash function for type vector"
+        GROUP BY c.id
         HAVING (1 - (c.embedding <=> :target_vector)) >= :threshold
         ORDER BY unit_price_inr ASC
     """).bindparams(
