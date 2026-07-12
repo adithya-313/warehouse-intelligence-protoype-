@@ -68,6 +68,7 @@ export function PreemptiveWarningBanner() {
 
               <div className="flex flex-col items-end gap-2">
                 <button
+                  suppressHydrationWarning={true}
                   onClick={() => handleOneClickPO(alert)}
                   disabled={isOrdering || !!orderSuccess}
                   className={cn(
