@@ -68,12 +68,16 @@ async def ask_clinical_assistant(
         # We intercept queries asking for a "substitute" or "alternative".
         # We use a regex (re.search) to find a SKU code (e.g., AMOXI-500 or PAN-40).
         # The regex r"([a-zA-Z]+-\d+)" looks for letters, a hyphen, and numbers.
+        # If that doesn't match, we try a second pattern without the hyphen
+        # (e.g., "PAN40") and insert a hyphen before the trailing digits.
         # This allows us to bridge the chat UI directly to the vector database,
         # bypassing the expensive LLM entirely and returning real-time relation data.
         # ---------------------------------------------------------------------
-        sku_match = re.search(r"([A-Z]+-\d+)", payload.query, re.IGNORECASE)
+        sku_match = re.search(r"([A-Z]+)-(\d+)", payload.query, re.IGNORECASE)
+        if not sku_match:
+            sku_match = re.search(r"([A-Z]+)(\d+)", payload.query, re.IGNORECASE)
         if sku_match:
-            sku = sku_match.group(1).upper()
+            sku = f"{sku_match.group(1).upper()}-{sku_match.group(2)}"
             substitutes = find_clinical_substitutes(db, target_sku=sku, threshold=0.80)
             
             if substitutes:

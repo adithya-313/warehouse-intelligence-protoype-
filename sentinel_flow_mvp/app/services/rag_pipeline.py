@@ -12,6 +12,7 @@ Think of it as a traffic cop at an intersection:
 """
 
 import logging
+import re
 from sqlalchemy.orm import Session
 from app.core.config import get_application_settings
 # Lazy import: execute_clinical_search is imported inside the function
@@ -53,6 +54,12 @@ OBJECTIVE_KEYWORDS_LIST = [
     "available",
     "cost",
     "expiry",
+    "expire",
+    "expires",
+    "expiration",
+    "mfg",
+    "manufacture",
+    "batch",
 ]
 
 
@@ -76,6 +83,38 @@ def route_and_process_query(
         the same format as generate_clinical_response() so the caller
         doesn't need to know which route was taken.
     """
+    # =====================================================================
+    # STEP 0: EXTRACT SKU FROM QUERY TEXT (if not already provided)
+    # =====================================================================
+    # Beginner Note: The frontend might not always know which SKU the user
+    # is asking about. For example, if the user types "What is the price
+    # of DOLO-650?" directly in a chat box, the frontend sends sku_id=None.
+    # We use a regex to extract the SKU directly from the query text.
+    #
+    # We try two patterns:
+    #   1. Standard format with hyphen (e.g., "AMOXI-500", "PAN-40").
+    #   2. No hyphen format (e.g., "PAN40", "DOLO650") — we insert the
+    #      hyphen before the trailing digits so it matches the database.
+    # =====================================================================
+    if sku_id is None:
+        # Pattern 1: "AMOXI-500", "PAN-40", "dolo-650" (case-insensitive)
+        sku_match = re.search(r"([A-Z]+)-(\d+)", query, re.IGNORECASE)
+        if sku_match:
+            sku_id = f"{sku_match.group(1).upper()}-{sku_match.group(2)}"
+            logger.info(
+                f"Adaptive Router: Extracted SKU '{sku_id}' from query "
+                f"(hyphenated pattern)."
+            )
+        else:
+            # Pattern 2: "PAN40", "AMOXI500", "dolo650" (no hyphen)
+            sku_match = re.search(r"([A-Z]+)(\d+)", query, re.IGNORECASE)
+            if sku_match:
+                sku_id = f"{sku_match.group(1).upper()}-{sku_match.group(2)}"
+                logger.info(
+                    f"Adaptive Router: Extracted SKU '{sku_id}' from query "
+                    f"(no-hyphen pattern — hyphen inserted)."
+                )
+
     # =====================================================================
     # STEP 1: CHECK IF THIS IS AN OBJECTIVE DATABASE QUERY
     # =====================================================================
@@ -194,12 +233,27 @@ def generate_clinical_response(
     # We fetch the application settings at runtime instead of module load time.
     # This guarantees we have the latest environment variables loaded safely.
     # Lazy import: google.generativeai is only imported when RAG is actually used.
-    import google.generativeai as genai
-    settings = get_application_settings()
-    if settings.GEMINI_API_KEY:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-    else:
-        logger.warning("GEMINI_API_KEY is missing. RAG pipeline will fail if called.")
+    #
+    # Beginner Note: We wrap the import AND configuration in a try/except
+    # because the google-generativeai library might not be installed in all
+    # environments (e.g., CI/CD, offline dev). Without this guard, a missing
+    # import would raise an unhandled ModuleNotFoundError and return a 500
+    # error to the user — which is a terrible experience. Instead, we log
+    # the error and return a clean message telling the user to check their
+    # API configuration.
+    try:
+        import google.generativeai as genai
+        settings = get_application_settings()
+        if settings.GEMINI_API_KEY:
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+        else:
+            logger.warning("GEMINI_API_KEY is missing. RAG pipeline will fail if called.")
+    except (ImportError, Exception) as e:
+        logger.error(f"Gemini module or configuration error: {str(e)}")
+        return {
+            "answer": "AI Generation Offline: Check API Configuration.",
+            "context_used": []
+        }
 
     # STEP 1: RETRIEVAL (Get the facts from our database)
     # We query the vector database for the top 3 most relevant clinical guidelines.
