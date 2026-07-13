@@ -175,7 +175,7 @@ async def ask_clinical_assistant(
     # frontend-provided SKU (payload.sku_id).
     final_sku = extracted_sku or payload.sku_id
 
-    rag_data = route_and_process_query(
+    rag_data = await route_and_process_query(
         db=db,
         query=cleaned_query,
         sku_id=final_sku,

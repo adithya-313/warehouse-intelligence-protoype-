@@ -44,6 +44,11 @@ import os            # For reading environment variables
 import sys           # For exiting with error codes
 from datetime import datetime, timezone  # For timestamps
 
+# Import the cache invalidation helper so that whenever the scraper modifies
+# the database, it also flushes the RAG response cache. This ensures
+# clinical users always see up-to-date safety information.
+from app.core.cache import increment_global_db_version_sync
+
 # Set up logging so we can see what the script is doing
 logging.basicConfig(
     level=logging.INFO,
@@ -405,6 +410,25 @@ def process_regulatory_change(alert_data: dict) -> dict:
         db_session.commit()
 
         logger.info("  [COMMITTED] Regulatory change applied successfully.")
+
+        # ------------------------------------------------------------------
+        # Step 2f: Invalidate the RAG cache
+        # ------------------------------------------------------------------
+        # Beginner Note: After changing the database, we increment a version
+        # counter in Redis. This "poisons" all cached RAG responses because
+        # their cache keys include the old version number. Users will get
+        # fresh responses generated from the updated data.
+        #
+        # If Redis is unavailable, we log a warning but do NOT fail the
+        # entire scraper — the cache is an optimization, not a requirement.
+        try:
+            new_db_version = increment_global_db_version_sync()
+            logger.info(f"  [CACHE] RAG cache invalidated. New DB version: {new_db_version}")
+        except Exception as cache_error:
+            logger.warning(
+                f"  [CACHE WARNING] Could not invalidate RAG cache: {str(cache_error)}. "
+                "The scraper succeeded, but cached responses may serve stale data."
+            )
 
         # Return a summary of what was done
         return {

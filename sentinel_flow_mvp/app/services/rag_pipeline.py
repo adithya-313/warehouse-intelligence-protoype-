@@ -11,6 +11,8 @@ Think of it as a traffic cop at an intersection:
   - If the driver asks "Is this safe for a pregnant patient?" → point them to Gemini (slow, costly).
 """
 
+import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -24,8 +26,45 @@ from app.core.config import get_application_settings
 from app.infrastructure.models import MedicationBatchModel, MedicationModel
 from app.services.rule_engine import ClinicalSafetyJudge
 from app.domain.schemas import ClinicalNarrativeSchema
+from app.core.circuit_breaker import AegisLiteCircuitBreaker, CircuitStateEnum
+from app.core.cache import get_global_db_version, CACHE_TTL_SECONDS
+from app.core.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Gemini-Specific Circuit Breaker
+# ---------------------------------------------------------------------------
+# Beginner Note: We create a SEPARATE circuit breaker instance for Gemini
+# API calls. The existing AegisLiteCircuitBreaker was designed for ML model
+# predictions (stockout forecasts). We reuse the same class but with more
+# sensitive thresholds because LLM APIs fail more often and we need to
+# react faster.
+#
+#   failure_threshold = 3   → Open after 3 consecutive failures.
+#   recovery_timeout  = 30  → Try recovery after 30 seconds.
+#   success_threshold = 2   → Close after 2 consecutive successes.
+#
+# This instance is created once at module load and shared across all
+# requests (singleton pattern via the wrapper function below).
+_gemini_circuit_breaker_instance = None
+
+
+def get_gemini_circuit_breaker() -> AegisLiteCircuitBreaker:
+    """
+    Get the Gemini-specific circuit breaker singleton.
+
+    Returns:
+        An AegisLiteCircuitBreaker configured for LLM API calls.
+    """
+    global _gemini_circuit_breaker_instance
+    if _gemini_circuit_breaker_instance is None:
+        _gemini_circuit_breaker_instance = AegisLiteCircuitBreaker(
+            failure_threshold=3,
+            recovery_timeout=30,
+            success_threshold=2,
+        )
+    return _gemini_circuit_breaker_instance
 
 
 # =====================================================================
@@ -66,7 +105,7 @@ OBJECTIVE_KEYWORDS_LIST = [
 ]
 
 
-def route_and_process_query(
+async def route_and_process_query(
     db: Session,
     query: str,
     sku_id: str = None,
@@ -227,7 +266,7 @@ def route_and_process_query(
         "Routing to Gemini RAG pipeline."
     )
 
-    return generate_clinical_response(
+    return await generate_clinical_response(
         db=db,
         query=query,
         sku_id=sku_id,
@@ -235,7 +274,7 @@ def route_and_process_query(
     )
 
 
-def generate_clinical_response(
+async def generate_clinical_response(
     db: Session,
     query: str,
     sku_id: str = None,
@@ -394,7 +433,55 @@ def generate_clinical_response(
         }
 
     # =====================================================================
-    # STEP 3: PROMPT ENGINEERING (WITH JUDGE'S VERDICT INJECTED)
+    # STEP 3: HASH-BASED RESULT CACHE CHECK (Phase 4)
+    # =====================================================================
+    # Beginner Note: Before we do ANY database lookups or AI calls, we
+    # check if the EXACT same query has been answered before. We use a
+    # two-part cache key:
+    #
+    #   cache_key = "rag_cache:{SHA256(query)}:{global_db_version}"
+    #
+    # The SHA256 hashing ensures that even tiny differences in spelling
+    # ("paracetamol" vs "paracetomol") produce completely different keys.
+    #
+    # The global_db_version acts as a cache-buster. When the government
+    # scraper updates a drug's safety data (e.g., changing a pregnancy
+    # category from B to X), it increments the version. This makes ALL
+    # old cache keys invalid because they contain the old version number.
+    #
+    # Why check the cache BEFORE the DB?
+    #   Because the DB search is the most expensive operation (PubMedBERT
+    #   vector search + keyword fusion). If we already have the answer,
+    #   we skip the DB entirely and return instantly.
+    #
+    # Exception safety: If Redis is down, get_redis_client() or the
+    # cache get/set will raise an exception. We catch it and fall
+    # through to the normal pipeline — the cache is an optimization,
+    # not a requirement.
+    try:
+        redis_client = await get_redis_client()
+        query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()
+        version = await get_global_db_version(redis_client)
+        cache_key = f"rag_cache:{query_hash}:{version}"
+
+        cached_response = await redis_client.get(cache_key)
+        if cached_response is not None:
+            logger.info(f"Cache HIT for query hash {query_hash[:12]}... (version {version})")
+            # The cached value is a JSON string. We parse it back into a dict.
+            return json.loads(cached_response)
+
+        logger.info(
+            f"Cache MISS for query hash {query_hash[:12]}... (version {version}). "
+            "Proceeding to full pipeline."
+        )
+    except Exception as cache_error:
+        # Redis might be offline. We log the warning and proceed without caching.
+        logger.warning(f"Cache check failed (Redis may be offline): {cache_error}")
+        redis_client = None
+        cache_key = None
+
+    # =====================================================================
+    # STEP 4: PROMPT ENGINEERING (WITH JUDGE'S VERDICT INJECTED)
     # =====================================================================
     # Beginner Note: We tell Gemini that the system has already determined
     # the safety status. The AI's job is NOT to decide safety — it's to
@@ -429,20 +516,46 @@ USER QUERY:
 """
 
     # =====================================================================
-    # STEP 4: STRUCTURED GEMINI GENERATION (JSON OUTPUT ENFORCED)
+    # STEP 5: CIRCUIT BREAKER + ASYNC GEMINI GENERATION (Phase 4)
     # =====================================================================
-    # Beginner Note: In Phase 2, we called Gemini with temperature=0.0
-    # and accepted whatever text it returned. This was risky because the
-    # AI could "forget" to mention critical safety information.
+    # Beginner Note: This step is the heart of Phase 4's resilience upgrade.
     #
-    # In Phase 3, we tell Gemini EXACTLY what JSON format to return using
-    # response_mime_type="application/json" and response_schema. Gemini's
-    # API will validate the output on its end before sending it back to us.
+    # We do THREE things differently from Phase 3:
     #
-    # If Gemini cannot generate valid JSON matching the schema, the API
-    # call itself will raise an exception — which we catch and handle
-    # gracefully below.
+    #   A. CIRCUIT BREAKER: Before calling Gemini, we check if the circuit
+    #      breaker is OPEN. If it is, we skip the LLM call entirely and
+    #      return the Judge's deterministic verdict immediately (Degraded Mode).
+    #
+    #   B. ASYNC + TIMEOUT: We use generate_content_async() instead of the
+    #      synchronous version, and wrap it in asyncio.wait_for(timeout=5.0).
+    #      This prevents the LLM from hanging the API worker for minutes.
+    #
+    #   C. DEGRADED MODE FALLBACK: If Gemini times out, returns an error, or
+    #      the circuit is OPEN, we DO NOT return a 500 error. Instead, we
+    #      construct a ClinicalNarrativeSchema using the Judge's verdict and
+    #      return it as a "degraded" response. The frontend can display a
+    #      banner like "⚠ AI offline — showing deterministic safety rules."
+    # =====================================================================
     try:
+        # ------------------------------------------------------------------
+        # Step 5a: Check the Circuit Breaker
+        # ------------------------------------------------------------------
+        gemini_cb = get_gemini_circuit_breaker()
+
+        if gemini_cb.current_state == CircuitStateEnum.OPEN:
+            # The circuit is open — too many recent failures.
+            # Check if enough time has passed to attempt recovery.
+            if gemini_cb._should_attempt_recovery():
+                logger.info("Gemini circuit HALF-OPEN: attempting recovery.")
+                gemini_cb.current_state = CircuitStateEnum.HALF_OPEN
+            else:
+                # Circuit is OPEN and recovery is not due yet.
+                # Skip Gemini entirely and go to degraded mode.
+                raise Exception("Circuit breaker is OPEN: Gemini API unavailable")
+
+        # ------------------------------------------------------------------
+        # Step 5b: Async Gemini Call with 5-Second Timeout
+        # ------------------------------------------------------------------
         model = genai.GenerativeModel('gemini-3.5-flash')
 
         generation_config = genai.types.GenerationConfig(
@@ -468,23 +581,26 @@ USER QUERY:
             },
         )
 
-        response = model.generate_content(
-            prompt,
-            generation_config=generation_config,
+        # Await the async Gemini call with a strict 5-second timeout.
+        # If Gemini does not respond within 5 seconds, asyncio.TimeoutError
+        # is raised and caught by the except block below.
+        response = await asyncio.wait_for(
+            model.generate_content_async(prompt, generation_config=generation_config),
+            timeout=5.0,
         )
 
-        # =====================================================================
-        # STEP 5: PARSE & VALIDATE GEMINI'S JSON RESPONSE
-        # =====================================================================
-        # Beginner Note: Gemini returns a raw JSON string. We parse it into
-        # a Python dict, then validate it against our ClinicalNarrativeSchema
-        # Pydantic model. If the JSON is malformed or missing required fields,
-        # the Pydantic validator will raise an error — which we catch below.
+        # Record success in the circuit breaker.
+        # This gradually reduces the failure count and eventually closes
+        # the circuit if the service has recovered.
+        gemini_cb._on_success()
+
+        # ------------------------------------------------------------------
+        # Step 5c: Parse & Validate Gemini's JSON Response
+        # ------------------------------------------------------------------
         raw_json = response.text.strip()
 
         # Remove any markdown code block fences that Gemini might add
         if raw_json.startswith("```"):
-            # Strip the opening ```json or ``` and the closing ```
             raw_json = raw_json.strip("`").strip()
             if raw_json.startswith("json"):
                 raw_json = raw_json[4:].strip()
@@ -497,7 +613,8 @@ USER QUERY:
             f"is_safe_to_dispense={narrative.is_safe_to_dispense}"
         )
 
-        return {
+        # Build the response dict
+        response_data = {
             "answer": narrative.narrative,
             "context_used": context_items,
             "is_safe_to_dispense": narrative.is_safe_to_dispense,
@@ -505,26 +622,81 @@ USER QUERY:
             "citations": narrative.citations,
         }
 
-    except json.JSONDecodeError as e:
-        # Gemini returned text that is NOT valid JSON.
-        logger.error(f"Clinical Narrator: Gemini returned invalid JSON: {e}")
-        return {
-            "answer": (
-                "SYSTEM ERROR: AI response could not be parsed. "
-                "Please consult a pharmacist."
-            ),
-            "context_used": context_items,
-            "is_safe_to_dispense": True,
-            "system_lock_reason": None,
-            "citations": [],
-        }
+        # ------------------------------------------------------------------
+        # Step 5d: Store in Cache (so identical future queries skip Gemini)
+        # ------------------------------------------------------------------
+        if redis_client is not None and cache_key is not None:
+            try:
+                await redis_client.set(
+                    cache_key,
+                    json.dumps(response_data),
+                    ex=CACHE_TTL_SECONDS,
+                )
+                logger.info(f"Cached response for key {cache_key} ({CACHE_TTL_SECONDS}s TTL).")
+            except Exception as store_error:
+                # Redis might have gone down between our check and store.
+                # This is not a fatal error — the response is still valid.
+                logger.warning(f"Failed to cache response: {store_error}")
+
+        return response_data
 
     except Exception as e:
-        logger.error(f"Clinical Narrator: Gemini API or parsing error: {str(e)}")
+        # =================================================================
+        # DEGRADED MODE FALLBACK (Phase 4)
+        # =================================================================
+        # Beginner Note: ANY failure in the Gemini call (timeout, network
+        # error, rate limit, circuit open, JSON parse error) ends up here.
+        #
+        # In Phase 3, we returned a generic "SYSTEM ERROR" message.
+        # In Phase 4, we do something much smarter:
+        #
+        #   We retrieve the Judge's deterministic verdict (computed in
+        #   STEP 2 above) and construct a ClinicalNarrativeSchema from it.
+        #
+        # This means:
+        #   - If the Judge said UNSAFE → fallback says UNSAFE with the
+        #     same lock_reason (e.g., CRITICAL_PREGNANCY_CONTRAINDICATION).
+        #   - If the Judge said SAFE → fallback says SAFE with a note
+        #     that the AI narrative is offline.
+        #
+        # The pharmacist sees a meaningful response instead of a broken
+        # error message. The response even includes the citations field
+        # with ["SYSTEM_FALLBACK"] so the frontend can show a yellow
+        # warning banner: "⚠ AI offline — showing deterministic rules."
+        # =================================================================
+
+        # Record the failure in the circuit breaker (if we got far enough
+        # to create one). This increments the failure count and may open
+        # the circuit if the threshold is reached.
+        try:
+            gemini_cb._on_failure()
+        except Exception:
+            pass  # gemini_cb might not be defined if error was before circuit setup
+
+        # Log the specific error for debugging
+        error_type = type(e).__name__
+        logger.error(
+            f"Clinical Narrator: Gemini call failed ({error_type}: {str(e)}). "
+            "Switching to DEGRADED MODE using Judge's verdict."
+        )
+
+        # Construct a fallback ClinicalNarrativeSchema from the Judge's
+        # deterministic verdict. This is the key insight of Phase 4:
+        # we NEVER lose the safety decision, even when the LLM is down.
+        fallback_narrative = ClinicalNarrativeSchema(
+            is_safe_to_dispense=verdict["is_safe"],
+            narrative=(
+                "NETWORK TIMEOUT: AI Narrative offline. "
+                "Deterministic safety rules applied."
+            ),
+            system_lock_reason=verdict["lock_reason"],
+            citations=["SYSTEM_FALLBACK"],
+        )
+
         return {
-            "answer": "SYSTEM ERROR: AI Generation failed. Please consult a pharmacist.",
+            "answer": fallback_narrative.narrative,
             "context_used": context_items,
-            "is_safe_to_dispense": True,
-            "system_lock_reason": None,
-            "citations": [],
+            "is_safe_to_dispense": fallback_narrative.is_safe_to_dispense,
+            "system_lock_reason": fallback_narrative.system_lock_reason,
+            "citations": fallback_narrative.citations,
         }
