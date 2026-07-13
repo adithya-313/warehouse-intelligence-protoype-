@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Date, Index, Numeric, text, Text, JSON, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Date, Index, Numeric, text, Text, JSON, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -134,7 +134,44 @@ class MedicationModel(Base):
     # Regulatory scheduling (e.g., 'Schedule H', 'Schedule H1', 'OTC')
     cdsco_schedule = Column(String, nullable=False)
 
+    # ================================================================
+    # Phase 1: Clinical Master Index Fields (Global Layer)
+    # ================================================================
+    # Beginner Note: These four columns are the "Clinical Master Index"
+    # that powers the drug safety checking system. They are stored at
+    # the medication level (not per batch) because they describe the
+    # drug itself, regardless of who manufactured it or when it expires.
 
+    # Pregnancy safety category per FDA / CDSCO guidelines.
+    # Validated values: 'A', 'B', 'C', 'D', 'X'.
+    # Nullable because not all drugs have been classified.
+    pregnancy_category = Column(String(2), nullable=True)
+
+    # The minimum age (in months) a patient must be to safely take this
+    # medication. For example, a value of 24 means "do not dispense to
+    # children under 2 years of age." Nullable because many drugs have
+    # no age restriction (or the data has not been curated yet).
+    pediatric_age_threshold_months = Column(Integer, nullable=True)
+
+    # A JSONB column that stores drug-to-drug contraindication rules.
+    # Each key is a molecule name (e.g., "nitrates"), and the value
+    # describes the interaction severity (e.g., "ABSOLUTE_CONTRAINDICATION").
+    # Example structure:
+    #   {"nitrates": "ABSOLUTE_CONTRAINDICATION",
+    #    "warfarin": "CAUTION_MONITOR_INR"}
+    interaction_matrix = Column(JSONB, nullable=True)
+
+    # Curator approval flag. When a government source updates the drug
+    # master list, new or modified entries enter with is_approved_by_curator
+    # = False. A human pharmacist must review them before the flag is set
+    # to True. This prevents unvetted regulatory changes from reaching
+    # the dispensary without human oversight.
+    is_approved_by_curator = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
 
 
 
@@ -151,6 +188,19 @@ class MedicationBatchModel(Base):
     # Foreign key linking this batch to a specific medication
     sku_id = Column(String, ForeignKey("medications.sku_id"), nullable=False)
     
+    # ================================================================
+    # Phase 1: Multi-Tenant Isolation
+    # ================================================================
+    # Beginner Note: Every row in this table now belongs to exactly one
+    # tenant (pharmacy organization). The foreign key constraint ensures
+    # you cannot create a batch for a non-existent tenant.
+    tenant_id = Column(
+        String,
+        ForeignKey("tenants.tenant_id"),
+        nullable=False,
+        index=True,
+    )
+    
     expiry_date = Column(Date, nullable=False)
     
     # Numeric(10, 2) ensures we safely store financial values with 2 decimal places
@@ -166,8 +216,11 @@ class MedicationBatchModel(Base):
     # --- Structural Indexes ---
     # Beginner Note: This composite index makes FEFO (First-Expire-First-Out) sorting extremely fast.
     # When the database looks for the oldest batch of a specific SKU, it uses this index.
+    # The second index (idx_tenant_batch) speeds up multi-tenant queries by letting
+    # PostgreSQL quickly find all batches belonging to a specific pharmacy.
     __table_args__ = (
         Index('idx_fefo_sort', 'sku_id', 'expiry_date'),
+        Index('idx_tenant_batch', 'tenant_id', 'batch_id'),
     )
 
 # --- Phase 14.3: Procurement & Distributor Tracking ---
@@ -181,6 +234,18 @@ class PurchaseOrderModel(Base):
     __tablename__ = "purchase_orders"
 
     po_id = Column(String, primary_key=True, index=True)
+    
+    # ================================================================
+    # Phase 1: Multi-Tenant Isolation
+    # ================================================================
+    # Beginner Note: Purchase orders are tenant-scoped so that one
+    # pharmacy cannot see another pharmacy's order history.
+    tenant_id = Column(
+        String,
+        ForeignKey("tenants.tenant_id"),
+        nullable=False,
+        index=True,
+    )
     
     # Links to the supplier/distributor who is supposed to deliver this
     supplier_id = Column(String, ForeignKey("suppliers.supplier_id"), nullable=False)
@@ -202,6 +267,11 @@ class PurchaseOrderModel(Base):
     actual_delivery_date = Column(Date, nullable=True)
     
     status = Column(String, default="PENDING") # PENDING, DELIVERED, PARTIAL, FAILED
+
+    # --- Structural Indexes ---
+    __table_args__ = (
+        Index('idx_tenant_po', 'tenant_id', 'po_id'),
+    )
 
 # ==========================================
 # PHASE 15.1: CLINICAL KNOWLEDGE BASE (VECTOR DB)
@@ -322,6 +392,20 @@ class SaleReceiptModel(Base):
     __tablename__ = "sale_receipts"
 
     id = Column(String, primary_key=True, index=True)
+    
+    # ================================================================
+    # Phase 1: Multi-Tenant Isolation
+    # ================================================================
+    # Beginner Note: Each sale receipt belongs to exactly one pharmacy
+    # tenant. This prevents a pharmacy from accidentally viewing or
+    # modifying another pharmacy's sales data.
+    tenant_id = Column(
+        String,
+        ForeignKey("tenants.tenant_id"),
+        nullable=False,
+        index=True,
+    )
+    
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     total_amount_inr = Column(Numeric(10, 2), nullable=False)
     payment_method = Column(String(10), nullable=False, server_default=text("'CASH'"))
@@ -330,6 +414,11 @@ class SaleReceiptModel(Base):
     patient_id = Column(String, ForeignKey("patients.patient_id"), nullable=True, index=True)
 
     lines = relationship("SaleLineItemModel", back_populates="receipt")
+
+    # --- Structural Indexes ---
+    __table_args__ = (
+        Index('idx_tenant_receipt', 'tenant_id', 'id'),
+    )
 
 
 class SaleLineItemModel(Base):
@@ -340,6 +429,22 @@ class SaleLineItemModel(Base):
     __tablename__ = "sale_line_items"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    # ================================================================
+    # Phase 1: Multi-Tenant Isolation
+    # ================================================================
+    # Beginner Note: Line items inherit their tenant scope from the
+    # parent receipt. Storing tenant_id directly on this table (rather
+    # than always joining through sale_receipts) makes multi-tenant
+    # queries dramatically faster because PostgreSQL can filter rows
+    # at the storage level without needing the join.
+    tenant_id = Column(
+        String,
+        ForeignKey("tenants.tenant_id"),
+        nullable=False,
+        index=True,
+    )
+    
     receipt_id = Column(String, ForeignKey("sale_receipts.id"), nullable=False, index=True)
     batch_id = Column(String, ForeignKey("medication_batches.batch_id"), nullable=False)
     name = Column(String(255), nullable=False, server_default=text("''"))
@@ -348,6 +453,11 @@ class SaleLineItemModel(Base):
     price_per_unit = Column(Numeric(10, 2), nullable=False)
 
     receipt = relationship("SaleReceiptModel", back_populates="lines")
+
+    # --- Structural Indexes ---
+    __table_args__ = (
+        Index('idx_tenant_line_item', 'tenant_id', 'id'),
+    )
 
 
 class OutboxEventModel(Base):
@@ -364,3 +474,68 @@ class OutboxEventModel(Base):
     payload = Column(JSONB, nullable=False) # Stores the exact details of the sale in JSON format
     status = Column(String, default="pending", index=True) # 'pending', 'processing', 'completed', 'failed'
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+# ==========================================
+# PHASE 1: REGULATORY DIFF LEDGER
+# ==========================================
+
+class RegulatoryDiffLogModel(Base):
+    """
+    Immutable audit ledger for tracking changes to the medication master
+    catalogue that originate from government regulatory sources (CDSCO,
+    FDA, NPPA price caps, etc.).
+
+    Beginner Note:
+        Every time the mock government scraper detects a change in a
+        drug's regulatory status (e.g., a newly banned molecule, an
+        updated price cap), it records the OLD value and the NEW value
+        in this table. This creates a complete, auditable history of
+        all regulatory changes that can be reviewed by a human curator.
+
+    Attributes:
+        id: Auto-incrementing big integer primary key.
+        timestamp: When the regulatory change was detected (server default).
+        product_id: Foreign key to the ``medications`` table. Identifies
+            which drug was affected.
+        old_value: The previous value before the regulatory change
+            (stored as plain text for maximum compatibility).
+        new_value: The new value after the regulatory change
+            (stored as plain text).
+        source_gov_url: The URL of the government notification or
+            PDF document that announced this change. This provides
+            a verifiable audit trail back to the original source.
+        curator_id: The ID of the human pharmacist who reviewed and
+            acknowledged this change. Nullable because the record is
+            created before a human reviews it.
+    """
+
+    __tablename__ = "regulatory_diff_log"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    timestamp = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    # Foreign key to the medications table — which drug was affected
+    product_id = Column(
+        String,
+        ForeignKey("medications.sku_id"),
+        nullable=False,
+        index=True,
+    )
+
+    # The previous and current values as plain text.
+    # We store them as Text rather than JSONB because the format
+    # of government notifications varies widely and we want to
+    # preserve the exact wording from the source PDF.
+    old_value = Column(Text, nullable=False)
+    new_value = Column(Text, nullable=False)
+
+    # The source URL of the government notification
+    source_gov_url = Column(Text, nullable=False)
+
+    # The human curator who reviewed this change (nullable until reviewed)
+    curator_id = Column(String, nullable=True)
