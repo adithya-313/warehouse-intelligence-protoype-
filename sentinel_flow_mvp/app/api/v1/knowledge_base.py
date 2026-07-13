@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, status, Depends
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_database_session
@@ -5,7 +6,16 @@ from app.domain.schemas import KnowledgeIngestionRequest, KnowledgeIngestionResp
 from app.workers.embedding_tasks import generate_and_store_embedding
 from app.services.semantic_search import execute_clinical_search, find_clinical_substitutes
 from app.services.rag_pipeline import route_and_process_query
-import re
+from app.services.sanitizer import QuerySanitizer
+
+logger = logging.getLogger(__name__)
+
+# Create a single reusable instance of the QuerySanitizer.
+# Beginner Note: We create this at MODULE LEVEL so that the sanitizer
+# is instantiated once when the application starts and reused for every
+# request. There is no per-request state to reset, so a single instance
+# is safe and efficient.
+sanitizer = QuerySanitizer()
 
 router = APIRouter()
 
@@ -59,46 +69,108 @@ async def ask_clinical_assistant(
     Adaptive AI Assistant Endpoint.
     Routes each query through the Adaptive Routing system:
       - Objective queries (price, stock, MRP) → answered from database instantly.
+      - Substitute queries → answered from the substitute finder (vector + inventory).
       - Clinical/subjective queries → answered via Gemini RAG with clinical context.
+
+    Beginner Note:
+        Before any routing happens, the query passes through the QuerySanitizer
+        which handles THREE preprocessing steps:
+          1. clean_drug_names() — fixes misspellings using fuzzy matching.
+          2. extract_sku() — finds drug SKU codes anywhere in the query.
+          3. extract_intents() — identifies what the user wants (pregnancy
+             safety, pediatric dosage, substitute, or simple objective data).
     """
-    query_lower = payload.query.lower()
-    if "substitute" in query_lower or "alternative" in query_lower:
-        # ---------------------------------------------------------------------
-        # STORY COMMENT:
-        # We intercept queries asking for a "substitute" or "alternative".
-        # We use a regex (re.search) to find a SKU code (e.g., AMOXI-500 or PAN-40).
-        # The regex r"([a-zA-Z]+-\d+)" looks for letters, a hyphen, and numbers.
-        # If that doesn't match, we try a second pattern without the hyphen
-        # (e.g., "PAN40") and insert a hyphen before the trailing digits.
-        # This allows us to bridge the chat UI directly to the vector database,
-        # bypassing the expensive LLM entirely and returning real-time relation data.
-        # ---------------------------------------------------------------------
-        sku_match = re.search(r"([A-Z]+)-(\d+)", payload.query, re.IGNORECASE)
-        if not sku_match:
-            sku_match = re.search(r"([A-Z]+)(\d+)", payload.query, re.IGNORECASE)
-        if sku_match:
-            sku = f"{sku_match.group(1).upper()}-{sku_match.group(2)}"
-            substitutes = find_clinical_substitutes(db, target_sku=sku, threshold=0.80)
-            
-            if substitutes:
-                # Format the returned substitutes into a clean string
-                lines = [f"Found alternatives for {sku}:"]
-                for sub in substitutes:
-                    lines.append(f"Found alternative: {sub['sku_id']} - Stock: {sub['stock_qty']} - Price: ₹{sub['unit_price_inr']:.2f}")
-                formatted_response = "\n".join(lines)
-            else:
-                formatted_response = f"No suitable clinical substitutes found for {sku} above 80% similarity threshold."
-                
-            return RAGQueryResponse(
-                query=payload.query,
-                answer=formatted_response,
-                context_used=[]
+
+    # =====================================================================
+    # STEP 0: SANITIZE THE QUERY
+    # =====================================================================
+    # Beginner Note: We build a list of valid drug names from the frontend
+    # payload (if a specific SKU was provided) or from the query text
+    # itself. The sanitizer will check each word against this list and
+    # correct any close misspellings (60% similarity threshold).
+
+    # Start with the query text as-is
+    raw_query = payload.query
+
+    # Build a list of valid drug names to check against.
+    # If the frontend provided a SKU, include it so the user's
+    # misspelling of that SKU gets corrected.
+    valid_names_list = []
+    if payload.sku_id:
+        valid_names_list.append(payload.sku_id)
+
+    # Run the fuzzy drug-name cleaner on the query.
+    # This replaces words like "Crooosin" with "CROCIN" so the
+    # search engine receives a correctly-spelled query.
+    cleaned_query = sanitizer.clean_drug_names(
+        query=raw_query,
+        valid_names=valid_names_list,
+    )
+
+    # Extract the SKU from the cleaned query text using the unified
+    # regex pattern (handles both "AMOXI-500" and "PAN40" formats).
+    extracted_sku = sanitizer.extract_sku(cleaned_query)
+
+    # Determine which intents are present in the query.
+    intents = sanitizer.extract_intents(cleaned_query)
+
+    # =====================================================================
+    # STEP 1: HANDLE SUBSTITUTE INTENT
+    # =====================================================================
+    # Beginner Note: If the user asks for a "substitute" or "alternative"
+    # for a drug, we route directly to the substitute finder instead of
+    # the general RAG pipeline. This bypasses the LLM entirely and
+    # returns real-time stock and pricing data from the database.
+
+    if intents["substitute"] and extracted_sku is not None:
+        logger.info(
+            f"QuerySanitizer: Routing substitute intent for SKU "
+            f"'{extracted_sku}' to substitute finder."
+        )
+
+        substitutes = find_clinical_substitutes(
+            db, target_sku=extracted_sku, threshold=0.80
+        )
+
+        if substitutes:
+            # Format the returned substitutes into a clean string
+            lines = [f"Found alternatives for {extracted_sku}:"]
+            for sub in substitutes:
+                lines.append(
+                    f"Found alternative: {sub['sku_id']} - "
+                    f"Stock: {sub['stock_qty']} - "
+                    f"Price: ₹{sub['unit_price_inr']:.2f}"
+                )
+            formatted_response = "\n".join(lines)
+        else:
+            formatted_response = (
+                f"No suitable clinical substitutes found for "
+                f"{extracted_sku} above 80% similarity threshold."
             )
+
+        return RAGQueryResponse(
+            query=payload.query,
+            answer=formatted_response,
+            context_used=[]
+        )
+
+    # =====================================================================
+    # STEP 2: ROUTE TO ADAPTIVE PIPELINE
+    # =====================================================================
+    # Pass the cleaned query and extracted SKU to the existing adaptive
+    # router. If the SKU was already extracted by the sanitizer, the
+    # router will skip its own SKU extraction and use ours.
+    # If no SKU was found (extracted_sku is None), the router will
+    # fall back to its own extraction logic or to Gemini.
+
+    # Use the extracted SKU if found, otherwise fall back to the
+    # frontend-provided SKU (payload.sku_id).
+    final_sku = extracted_sku or payload.sku_id
 
     rag_data = route_and_process_query(
         db=db,
-        query=payload.query,
-        sku_id=payload.sku_id
+        query=cleaned_query,
+        sku_id=final_sku,
     )
 
     return RAGQueryResponse(
