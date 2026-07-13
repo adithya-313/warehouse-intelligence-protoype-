@@ -1,0 +1,12 @@
+sku_id,brand_name,generic_name,indications,side_effects,contraindications,price_inr,pregnancy_category,pediatric_age_threshold_months
+PAN40,Pan 40,Pantoprazole,GERD; Peptic ulcer disease; Acid reflux,Headache; Diarrhea; Stomach pain,Severe liver disease; Known hypersensitivity,135.00,C,0
+GLYCOMET500,Glycomet 500,Metformin,Type 2 Diabetes Mellitus; PCOS,Nausea; Vomiting; Diarrhea; Lactic acidosis,Severe renal impairment; Diabetic ketoacidosis,45.00,B,0
+ALLEGRA120,Allegra 120,Fexofenadine,Allergic rhinitis; Urticaria; Hay fever,Headache; Drowsiness; Dry mouth,Renal impairment (requires dose adjustment),180.00,C,0
+AZITH500,Azithral 500,Azithromycin,Bacterial infections; Typhoid; Respiratory tract infections,Nausea; Abdominal pain; Diarrhea,Hepatic dysfunction; History of cholestatic jaundice,120.00,B,0
+AMLOK5,Amlokind 5,Amlodipine,Hypertension; Angina,Swelling of ankles; Flushing; Dizziness,Severe hypotension; Cardiogenic shock,25.00,C,0
+CALPOL650,Calpol 650,Paracetamol,Fever; Mild to moderate pain,Nausea; Skin rash; Hepatic damage at high doses,Severe hepatic impairment,30.00,B,0
+AUGMENTIN625,Augmentin 625,Amoxicillin + Clavulanic Acid,Severe bacterial infections; Ear infections; Pneumonia,Diarrhea; Thrush; Skin rash,Penicillin allergy; History of jaundice with this drug,200.00,B,0
+TELMA40,Telma 40,Telmisartan,Hypertension; Cardiovascular risk reduction,Back pain; Sinus infection; Diarrhea,Pregnancy (2nd and 3rd trimesters); Severe hepatic impairment,110.00,D,0
+THYRO50,Thyronorm 50,Levothyroxine,Hypothyroidism,Palpitations; Sweating; Weight loss (if over-dosed),Uncorrected adrenal insufficiency; Acute myocardial infarction,150.00,A,0
+ZIFI200,Zifi 200,Cefixime,Bacterial infections; UTI; Typhoid,Diarrhea; Stomach upset; Nausea,Cephalosporin allergy,105.00,B,0
+RISO20,Isotretinoin 20,Isotretinoin,Severe recalcitrant nodular acne,Skin dryness; Photosensitivity; Joint pain; Mucosal dryness,Pregnancy (ABSOLUTE CONTRAINDICATION); Nursing mothers; Hepatic impairment,450.00,X,0
