@@ -11,6 +11,7 @@ Think of it as a traffic cop at an intersection:
   - If the driver asks "Is this safe for a pregnant patient?" → point them to Gemini (slow, costly).
 """
 
+import json
 import logging
 import re
 from sqlalchemy.orm import Session
@@ -20,7 +21,9 @@ from app.core.config import get_application_settings
 # dependencies) at module level. This keeps the module importable even
 # when the full ML stack is not available.
 # from app.services.semantic_search import execute_clinical_search
-from app.infrastructure.models import MedicationBatchModel
+from app.infrastructure.models import MedicationBatchModel, MedicationModel
+from app.services.rule_engine import ClinicalSafetyJudge
+from app.domain.schemas import ClinicalNarrativeSchema
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +69,8 @@ OBJECTIVE_KEYWORDS_LIST = [
 def route_and_process_query(
     db: Session,
     query: str,
-    sku_id: str = None
+    sku_id: str = None,
+    intents: dict = None,
 ) -> dict:
     """
     Route a query to either the database (for objective questions) or
@@ -77,11 +81,17 @@ def route_and_process_query(
         query: The user's natural language question.
         sku_id: Optional SKU identifier if the frontend knows which
                 medication the user is asking about.
+        intents: Optional dict of extracted intents from QuerySanitizer.
+                 Passed to the Rule Engine for deterministic safety checks
+                 before the LLM is called. Expected keys: 'pregnancy',
+                 'pediatric', 'substitute', 'objective'.
 
     Returns:
-        dict with keys "answer" (str) and "context_used" (list), matching
-        the same format as generate_clinical_response() so the caller
-        doesn't need to know which route was taken.
+        dict with keys "answer" (str), "context_used" (list),
+        "is_safe_to_dispense" (bool), "system_lock_reason" (str | None),
+        and "citations" (list). Matches the return format of
+        generate_clinical_response() so the caller doesn't need to
+        know which route was taken.
     """
     # =====================================================================
     # STEP 0: EXTRACT SKU FROM QUERY TEXT (if not already provided)
@@ -180,7 +190,10 @@ def route_and_process_query(
 
             return {
                 "answer": formatted_answer,
-                "context_used": []
+                "context_used": [],
+                "is_safe_to_dispense": True,
+                "system_lock_reason": None,
+                "citations": [],
             }
 
         else:
@@ -190,7 +203,10 @@ def route_and_process_query(
                     f"No inventory records found for SKU '{sku_id}'. "
                     "Please verify the SKU or check inventory master."
                 ),
-                "context_used": []
+                "context_used": [],
+                "is_safe_to_dispense": True,
+                "system_lock_reason": None,
+                "citations": [],
             }
 
     # =====================================================================
@@ -214,22 +230,42 @@ def route_and_process_query(
     return generate_clinical_response(
         db=db,
         query=query,
-        sku_id=sku_id
+        sku_id=sku_id,
+        intents=intents or {},
     )
 
 
 def generate_clinical_response(
     db: Session,
     query: str,
-    sku_id: str = None
+    sku_id: str = None,
+    intents: dict = None,
 ) -> dict:
     """
     Retrieval-Augmented Generation (RAG) Pipeline.
-    1. Retrieves relevant clinical context using PubMedBERT vector search.
-    2. Feeds the context to Google Gemini with a strict 'Do Not Hallucinate' prompt.
-    """
 
+    Refactored for Phase 3:
+        Step A — Retrieval (get clinical context via PubMedBERT vector search)
+        Step B — Rule Engine (deterministic safety check BEFORE Gemini)
+        Step C — Prompt building (with Judge's verdict injected)
+        Step D — Structured Gemini generation (JSON output enforced)
+        Step E — Parse & return (validate Gemini's JSON against ClinicalNarrativeSchema)
+
+    Returns:
+        dict with keys:
+            "answer" (str)
+            "context_used" (list)
+            "is_safe_to_dispense" (bool)
+            "system_lock_reason" (str | None)
+            "citations" (list of str)
+    """
+    # Guard: ensure intents is always a dict so we can call .get() safely
+    if intents is None:
+        intents = {}
+
+    # =====================================================================
     # STEP 0: DYNAMIC API KEY CONFIGURATION
+    # =====================================================================
     # We fetch the application settings at runtime instead of module load time.
     # This guarantees we have the latest environment variables loaded safely.
     # Lazy import: google.generativeai is only imported when RAG is actually used.
@@ -252,10 +288,15 @@ def generate_clinical_response(
         logger.error(f"Gemini module or configuration error: {str(e)}")
         return {
             "answer": "AI Generation Offline: Check API Configuration.",
-            "context_used": []
+            "context_used": [],
+            "is_safe_to_dispense": True,
+            "system_lock_reason": None,
+            "citations": [],
         }
 
+    # =====================================================================
     # STEP 1: RETRIEVAL (Get the facts from our database)
+    # =====================================================================
     # We query the vector database for the top 3 most relevant clinical guidelines.
     # Lazy import: Only load sentence_transformers when clinical RAG is actually needed.
     from app.services.semantic_search import execute_clinical_search
@@ -265,23 +306,120 @@ def generate_clinical_response(
     if search_results.get("safety_warning"):
         return {
             "answer": search_results["safety_warning"],
-            "context_used": []
+            "context_used": [],
+            "is_safe_to_dispense": True,
+            "system_lock_reason": None,
+            "citations": [],
         }
 
     context_items = search_results["results"]
 
-    # STEP 2: FORMAT CONTEXT
-    # Combine the retrieved text blocks into a single string for the AI to read.
+    # =====================================================================
+    # STEP 1.5: ENRICH RETRIEVED RECORDS WITH MEDICATION SAFETY DATA
+    # =====================================================================
+    # Beginner Note: The clinical_search returns records from the
+    # clinical_knowledge_base table, which does NOT contain pregnancy
+    # categories or pediatric age thresholds. Those live in the
+    # medications table. We look up the medication record here and
+    # add its safety fields to the retrieved records so the Judge
+    # has all the data it needs.
+    enriched_records = list(context_items)
+
+    if sku_id:
+        try:
+            medication_record = db.query(MedicationModel).filter(
+                MedicationModel.sku_id == sku_id
+            ).first()
+
+            if medication_record:
+                # Create a synthetic record carrying the medication's
+                # safety data so the Rule Engine can inspect it.
+                safety_enrichment = {
+                    "sku_id": medication_record.sku_id,
+                    "content": "",
+                    "pregnancy_category": medication_record.pregnancy_category,
+                    "pediatric_age_threshold_months": (
+                        medication_record.pediatric_age_threshold_months
+                    ),
+                }
+                enriched_records.append(safety_enrichment)
+        except Exception as e:
+            # If the medication lookup fails (e.g., database offline),
+            # we log the error but continue. The Judge will simply not
+            # have the safety data and will allow the transaction through.
+            logger.warning(
+                f"ClinicalSafetyJudge: Could not look up medication "
+                f"record for SKU '{sku_id}': {e}"
+            )
+
+    # =====================================================================
+    # STEP 2: DETERMINISTIC SAFETY CHECK (THE JUDGE)
+    # =====================================================================
+    # Beginner Note: We run the Rule Engine BEFORE calling Gemini.
+    # If the Judge finds a safety violation, we BLOCK the transaction
+    # immediately and return a lock message — no LLM call needed.
+    # This is the critical difference between Phase 2 and Phase 3:
+    #   Phase 2: User query -> Sanitizer -> LLM -> Free-text response
+    #   Phase 3: User query -> Sanitizer -> JUDGE -> LLM -> Structured JSON
+    #
+    # The Judge sits BETWEEN the Sanitizer and the LLM, acting as a
+    # deterministic safety gate.
+    judge = ClinicalSafetyJudge()
+    verdict = judge.evaluate_safety(
+        intents=intents,
+        retrieved_records=enriched_records,
+    )
+
+    # If the Judge says UNSAFE, return immediately with the lock reason.
+    # No Gemini call is made — saving money AND preventing the LLM
+    # from accidentally contradicting the safety decision.
+    if not verdict["is_safe"]:
+        lock_reason = verdict["lock_reason"]
+        logger.warning(
+            f"ClinicalSafetyJudge: Transaction LOCKED. "
+            f"Reason: {lock_reason}"
+        )
+
+        return {
+            "answer": (
+                f"SYSTEM LOCK: {lock_reason}. "
+                "This medication cannot be dispensed based on the "
+                "current patient profile. Consult a senior pharmacist "
+                "for manual override."
+            ),
+            "context_used": context_items,
+            "is_safe_to_dispense": False,
+            "system_lock_reason": lock_reason,
+            "citations": [],
+        }
+
+    # =====================================================================
+    # STEP 3: PROMPT ENGINEERING (WITH JUDGE'S VERDICT INJECTED)
+    # =====================================================================
+    # Beginner Note: We tell Gemini that the system has already determined
+    # the safety status. The AI's job is NOT to decide safety — it's to
+    # EXPLAIN why the decision was made, using the clinical context.
+    #
+    # We also instruct Gemini to return a JSON object that matches our
+    # ClinicalNarrativeSchema. This is enforced by the response_schema
+    # parameter in generation_config.
+
     context_blocks = "\n\n".join([f"- {item['content']}" for item in context_items])
 
-    # STEP 3: PROMPT ENGINEERING (Strict Constraints)
-    prompt = f"""You are a strict clinical safety assistant for a pharmacy.
-Your job is to answer the user's query using ONLY the provided clinical context.
+    prompt = f"""You are a strict clinical safety narrator for a pharmacy.
+
+The system has determined this transaction is: SAFE — ALLOWED.
+You must explain why this medication is safe based on the provided clinical context.
 
 RULES:
 1. Do NOT hallucinate or use outside medical knowledge.
-2. If the provided context does not contain the answer, reply EXACTLY with: "INSUFFICIENT CLINICAL DATA. CONSULT PHARMACIST."
-3. Keep the answer concise, professional, and direct.
+2. If the provided context does not contain the answer, set narrative to "INSUFFICIENT CLINICAL DATA. CONSULT PHARMACIST."
+3. Keep the narrative concise, professional, and direct.
+4. You MUST return a valid JSON object with the following fields:
+   - is_safe_to_dispense (boolean): Always true in this context.
+   - narrative (string): Your explanation.
+   - system_lock_reason (null): Always null in this context.
+   - citations (array of strings): Any clinical sources referenced.
 
 CLINICAL CONTEXT:
 {context_blocks}
@@ -290,25 +428,103 @@ USER QUERY:
 {query}
 """
 
-    # STEP 4: GENERATION (Call Gemini)
+    # =====================================================================
+    # STEP 4: STRUCTURED GEMINI GENERATION (JSON OUTPUT ENFORCED)
+    # =====================================================================
+    # Beginner Note: In Phase 2, we called Gemini with temperature=0.0
+    # and accepted whatever text it returned. This was risky because the
+    # AI could "forget" to mention critical safety information.
+    #
+    # In Phase 3, we tell Gemini EXACTLY what JSON format to return using
+    # response_mime_type="application/json" and response_schema. Gemini's
+    # API will validate the output on its end before sending it back to us.
+    #
+    # If Gemini cannot generate valid JSON matching the schema, the API
+    # call itself will raise an exception — which we catch and handle
+    # gracefully below.
     try:
-        # We use gemini-3.5-flash for high speed and low latency (fixed invalid model name)
         model = genai.GenerativeModel('gemini-3.5-flash')
 
-        # Temperature = 0.0 forces the AI to be deterministic and analytical, not creative.
+        generation_config = genai.types.GenerationConfig(
+            temperature=0.0,
+            response_mime_type="application/json",
+            response_schema={
+                "type": "object",
+                "properties": {
+                    "is_safe_to_dispense": {"type": "boolean"},
+                    "narrative": {"type": "string"},
+                    "system_lock_reason": {"type": "string"},
+                    "citations": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": [
+                    "is_safe_to_dispense",
+                    "narrative",
+                    "system_lock_reason",
+                    "citations",
+                ],
+            },
+        )
+
         response = model.generate_content(
             prompt,
-            generation_config=genai.types.GenerationConfig(temperature=0.0)
+            generation_config=generation_config,
+        )
+
+        # =====================================================================
+        # STEP 5: PARSE & VALIDATE GEMINI'S JSON RESPONSE
+        # =====================================================================
+        # Beginner Note: Gemini returns a raw JSON string. We parse it into
+        # a Python dict, then validate it against our ClinicalNarrativeSchema
+        # Pydantic model. If the JSON is malformed or missing required fields,
+        # the Pydantic validator will raise an error — which we catch below.
+        raw_json = response.text.strip()
+
+        # Remove any markdown code block fences that Gemini might add
+        if raw_json.startswith("```"):
+            # Strip the opening ```json or ``` and the closing ```
+            raw_json = raw_json.strip("`").strip()
+            if raw_json.startswith("json"):
+                raw_json = raw_json[4:].strip()
+
+        parsed_data = json.loads(raw_json)
+        narrative = ClinicalNarrativeSchema(**parsed_data)
+
+        logger.info(
+            f"Clinical Narrator: Gemini returned structured response. "
+            f"is_safe_to_dispense={narrative.is_safe_to_dispense}"
         )
 
         return {
-            "answer": response.text.strip(),
-            "context_used": context_items
+            "answer": narrative.narrative,
+            "context_used": context_items,
+            "is_safe_to_dispense": narrative.is_safe_to_dispense,
+            "system_lock_reason": narrative.system_lock_reason,
+            "citations": narrative.citations,
+        }
+
+    except json.JSONDecodeError as e:
+        # Gemini returned text that is NOT valid JSON.
+        logger.error(f"Clinical Narrator: Gemini returned invalid JSON: {e}")
+        return {
+            "answer": (
+                "SYSTEM ERROR: AI response could not be parsed. "
+                "Please consult a pharmacist."
+            ),
+            "context_used": context_items,
+            "is_safe_to_dispense": True,
+            "system_lock_reason": None,
+            "citations": [],
         }
 
     except Exception as e:
-        logger.error(f"Gemini API generation failed: {str(e)}")
+        logger.error(f"Clinical Narrator: Gemini API or parsing error: {str(e)}")
         return {
             "answer": "SYSTEM ERROR: AI Generation failed. Please consult a pharmacist.",
-            "context_used": context_items
+            "context_used": context_items,
+            "is_safe_to_dispense": True,
+            "system_lock_reason": None,
+            "citations": [],
         }

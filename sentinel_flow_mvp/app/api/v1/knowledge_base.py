@@ -151,17 +151,25 @@ async def ask_clinical_assistant(
         return RAGQueryResponse(
             query=payload.query,
             answer=formatted_response,
-            context_used=[]
+            context_used=[],
+            is_safe_to_dispense=True,
+            system_lock_reason=None,
+            citations=[],
         )
 
     # =====================================================================
-    # STEP 2: ROUTE TO ADAPTIVE PIPELINE
+    # STEP 2: ROUTE TO ADAPTIVE PIPELINE (WITH INTENTS FOR THE JUDGE)
     # =====================================================================
     # Pass the cleaned query and extracted SKU to the existing adaptive
     # router. If the SKU was already extracted by the sanitizer, the
     # router will skip its own SKU extraction and use ours.
     # If no SKU was found (extracted_sku is None), the router will
     # fall back to its own extraction logic or to Gemini.
+    #
+    # Phase 3 addition: We also pass the intents dict so the Rule Engine
+    # (ClinicalSafetyJudge) can perform deterministic safety checks
+    # BEFORE the LLM is called. The intents tell the Judge whether the
+    # patient is pregnant, pediatric, or asking for a substitute.
 
     # Use the extracted SKU if found, otherwise fall back to the
     # frontend-provided SKU (payload.sku_id).
@@ -171,12 +179,16 @@ async def ask_clinical_assistant(
         db=db,
         query=cleaned_query,
         sku_id=final_sku,
+        intents=intents,
     )
 
     return RAGQueryResponse(
         query=payload.query,
         answer=rag_data["answer"],
-        context_used=rag_data["context_used"]
+        context_used=rag_data["context_used"],
+        is_safe_to_dispense=rag_data.get("is_safe_to_dispense", True),
+        system_lock_reason=rag_data.get("system_lock_reason"),
+        citations=rag_data.get("citations", []),
     )
 
 

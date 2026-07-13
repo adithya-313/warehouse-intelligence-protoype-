@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 # -------------------------------------------------------------------
 # Recursion guard constants and helper
@@ -861,6 +861,50 @@ class RAGQueryResponse(BaseModel):
     query: str
     answer: str = Field(..., description="The AI-generated answer based strictly on context.")
     context_used: list[SearchResultItem] = Field(..., description="The exact database records used to generate the answer.")
+    is_safe_to_dispense: StrictBool = Field(
+        default=True,
+        description="Whether the ClinicalSafetyJudge determined it is safe to dispense.",
+    )
+    system_lock_reason: str | None = Field(
+        default=None,
+        description="If locked by the Rule Engine, the reason code (e.g. CRITICAL_PREGNANCY_CONTRAINDICATION).",
+    )
+    citations: list[str] = Field(
+        default_factory=list,
+        description="List of clinical citation strings used to generate the answer.",
+    )
+
+
+# --- Phase 3: Structured Clinical Narrative Schema ---
+# Beginner Note: This schema is used TWO ways:
+#   1. As the output format we tell Gemini to return (response_schema).
+#   2. As a validation model so our Python code can safely parse Gemini's JSON.
+#
+# By forcing Gemini to return structured JSON instead of free text, we can
+# programmatically verify that the LLM answered every required field. This
+# eliminates the risk of the AI "forgetting" to mention critical safety info.
+
+class ClinicalNarrativeSchema(BaseModel):
+    """
+    Structured output contract for the Gemini LLM narrator.
+
+    Attributes:
+        is_safe_to_dispense: Boolean flag — true means the pharmacist can
+            safely dispense this medication based on the patient context.
+            Uses StrictBool to reject non-boolean values (e.g. "yes", "true")
+            that Pydantic would otherwise coerce.
+        narrative: A human-readable explanation of the safety decision.
+            Written for a pharmacist to read aloud or show the patient.
+        system_lock_reason: If is_safe_to_dispense is False, this field
+            contains the exact lock reason code (e.g. "CRITICAL_PREGNANCY_"
+            "CONTRAINDICATION"). If safe, this field is None.
+        citations: A list of exact source citations (e.g. CDSCO guideline
+            IDs or PubMed references) that support the narrative.
+    """
+    is_safe_to_dispense: StrictBool
+    narrative: str
+    system_lock_reason: str | None
+    citations: list[str]
 
 
 # --- Phase 9: Cross-Model Hybrid Substitute Schemas ---
