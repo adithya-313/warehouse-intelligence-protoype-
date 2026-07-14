@@ -87,7 +87,7 @@ logger = logging.getLogger(__name__)
 # We compute it relative to this script's location so it works regardless
 # of which directory the user runs the script from.
 CSV_FILE_PATH: str = str(
-    Path(__file__).resolve().parent.parent / "data" / "indian_essential_meds.csv"
+    Path(__file__).resolve().parent.parent / "data" / "sample_essential_meds.csv"
 )
 
 # How many records to insert before committing to the database.
@@ -618,16 +618,40 @@ def main() -> None:
     batch_counter: int = 0
 
     try:
+        # ------------------------------------------------------------------
+        # PASS 1: Insert ALL medication records (parent table).
+        # We commit in batches so the child table insert below can reference
+        # these SKUs via the foreign key constraint.
+        # ------------------------------------------------------------------
+        for index, t_row in enumerate(transformed_rows):
+            if load_medication_record(db_session, t_row):
+                medications_created += 1
+
+            batch_counter += 1
+            if batch_counter >= BATCH_COMMIT_SIZE:
+                db_session.commit()
+                logger.info(
+                    "Load [Pass 1 — Medications]: Batch committed. "
+                    "Medications created so far: %d.",
+                    medications_created,
+                )
+                batch_counter = 0
+
+        if batch_counter > 0:
+            db_session.commit()
+
+        # ------------------------------------------------------------------
+        # PASS 2: Insert ALL clinical knowledge records (child table).
+        # By now all parent medications exist in the database, so the FK
+        # constraint ``clinical_knowledge_base.sku_id -> medications.sku_id``
+        # will be satisfied.
+        # ------------------------------------------------------------------
+        batch_counter = 0
         for index, t_row in enumerate(transformed_rows):
             sku_id: str = t_row["sku_id"]
             chunk: str = chunks[index]
             embedding: list[float] = embeddings[index]
 
-            # --- Step 5a: Insert Medication (parent record) ---
-            if load_medication_record(db_session, t_row):
-                medications_created += 1
-
-            # --- Step 5b: Insert Clinical Knowledge (child record) ---
             metadata: dict = {
                 "brand_name": t_row.get("brand_name", ""),
                 "generic_name": t_row.get("generic_name", ""),
@@ -639,26 +663,18 @@ def main() -> None:
             if load_knowledge_record(db_session, sku_id, chunk, embedding, metadata):
                 knowledge_created += 1
 
-            # --- Step 5c: Batch Commit ---
             batch_counter += 1
             if batch_counter >= BATCH_COMMIT_SIZE:
                 db_session.commit()
                 logger.info(
-                    "Load: Batch committed (%d records). "
-                    "Medications created so far: %d. Knowledge created so far: %d.",
-                    BATCH_COMMIT_SIZE,
-                    medications_created,
+                    "Load [Pass 2 — Knowledge]: Batch committed. "
+                    "Knowledge records created so far: %d.",
                     knowledge_created,
                 )
                 batch_counter = 0
 
-        # Final commit for any remaining records.
         if batch_counter > 0:
             db_session.commit()
-            logger.info(
-                "Load: Final batch committed (%d records).",
-                batch_counter,
-            )
 
         db_session.close()
 

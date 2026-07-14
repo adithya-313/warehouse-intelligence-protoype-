@@ -364,31 +364,25 @@ async def generate_clinical_response(
     # has all the data it needs.
     enriched_records = list(context_items)
 
-    if sku_id:
+    # Look up each retrieved record's medication safety data so the Judge
+    # can inspect pregnancy_category, pediatric_age_threshold_months, etc.
+    for ctx_item in context_items:
+        ctx_sku = ctx_item.get("sku_id")
+        if not ctx_sku:
+            continue
         try:
-            medication_record = db.query(MedicationModel).filter(
-                MedicationModel.sku_id == sku_id
+            med_record = db.query(MedicationModel).filter(
+                MedicationModel.sku_id == ctx_sku
             ).first()
-
-            if medication_record:
-                # Create a synthetic record carrying the medication's
-                # safety data so the Rule Engine can inspect it.
-                safety_enrichment = {
-                    "sku_id": medication_record.sku_id,
-                    "content": "",
-                    "pregnancy_category": medication_record.pregnancy_category,
-                    "pediatric_age_threshold_months": (
-                        medication_record.pediatric_age_threshold_months
-                    ),
-                }
-                enriched_records.append(safety_enrichment)
+            if med_record:
+                ctx_item["pregnancy_category"] = med_record.pregnancy_category
+                ctx_item["pediatric_age_threshold_months"] = (
+                    med_record.pediatric_age_threshold_months
+                )
         except Exception as e:
-            # If the medication lookup fails (e.g., database offline),
-            # we log the error but continue. The Judge will simply not
-            # have the safety data and will allow the transaction through.
             logger.warning(
                 f"ClinicalSafetyJudge: Could not look up medication "
-                f"record for SKU '{sku_id}': {e}"
+                f"record for SKU '{ctx_sku}': {e}"
             )
 
     # =====================================================================
