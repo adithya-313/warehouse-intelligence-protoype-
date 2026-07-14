@@ -600,7 +600,7 @@ USER QUERY:
         # ------------------------------------------------------------------
         # Step 5b: Async Gemini Call with 5-Second Timeout
         # ------------------------------------------------------------------
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-3.5-flash')
 
         generation_config = genai.types.GenerationConfig(
             temperature=0.0,
