@@ -59,6 +59,9 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@timescaledb:5432/sentinel_db
       - REDIS_URL=redis://redis:6379/0
+    # Live-mount host source so Uvicorn --reload picks up changes without --build
+    volumes:
+      - .:/app
     deploy:
       resources:
         reservations:
@@ -80,6 +83,9 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@timescaledb:5432/sentinel_db
       - REDIS_URL=redis://redis:6379/0
+    # Live-mount host source so code changes apply on `docker compose restart worker`
+    volumes:
+      - .:/app
     deploy:
       resources:
         reservations:
@@ -100,6 +106,9 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@timescaledb:5432/sentinel_db
       - REDIS_URL=redis://redis:6379/0
+    # Live-mount host source so code changes apply on `docker compose restart celery-beat`
+    volumes:
+      - .:/app
     depends_on:
       timescaledb:
         condition: service_healthy
@@ -126,13 +135,17 @@ services:
     stdin_open: true
     tty: true
     entrypoint: ""
-    command: sh -c "npx next dev -H 0.0.0.0"
+    command: >
+      sh -c "until wget -q -O - api:8080/docs > /dev/null 2>&1; do echo 'Waiting for API to be ready...'; sleep 2; done; npx next dev -H 0.0.0.0"
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
     environment:
       - WATCHPACK_POLLING=true
       - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      api:
+        condition: service_started
 
 volumes:
   sentinel_pg_data:

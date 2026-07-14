@@ -340,17 +340,6 @@ async def generate_clinical_response(
     # Lazy import: Only load sentence_transformers when clinical RAG is actually needed.
     from app.services.semantic_search import execute_clinical_search
     search_results = execute_clinical_search(db=db, query=query, sku_id=sku_id, top_k=3)
-
-    # If the safety breaker tripped (no high-confidence results), degrade gracefully.
-    if search_results.get("safety_warning"):
-        return {
-            "answer": search_results["safety_warning"],
-            "context_used": [],
-            "is_safe_to_dispense": True,
-            "system_lock_reason": None,
-            "citations": [],
-        }
-
     context_items = search_results["results"]
 
     # =====================================================================
@@ -371,9 +360,14 @@ async def generate_clinical_response(
         if not ctx_sku:
             continue
         try:
-            med_record = db.query(MedicationModel).filter(
-                MedicationModel.sku_id == ctx_sku
-            ).first()
+            # Normalize: try both hyphenated and de-hyphenated SKU formats
+            # since extraction may add hyphens but the DB stores bare codes.
+            sku_variants = {ctx_sku, ctx_sku.replace("-", "")}
+            med_record = (
+                db.query(MedicationModel)
+                .filter(MedicationModel.sku_id.in_(sku_variants))
+                .first()
+            )
             if med_record:
                 ctx_item["pregnancy_category"] = med_record.pregnancy_category
                 ctx_item["pediatric_age_threshold_months"] = (
@@ -385,18 +379,52 @@ async def generate_clinical_response(
                 f"record for SKU '{ctx_sku}': {e}"
             )
 
+    # Fallback: If no records were found by search but we have a SKU,
+    # do a direct medication lookup so the Judge still has safety data
+    # to evaluate. This prevents Category X/D drugs from slipping through
+    # when vector similarity fails due to query dilution.
+    if not enriched_records and sku_id:
+        try:
+            # Normalize: Try both hyphenated and de-hyphenated formats.
+            # Some SKUs are stored as "RISO20" in the DB but extracted as
+            # "RISO-20" from query text. We try both.
+            sku_variants = {sku_id, sku_id.replace("-", "")}
+            med_record = (
+                db.query(MedicationModel)
+                .filter(MedicationModel.sku_id.in_(sku_variants))
+                .first()
+            )
+            if med_record:
+                safe_sku = med_record.sku_id
+                enriched_records.append({
+                    "sku_id": safe_sku,
+                    "pregnancy_category": med_record.pregnancy_category,
+                    "pediatric_age_threshold_months": (
+                        med_record.pediatric_age_threshold_months
+                    ),
+                })
+                logger.info(
+                    f"SKU Fallback: Direct medication lookup for "
+                    f"{sku_id}/{safe_sku} enriched the Judge with "
+                    f"safety data "
+                    f"(preg_category={med_record.pregnancy_category})."
+                )
+        except Exception as e:
+            logger.warning(f"SKU Fallback: Could not look up SKU '{sku_id}': {e}")
+
     # =====================================================================
-    # STEP 2: DETERMINISTIC SAFETY CHECK (THE JUDGE)
+    # STEP 2: DETERMINISTIC SAFETY CHECK (THE JUDGE) — BEFORE THRESHOLD GATE
     # =====================================================================
-    # Beginner Note: We run the Rule Engine BEFORE calling Gemini.
-    # If the Judge finds a safety violation, we BLOCK the transaction
-    # immediately and return a lock message — no LLM call needed.
-    # This is the critical difference between Phase 2 and Phase 3:
-    #   Phase 2: User query -> Sanitizer -> LLM -> Free-text response
-    #   Phase 3: User query -> Sanitizer -> JUDGE -> LLM -> Structured JSON
+    # Beginner Note: The Judge MUST run BEFORE the confidence-threshold
+    # early exit. Even if the vector search returned low-confidence
+    # results, the Judge must evaluate pregnancy/pediatric intents.
+    # This prevents the "safety dilution" bug where safety-language words
+    # in the query ("safety", "safe") drop vector similarity below the
+    # threshold, causing the Judge to never see the medication records.
     #
     # The Judge sits BETWEEN the Sanitizer and the LLM, acting as a
-    # deterministic safety gate.
+    # deterministic safety gate. If it blocks, we return immediately
+    # and skip both the safety-warning response AND the LLM call.
     judge = ClinicalSafetyJudge()
     verdict = judge.evaluate_safety(
         intents=intents,
@@ -423,6 +451,24 @@ async def generate_clinical_response(
             "context_used": context_items,
             "is_safe_to_dispense": False,
             "system_lock_reason": lock_reason,
+            "citations": [],
+        }
+
+    # =====================================================================
+    # STEP 2.5: EARLY EXIT IF SEARCH FOUND NO HIGH-CONFIDENCE MATCHES
+    # =====================================================================
+    # Beginner Note: If the search returned zero results (even after the
+    # threshold reduction), AND the Judge did not block the transaction,
+    # we return a graceful safety-warning message. This prevents the LLM
+    # from hallucinating when there is no clinical data to ground its
+    # response. The Judge has already been evaluated at this point,
+    # ensuring safety rules are NEVER bypassed by an empty search.
+    if search_results.get("safety_warning"):
+        return {
+            "answer": search_results["safety_warning"],
+            "context_used": [],
+            "is_safe_to_dispense": True,
+            "system_lock_reason": None,
             "citations": [],
         }
 
@@ -487,9 +533,13 @@ async def generate_clinical_response(
 
     context_blocks = "\n\n".join([f"- {item['content']}" for item in context_items])
 
+    # Beginner Note: By this point the Judge has already run and determined
+    # the transaction is safe. We pass its verdict into the prompt so the
+    # LLM narrator can explain the decision without re-evaluating safety.
+    judge_triggered_rule = verdict.get("triggered_rule", "None")
     prompt = f"""You are a strict clinical safety narrator for a pharmacy.
 
-The system has determined this transaction is: SAFE — ALLOWED.
+The system has determined this transaction is: SAFE — ALLOWED (Judge rule: {judge_triggered_rule}).
 You must explain why this medication is safe based on the provided clinical context.
 
 RULES:
@@ -550,7 +600,7 @@ USER QUERY:
         # ------------------------------------------------------------------
         # Step 5b: Async Gemini Call with 5-Second Timeout
         # ------------------------------------------------------------------
-        model = genai.GenerativeModel('gemini-3.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
 
         generation_config = genai.types.GenerationConfig(
             temperature=0.0,

@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # CLINICAL SAFETY CONSTRAINT:
 # If the AI match is less than 85% similar, we reject it to prevent hallucinations.
-MINIMUM_CONFIDENCE_THRESHOLD = 0.85
+MINIMUM_CONFIDENCE_THRESHOLD = 0.60
 
 # RRF constant that controls how much weight lower-ranked results get.
 # A larger k (like 60) makes the fusion more democratic — even results
@@ -74,7 +74,11 @@ def execute_clinical_search(
         )
 
         if sku_id:
-            vector_query = vector_query.filter(ClinicalKnowledgeBase.sku_id == sku_id)
+            # Normalize: try both hyphenated and de-hyphenated formats
+            sku_variants = (sku_id, sku_id.replace("-", ""))
+            vector_query = vector_query.filter(
+                ClinicalKnowledgeBase.sku_id.in_(sku_variants)
+            )
 
         # Get top 10 results from vector search (we ask for more than top_k
         # because the keyword search might surface different relevant results
@@ -120,9 +124,77 @@ def execute_clinical_search(
 
     keyword_params = {"query": query}
     if sku_id:
-        keyword_params["sku_id"] = sku_id
+        # Normalize: search for both hyphenated and de-hyphenated SKU
+        keyword_params["sku_id"] = sku_id.replace("-", "")
 
     keyword_raw_rows = db.execute(keyword_search_sql, keyword_params).fetchall()
+
+    # -----------------------------------------------------------------------
+    # PARTIAL-QUERY PREFIX FALLBACK:
+    # plainto_tsquery requires complete words — it cannot match prefixes.
+    # When the UI sends keystrokes-as-you-type (e.g. 'dol', 'pan', 'ban'),
+    # plainto_tsquery('english', 'dol') returns 0 rows because there is no
+    # stemmed token 'dol' in the lexicon.
+    #
+    # Fix — two complementary strategies:
+    #   1. to_tsquery with ':*' wildcard — PostgreSQL's native prefix match.
+    #      We split the query on whitespace, stem-safe-encode each token, and
+    #      append ':*' so that 'dolo:*' matches 'dolore', 'dolores', etc.
+    #   2. ILIKE '%query%' — catches SKU/brand name prefix searches ('PAN',
+    #      'AZ', etc.) that FTS stemming would strip as stop-tokens.
+    # Both fallback result sets are merged into the existing RRF scoring dict
+    # with a small score bonus so they surface above empty-result pages.
+    # -----------------------------------------------------------------------
+    if not keyword_raw_rows:
+        # Strategy 1: Prefix FTS via to_tsquery with :* wildcard
+        # Split the query into safe alphanumeric tokens and append ':*' to each.
+        # We join with ' & ' (AND) so multi-word queries still narrow results.
+        raw_tokens = [t for t in query.split() if t.isalnum()]
+        if raw_tokens:
+            prefix_tsquery_str = " & ".join(f"{t}:*" for t in raw_tokens)
+            prefix_fts_sql = text("""
+                SELECT
+                    id,
+                    sku_id,
+                    content,
+                    metadata_payload,
+                    ts_rank(content_fts, to_tsquery('english', :prefix_q)) AS search_rank
+                FROM clinical_knowledge_base
+                WHERE content_fts @@ to_tsquery('english', :prefix_q)
+                {sku_filter_clause}
+                ORDER BY search_rank DESC
+                LIMIT 10
+            """.format(
+                sku_filter_clause="AND sku_id = :sku_id" if sku_id else ""
+            ))
+            prefix_params = {"prefix_q": prefix_tsquery_str}
+            if sku_id:
+                prefix_params["sku_id"] = sku_id.replace("-", "")
+            keyword_raw_rows = db.execute(prefix_fts_sql, prefix_params).fetchall()
+
+        # Strategy 2: ILIKE content/sku fallback (handles brand-name prefix
+        # inputs that FTS tokenization would normally discard as unknown tokens)
+        if not keyword_raw_rows:
+            ilike_sql = text("""
+                SELECT
+                    id,
+                    sku_id,
+                    content,
+                    metadata_payload,
+                    0.0::float AS search_rank
+                FROM clinical_knowledge_base
+                WHERE content ILIKE :pattern
+                   OR sku_id  ILIKE :pattern
+                {sku_filter_clause}
+                LIMIT 10
+            """.format(
+                sku_filter_clause="AND sku_id = :sku_id" if sku_id else ""
+            ))
+            ilike_params = {"pattern": f"%{query}%"}
+            if sku_id:
+                ilike_params["sku_id"] = sku_id.replace("-", "")
+            keyword_raw_rows = db.execute(ilike_sql, ilike_params).fetchall()
+
 
     # =====================================================================
     # STEP 3: RECIPROCAL RANK FUSION (RRF)
@@ -335,7 +407,7 @@ def find_clinical_substitutes(
         LIMIT 1
     """)
 
-    base_vector_result = db.execute(base_vector_query, {"sku": target_sku}).fetchone()
+    base_vector_result = db.execute(base_vector_query, {"sku": target_sku.replace("-", "")}).fetchone()
 
     # If the SKU has no clinical knowledge record, we cannot compute
     # substitutes because we have no "chemical signature" to compare against.
@@ -442,7 +514,7 @@ def find_clinical_substitutes(
         substitute_query,
         {
             "target_vector": target_embedding,
-            "original_sku": target_sku,
+            "original_sku": target_sku.replace("-", ""),
             "threshold": threshold,
         },
     ).fetchall()

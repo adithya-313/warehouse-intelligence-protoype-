@@ -29,4 +29,4 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # APPLICATION LAYER
 COPY . .
 
-EXPOSE 8000
+EXPOSE 8080

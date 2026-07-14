@@ -121,15 +121,18 @@ def run_drift_analysis_task() -> str:
     database_session: Session = SessionLocal()
 
     try:
-        # Call the drift detection service
-        psi_value = detect_stockout_drift(database_session=database_session)
+        # Call the drift detection service.
+        # NOTE: detect_stockout_drift() returns a Dict[str, float], not a bare float.
+        # The dict always contains a 'psi' key. We extract it before any comparison.
+        psi_result = detect_stockout_drift(database_session=database_session)
+        psi_value: float = psi_result["psi"]
 
         # Step 2: Check if critical drift was detected (PSI > 0.2)
         # If so, trigger asynchronous LoRA fine-tuning to adapt the model
         # The training uses the last 24 hours of data to create a new adapter
         PSI_CRITICAL_THRESHOLD = 0.2
 
-        if psi_value is not None and psi_value > PSI_CRITICAL_THRESHOLD:
+        if psi_value > PSI_CRITICAL_THRESHOLD:
             logger.warning(
                 f"Critical drift detected: PSI={psi_value:.4f} exceeds {PSI_CRITICAL_THRESHOLD}. "
                 f"Triggering LoRA fine-tuning for module 'stockout_prediction'."
