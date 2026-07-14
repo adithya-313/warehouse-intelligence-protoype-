@@ -14,6 +14,11 @@ export interface ChatMessage {
   role: 'user' | 'ai';
   content: string;
   sources?: any[];
+  // Phase 6: Backend ClinicalSafetyJudge verdict fields.
+  // If is_safe_to_dispense is false, the pharmacist should NOT
+  // proceed with the transaction until a senior pharmacist overrides.
+  is_safe_to_dispense?: boolean;
+  system_lock_reason?: string;
 }
 
 interface POSState {
@@ -25,7 +30,13 @@ interface POSState {
   customerPhone: string;
   customerName: string;
   customerId: string;
+  // Phase 6: Safety lock — set by the CopilotPanel when the backend
+  // ClinicalSafetyJudge blocks a transaction. Non-null means the
+  // checkout buttons are disabled until a senior pharmacist overrides.
+  activeSafetyLock: string | null;
   // Actions
+  setSafetyLock: (reason: string | null) => void;
+  clearSafetyLock: () => void;
   addItem: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
   decrementItem: (batch_id: string) => void;
   removeItem: (batch_id: string) => void;
@@ -48,6 +59,19 @@ export const usePOSStore = create<POSState>((set, get) => ({
   customerPhone: '',
   customerName: '',
   customerId: '',
+  // Phase 6: Safety lock starts null (unlocked). Set by CopilotPanel
+  // when the backend returns is_safe_to_dispense=false.
+  activeSafetyLock: null,
+
+  // Phase 6: Called by CopilotPanel when the backend Judge blocks a
+  // transaction. The reason (e.g. "CRITICAL_PREGNANCY_CONTRAINDICATION")
+  // is stored so the POS page can display it in the lock banner.
+  setSafetyLock: (reason: string | null) => set({ activeSafetyLock: reason }),
+
+  // Phase 6: Called when a senior pharmacist clicks "Override Lock"
+  // in the red checkout banner. Resets activeSafetyLock to null so
+  // the checkout buttons become clickable again.
+  clearSafetyLock: () => set({ activeSafetyLock: null }),
 
   toggleCopilot: () => set((state) => ({ isCopilotOpen: !state.isCopilotOpen })),
   addChatMessage: (msg) => set((state) => ({ chatHistory: [...state.chatHistory, msg] })),
@@ -105,7 +129,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
     cart: state.cart.filter(item => item.batch_id !== batch_id)
   })),
 
-  clearCart: () => set({ cart: [], customerPhone: '', customerName: '', customerId: '' }),
+  clearCart: () => set({ cart: [], customerPhone: '', customerName: '', customerId: '', activeSafetyLock: null }),
   
   setProcessing: (status) => set({ isProcessing: status }),
 

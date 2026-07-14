@@ -66,6 +66,10 @@ export default function POSDashboard() {
   const clearCart = usePOSStore((state: any) => state.clearCart);
   const isProcessing = usePOSStore((state: any) => state.isProcessing);
   const setProcessing = usePOSStore((state: any) => state.setProcessing);
+  // Phase 6: Safety lock — set by CopilotPanel when the backend Judge
+  // blocks a transaction. When non-null, checkout is physically disabled.
+  const activeSafetyLock = usePOSStore((state: any) => state.activeSafetyLock);
+  const clearSafetyLock = usePOSStore((state: any) => state.clearSafetyLock);
   const customerPhone = usePOSStore((state: any) => state.customerPhone);
   const customerName = usePOSStore((state: any) => state.customerName);
   const customerId = usePOSStore((state: any) => state.customerId);
@@ -456,6 +460,34 @@ export default function POSDashboard() {
                 </div>
               </div>
               
+              {/* Phase 6: Safety Lock Banner.
+                  When the backend ClinicalSafetyJudge blocks a transaction,
+                  the global activeSafetyLock is set. We render a highly
+                  visible red banner inside the cart sidebar that prevents
+                  the pharmacist from accidentally processing the order.
+                  A senior pharmacist can click "Override Lock" to
+                  acknowledge the risk and proceed. */}
+              {activeSafetyLock && (
+                <div className="mx-8 mt-4 bg-red-600 text-white p-4 rounded-xl shadow-lg">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <p className="font-bold text-sm uppercase tracking-wider">CHECKOUT LOCKED</p>
+                      <p className="text-lg font-black mt-1">{activeSafetyLock}</p>
+                      <p className="text-xs text-red-200 mt-1">
+                        The Clinical Safety Judge has blocked this transaction.
+                        Consult a senior pharmacist before overriding.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => clearSafetyLock()}
+                      className="shrink-0 px-4 py-2 bg-white text-red-700 font-bold text-xs rounded-lg hover:bg-red-50 transition-colors uppercase tracking-wider"
+                    >
+                      Override Lock
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex-1 p-8 overflow-y-auto">
                 <AnimatePresence mode="popLayout">
                   {!mounted || cart.length === 0 ? (
@@ -534,7 +566,7 @@ export default function POSDashboard() {
                 <div className="grid grid-cols-3 gap-3">
                   <button
                     onClick={() => executeCheckout('CASH')}
-                    disabled={!mounted || cart.length === 0 || isProcessing}
+                    disabled={!mounted || cart.length === 0 || isProcessing || activeSafetyLock !== null}
                     className="flex flex-col items-center justify-center gap-2 py-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-emerald-200/50"
                   >
                     <Banknote size={22} />
@@ -542,7 +574,7 @@ export default function POSDashboard() {
                   </button>
                   <button
                     onClick={() => executeCheckout('UPI')}
-                    disabled={!mounted || cart.length === 0 || isProcessing}
+                    disabled={!mounted || cart.length === 0 || isProcessing || activeSafetyLock !== null}
                     className="flex flex-col items-center justify-center gap-2 py-4 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-blue-200/50"
                   >
                     <QrCode size={22} />
@@ -550,7 +582,7 @@ export default function POSDashboard() {
                   </button>
                   <button
                     onClick={() => executeCheckout('CARD')}
-                    disabled={!mounted || cart.length === 0 || isProcessing}
+                    disabled={!mounted || cart.length === 0 || isProcessing || activeSafetyLock !== null}
                     className="flex flex-col items-center justify-center gap-2 py-4 rounded-xl bg-violet-50 hover:bg-violet-100 text-violet-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-violet-200/50"
                   >
                     <CreditCard size={22} />

@@ -45,6 +45,7 @@ export default function CopilotPanel() {
   const toggleCopilot = usePOSStore((state: any) => state.toggleCopilot);
   const chatHistory = usePOSStore((state: any) => state.chatHistory);
   const addChatMessage = usePOSStore((state: any) => state.addChatMessage);
+  const setSafetyLock = usePOSStore((state: any) => state.setSafetyLock);
   const cart = usePOSStore((state: any) => state.cart);
 
   useEffect(() => {
@@ -76,13 +77,34 @@ export default function CopilotPanel() {
         throw new Error(errorData.detail || `Server Error: ${response.status}`);
       }
 
+      // Step 1: Parse the backend's structured JSON response.
+      // The RAG pipeline now returns is_safe_to_dispense and
+      // system_lock_reason alongside the narrative answer.
       const data = await response.json();
 
+      // Step 2: Extract the safety fields from the backend response.
+      // If the ClinicalSafetyJudge blocked this transaction,
+      // is_safe_to_dispense will be false and system_lock_reason
+      // will contain the reason code (e.g. CRITICAL_PREGNANCY_CONTRAINDICATION).
+      const isSafe: boolean | undefined = data.is_safe_to_dispense;
+      const lockReason: string | undefined = data.system_lock_reason;
+
+      // Step 3: Broadcast the safety verdict to the Zustand store.
+      // When is_safe_to_dispense is false, the global activeSafetyLock
+      // is set, which immediately disables all checkout buttons.
+      if (isSafe === false && lockReason) {
+        setSafetyLock(lockReason);
+      }
+
+      // Step 4: Store the message in chat history, carrying the
+      // safety fields so the rendering layer can style them.
       addChatMessage({ 
         id: (Date.now() + 1).toString(), 
         role: 'ai', 
         content: data.answer,
-        sources: data.context_used 
+        sources: data.context_used,
+        is_safe_to_dispense: isSafe,
+        system_lock_reason: lockReason,
       });
     } catch (error: any) {
       addChatMessage({ 
@@ -159,12 +181,26 @@ export default function CopilotPanel() {
                     >
                       {msg.role === 'user' ? <BiometricNode className="w-8 h-8 shrink-0" /> : <SentinelCore className="w-8 h-8 shrink-0" />}
                       
+                      {/* Phase 6: Polymorphic message bubble.
+                          If the backend Judge blocked this transaction, the bubble
+                          turns red and shows the lock reason prominently. */}
                       <div className={cn(
                         "p-4 text-[15px] leading-relaxed shadow-sm",
                         msg.role === 'user' 
-                          ? "bg-white border border-slate-100 text-slate-800 rounded-2xl rounded-tr-sm" 
-                          : "bg-gradient-to-br from-slate-50 to-blue-50/30 border border-blue-100/50 text-slate-800 rounded-2xl rounded-tl-sm"
+                          ? "bg-white border border-slate-100 text-slate-800 rounded-2xl rounded-tr-sm"
+                          : msg.is_safe_to_dispense === false
+                            ? "bg-red-50 border border-red-500 text-red-900 rounded-2xl rounded-tl-sm"
+                            : "bg-gradient-to-br from-slate-50 to-blue-50/30 border border-blue-100/50 text-slate-800 rounded-2xl rounded-tl-sm"
                       )}>
+                        {/* Phase 6: If the Judge blocked, show the lock reason
+                            as a bold red badge above the narrative text. */}
+                        {msg.is_safe_to_dispense === false && msg.system_lock_reason && (
+                          <div className="mb-3">
+                            <span className="inline-block px-3 py-1 bg-red-600 text-white text-[11px] font-bold rounded-lg uppercase tracking-wider">
+                              {msg.system_lock_reason}
+                            </span>
+                          </div>
+                        )}
                         <p>{msg.content}</p>
                         
                         {msg.sources && msg.sources.length > 0 && (
