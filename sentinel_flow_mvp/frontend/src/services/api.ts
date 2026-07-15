@@ -37,7 +37,10 @@ export interface AutoPOResponse {
 }
 
 let _apiKey: string = '';
-const DEFAULT_TENANT = "system_admin";
+// IMPORTANT: This must exactly match the tenant_id seeded in the database.
+// All medication_batches, notifications, procurement alerts, etc. are scoped to this tenant.
+// Run `SELECT DISTINCT tenant_id FROM medication_batches;` to verify the correct value.
+const DEFAULT_TENANT = "PHARM-001";
 
 export function setApiKey(key: string) {
   _apiKey = key;

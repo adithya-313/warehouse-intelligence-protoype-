@@ -399,7 +399,26 @@ class QuerySanitizer:
             )
             return sku_id
 
-        # Step 3: No SKU pattern found anywhere in the query.
+        # Step 3: Try the space-separated brand/strength pattern.
+        # This matches queries like "calpol 650", "pan 40", "augmentin 625"
+        # where the brand name is separated from the strength by a space.
+        # We strip the space and produce a bare code (no hyphen) matching
+        # the DB storage format.
+        sku_match = re.search(
+            r"([A-Z]+)\s+(\d+)",
+            query,
+            re.IGNORECASE,
+        )
+
+        if sku_match:
+            sku_id = f"{sku_match.group(1).upper()}{sku_match.group(2)}"
+            logger.info(
+                f"QuerySanitizer: Extracted SKU '{sku_id}' from query "
+                f"(space-separated pattern — bare code)."
+            )
+            return sku_id
+
+        # Step 4: No SKU pattern found anywhere in the query.
         logger.info(
             "QuerySanitizer: No SKU pattern found in query."
         )

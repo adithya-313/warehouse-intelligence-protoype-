@@ -425,6 +425,7 @@ async def process_checkout(
         # 3. Create the empty receipt header FIRST so it has a row in the DB.
         newReceiptRecord = SaleReceiptModel(
             id=generatedReceiptId,
+            tenant_id=tenant_id,
             total_amount_inr=0,
             payment_method=payload.payment_method.value,
             patient_id=resolvedPatientId
@@ -465,6 +466,7 @@ async def process_checkout(
             # Record the specific line item sold — receipt_id is safe now because we flushed
             newLineItemRecord = SaleLineItemModel(
                 receipt_id=generatedReceiptId,
+                tenant_id=tenant_id,
                 batch_id=cartItem.batch_id,
                 name=cartItem.name,
                 quantity_sold=cartItem.quantity,

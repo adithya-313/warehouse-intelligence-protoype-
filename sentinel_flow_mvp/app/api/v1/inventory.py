@@ -8,6 +8,7 @@ from app.infrastructure.models import MedicationModel, MedicationBatchModel
 # Import the Redis inventory lock so that when a pharmacist selects a batch
 # via search, we reserve it for 60 seconds (preventing double-sales).
 from app.core.redis_client import try_acquire_inventory_lock
+from app.api.dependencies import get_current_tenant
 
 import logging
 
@@ -25,7 +26,8 @@ class InventorySearchResponse(BaseModel):
 @router.get("/search", response_model=List[InventorySearchResponse])
 async def search_inventory(
     q: str = Query(..., min_length=2),
-    db: Session = Depends(get_database_session)
+    db: Session = Depends(get_database_session),
+    tenant_id: str = Depends(get_current_tenant)
 ):
     """
     Search medication batches where the medication's sku_id matches the query.
@@ -48,6 +50,7 @@ async def search_inventory(
         )
         .join(MedicationModel, MedicationBatchModel.sku_id == MedicationModel.sku_id)
         .filter(MedicationModel.sku_id.ilike(f"%{q}%"))
+        .filter(MedicationBatchModel.tenant_id == tenant_id)
         .limit(10)
         .all()
     )

@@ -23,7 +23,11 @@ from app.core.config import get_application_settings
 # dependencies) at module level. This keeps the module importable even
 # when the full ML stack is not available.
 # from app.services.semantic_search import execute_clinical_search
-from app.infrastructure.models import MedicationBatchModel, MedicationModel
+from app.infrastructure.models import (
+    MedicationBatchModel,
+    MedicationModel,
+    ClinicalKnowledgeBase,
+)
 from app.services.rule_engine import ClinicalSafetyJudge
 from app.domain.schemas import ClinicalNarrativeSchema
 from app.core.circuit_breaker import AegisLiteCircuitBreaker, CircuitStateEnum
@@ -92,6 +96,7 @@ OBJECTIVE_KEYWORDS_LIST = [
     "mrp",
     "price",
     "stock",
+    "left",
     "quantity",
     "available",
     "cost",
@@ -140,10 +145,11 @@ async def route_and_process_query(
     # of DOLO-650?" directly in a chat box, the frontend sends sku_id=None.
     # We use a regex to extract the SKU directly from the query text.
     #
-    # We try two patterns:
+    # We try three patterns:
     #   1. Standard format with hyphen (e.g., "AMOXI-500", "PAN-40").
-    #   2. No hyphen format (e.g., "PAN40", "DOLO650") — we insert the
-    #      hyphen before the trailing digits so it matches the database.
+    #   2. No separator (e.g., "PAN40", "DOLO650").
+    #   3. Space between brand name and strength (e.g., "calpol 650",
+    #      "pan 40", "augmentin 625") — common in conversational queries.
     # =====================================================================
     if sku_id is None:
         # Pattern 1: "AMOXI-500", "PAN-40", "dolo-650" (case-insensitive)
@@ -155,13 +161,24 @@ async def route_and_process_query(
                 f"(hyphenated pattern)."
             )
         else:
-            # Pattern 2: "PAN40", "AMOXI500", "dolo650" (no hyphen)
+            # Pattern 2: "PAN40", "AMOXI500", "dolo650" (no separator)
             sku_match = re.search(r"([A-Z]+)(\d+)", query, re.IGNORECASE)
             if sku_match:
                 sku_id = f"{sku_match.group(1).upper()}-{sku_match.group(2)}"
                 logger.info(
                     f"Adaptive Router: Extracted SKU '{sku_id}' from query "
                     f"(no-hyphen pattern — hyphen inserted)."
+                )
+        # Pattern 3: "calpol 650", "augmentin 625", "pan 40" (space between
+        # brand letters and strength digits). We strip the space and keep
+        # the bare code (no hyphen) since the DB stores bare codes.
+        if sku_id is None:
+            sku_match = re.search(r"([A-Z]+)\s+(\d+)", query, re.IGNORECASE)
+            if sku_match:
+                sku_id = f"{sku_match.group(1).upper()}{sku_match.group(2)}"
+                logger.info(
+                    f"Adaptive Router: Extracted SKU '{sku_id}' from query "
+                    f"(space-separated pattern — bare code)."
                 )
 
     # =====================================================================
@@ -196,8 +213,14 @@ async def route_and_process_query(
         # Query all batches of this medication from the database.
         # We fetch all batches because the user might want aggregate info
         # like total stock (sum of all batches) or earliest expiry.
+        #
+        # Normalize: Try both hyphenated and bare-code formats since the
+        # DB stores bare codes (e.g., "CALPOL650") but Patterns 1 and 2
+        # produce hyphenated codes (e.g., "CALPOL-650"). Pattern 3
+        # produces bare codes. We try both to ensure a match.
+        sku_variants = {sku_id, sku_id.replace("-", "")}
         medication_batches = db.query(MedicationBatchModel).filter(
-            MedicationBatchModel.sku_id == sku_id
+            MedicationBatchModel.sku_id.in_(sku_variants)
         ).order_by(
             MedicationBatchModel.expiry_date.asc()
         ).all()
@@ -274,6 +297,159 @@ async def route_and_process_query(
     )
 
 
+# =====================================================================
+# LEXICAL ENTITY EXTRACTION — DIRECT DRUG LOOKUP BYPASS (Phase 10)
+# =====================================================================
+# Beginner Note: Long conversational queries like "Can I give half a
+# PAN40 to a 3-year-old?" dilute the vector embedding (the sentence
+# is mostly filler words like "can", "I", "give", "half", "to", "a").
+# The vector score drops below 0.60, and the FTS (plainto_tsquery)
+# strips stop words so aggressively that the drug name is the only
+# meaningful token left — which still may not match because FTS
+# tokenizes "PAN40" as an unknown word and discards it.
+#
+# This function is a pre-retrieval safety net:
+#   1. Query the database for ALL known drug identifiers (SKU codes,
+#      brand names, generic names).
+#   2. Scan the user's raw query string (case-insensitive) for any of
+#      these identifiers as substrings.
+#   3. If a match is found, perform a DIRECT hard SQL lookup on
+#      clinical_knowledge_base for that drug's full clinical record.
+#   4. Return the matched record(s) so the caller can inject them into
+#      the Judge's enriched_records BEFORE the vector search results.
+#
+# This guarantees that even when vector similarity fails due to query
+# dilution, the ClinicalSafetyJudge still evaluates the CORRECT drug's
+# safety data.
+
+
+def extract_known_entities(
+    db: Session,
+    query: str,
+) -> list[dict]:
+    """
+    Scan the query for known drug identifiers and return matching
+    clinical knowledge records via direct SQL lookup.
+
+    Parameters:
+        db: Active database session.
+        query: The user's raw query string.
+
+    Returns:
+        A list of dicts, each with keys 'sku_id' and 'content'
+        (matching the format of vector search results so they can be
+        merged seamlessly). Returns an empty list if no entities found.
+    """
+    # Step 1: Fetch all known identifiers from the database.
+    # We collect SKU IDs (e.g., "PAN40", "TELMA40") from the medications
+    # table AND brand names + generic names from the clinical knowledge
+    # metadata payload. These are our "catalog" of known entities.
+    try:
+        # Fetch all SKU IDs from the medications table
+        sku_rows = (
+            db.query(MedicationModel.sku_id)
+            .all()
+        )
+        known_skus: set[str] = {row.sku_id for row in sku_rows}
+
+        # Fetch brand names and generic names from clinical knowledge
+        # metadata. The metadata_payload column is a JSONB dict that
+        # typically contains keys like 'brand_name', 'generic_name',
+        # 'therapeutic_class', etc.
+        brand_rows = (
+            db.query(
+                ClinicalKnowledgeBase.metadata_payload
+            )
+            .all()
+        )
+        known_brands: set[str] = set()
+        for row in brand_rows:
+            payload = row.metadata_payload or {}
+            if isinstance(payload, dict):
+                brand = payload.get("brand_name", "")
+                generic = payload.get("generic_name", "")
+                if brand:
+                    known_brands.add(brand.upper())
+                if generic:
+                    known_brands.add(generic.upper())
+    except Exception as e:
+        logger.warning(
+            f"Entity Extraction: Could not load known identifiers: {e}"
+        )
+        return []
+
+    # Step 2: Scan the query for each known identifier.
+    # We check every identifier as a case-insensitive substring of
+    # the query. We prefer LONGER matches over shorter ones to avoid
+    # false positives (e.g., "PAN" matching inside "PANTROPRAZOLE").
+    query_upper = query.upper()
+    matched_entities: list[str] = []
+
+    for sku in known_skus:
+        if sku.upper() in query_upper:
+            matched_entities.append(sku)
+
+    for brand in known_brands:
+        if brand in query_upper:
+            matched_entities.append(brand)
+
+    # Remove duplicates and sort by length descending (longest match
+    # first — the most specific identifier wins).
+    matched_entities = sorted(
+        set(matched_entities),
+        key=len,
+        reverse=True,
+    )
+
+    if not matched_entities:
+        logger.info(
+            "Entity Extraction: No known drug identifiers found in query."
+        )
+        return []
+
+    logger.info(
+        f"Entity Extraction: Found {len(matched_entities)} identifiers "
+        f"in query: {matched_entities}"
+    )
+
+    # Step 3: Do a direct SQL lookup on clinical_knowledge_base for
+    # each matched entity. We query by sku_id (the primary identifier),
+    # but we also check the metadata_payload for brand_name/generic_name
+    # matches.
+    results: list[dict] = []
+    seen_sku_ids: set[str] = set()
+
+    for entity in matched_entities:
+        try:
+            # First try matching as an SKU ID
+            kb_record = (
+                db.query(ClinicalKnowledgeBase)
+                .filter(
+                    ClinicalKnowledgeBase.sku_id == entity.replace("-", "")
+                )
+                .first()
+            )
+
+            if kb_record and kb_record.sku_id not in seen_sku_ids:
+                seen_sku_ids.add(kb_record.sku_id)
+                results.append({
+                    "sku_id": kb_record.sku_id,
+                    "content": kb_record.content,
+                    "confidence_score": 1.0,
+                    "metadata_payload": kb_record.metadata_payload,
+                })
+                logger.info(
+                    f"Entity Extraction: Direct lookup found clinical "
+                    f"record for SKU '{kb_record.sku_id}'."
+                )
+        except Exception as e:
+            logger.warning(
+                f"Entity Extraction: Lookup failed for '{entity}': {e}"
+            )
+
+    return results
+
+
 async def generate_clinical_response(
     db: Session,
     query: str,
@@ -317,12 +493,12 @@ async def generate_clinical_response(
     # the error and return a clean message telling the user to check their
     # API configuration.
     try:
-        import google.generativeai as genai
+        from google import genai as _genai
+        from google.genai import types as _genai_types
         settings = get_application_settings()
-        if settings.GEMINI_API_KEY:
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-        else:
+        if not settings.GEMINI_API_KEY:
             logger.warning("GEMINI_API_KEY is missing. RAG pipeline will fail if called.")
+        gemini_client = _genai.Client(api_key=settings.GEMINI_API_KEY)
     except (ImportError, Exception) as e:
         logger.error(f"Gemini module or configuration error: {str(e)}")
         return {
@@ -334,16 +510,60 @@ async def generate_clinical_response(
         }
 
     # =====================================================================
-    # STEP 1: RETRIEVAL (Get the facts from our database)
+    # STEP 1: PRE-RETRIEVAL ENTITY EXTRACTION (Phase 10)
     # =====================================================================
-    # We query the vector database for the top 3 most relevant clinical guidelines.
-    # Lazy import: Only load sentence_transformers when clinical RAG is actually needed.
+    # Beginner Note: Before we run the vector search (which can fail on
+    # long conversational queries due to vector dilution), we do a
+    # direct LEXICAL scan of the query against all known drug identifiers
+    # in the database. If we find a match, we pre-load the clinical
+    # knowledge record so the Judge will definitely see it.
+    #
+    # This runs BEFORE the vector search so that even if the vector
+    # search returns empty or low-confidence results, the direct
+    # lookup records are already captured and injected into
+    # enriched_records for the Judge to evaluate.
+    direct_lookup_records: list[dict] = extract_known_entities(
+        db=db,
+        query=query,
+    )
+
+    # If we found a direct match, also update the sku_id for better
+    # vector search filtering (this helps the vector search narrow down
+    # to the right drug even with a diluted query).
+    if direct_lookup_records and sku_id is None:
+        sku_id = direct_lookup_records[0]["sku_id"]
+        logger.info(
+            f"Entity Extraction: Updated sku_id to '{sku_id}' "
+            f"from direct lookup."
+        )
+
+    # =====================================================================
+    # STEP 2: VECTOR + KEYWORD HYBRID SEARCH
+    # =====================================================================
+    # We query the vector database for the top 3 most relevant clinical
+    # guidelines. Lazy import: Only load sentence_transformers when
+    # clinical RAG is actually needed.
     from app.services.semantic_search import execute_clinical_search
     search_results = execute_clinical_search(db=db, query=query, sku_id=sku_id, top_k=3)
     context_items = search_results["results"]
 
+    # Merge direct lookup records with vector search results.
+    # Direct lookup records have confidence_score=1.0, so they always
+    # pass the threshold gate. We deduplicate by sku_id to avoid
+    # showing the same drug twice.
+    seen_skus: set[str] = {item["sku_id"] for item in context_items if item.get("sku_id")}
+    for record in direct_lookup_records:
+        sku = record.get("sku_id")
+        if sku and sku not in seen_skus:
+            context_items.append(record)
+            seen_skus.add(sku)
+            logger.info(
+                f"Entity Extraction: Injected direct lookup record "
+                f"for SKU '{sku}' into search results."
+            )
+
     # =====================================================================
-    # STEP 1.5: ENRICH RETRIEVED RECORDS WITH MEDICATION SAFETY DATA
+    # STEP 3: ENRICH RETRIEVED RECORDS WITH MEDICATION SAFETY DATA
     # =====================================================================
     # Beginner Note: The clinical_search returns records from the
     # clinical_knowledge_base table, which does NOT contain pregnancy
@@ -413,7 +633,7 @@ async def generate_clinical_response(
             logger.warning(f"SKU Fallback: Could not look up SKU '{sku_id}': {e}")
 
     # =====================================================================
-    # STEP 2: DETERMINISTIC SAFETY CHECK (THE JUDGE) — BEFORE THRESHOLD GATE
+    # STEP 4: DETERMINISTIC SAFETY CHECK (THE JUDGE) — BEFORE THRESHOLD GATE
     # =====================================================================
     # Beginner Note: The Judge MUST run BEFORE the confidence-threshold
     # early exit. Even if the vector search returned low-confidence
@@ -455,15 +675,16 @@ async def generate_clinical_response(
         }
 
     # =====================================================================
-    # STEP 2.5: EARLY EXIT IF SEARCH FOUND NO HIGH-CONFIDENCE MATCHES
+    # STEP 4.5: EARLY EXIT IF BOTH VECTOR SEARCH AND ENTITY EXTRACTION
+    #           FOUND NOTHING
     # =====================================================================
-    # Beginner Note: If the search returned zero results (even after the
-    # threshold reduction), AND the Judge did not block the transaction,
-    # we return a graceful safety-warning message. This prevents the LLM
-    # from hallucinating when there is no clinical data to ground its
-    # response. The Judge has already been evaluated at this point,
-    # ensuring safety rules are NEVER bypassed by an empty search.
-    if search_results.get("safety_warning"):
+    # Beginner Note: If BOTH the vector search AND the entity extraction
+    # returned zero results, AND the Judge did not block the transaction,
+    # we return a graceful safety-warning message. The entity extraction
+    # bypass injects records with confidence_score=1.0, so if it found
+    # anything, context_items will be non-empty even when the vector
+    # search failed. We only exit early when NEITHER method found data.
+    if search_results.get("safety_warning") and not direct_lookup_records:
         return {
             "answer": search_results["safety_warning"],
             "context_used": [],
@@ -473,7 +694,7 @@ async def generate_clinical_response(
         }
 
     # =====================================================================
-    # STEP 3: HASH-BASED RESULT CACHE CHECK (Phase 4)
+    # STEP 5: HASH-BASED RESULT CACHE CHECK (Phase 4)
     # =====================================================================
     # Beginner Note: Before we do ANY database lookups or AI calls, we
     # check if the EXACT same query has been answered before. We use a
@@ -521,7 +742,7 @@ async def generate_clinical_response(
         cache_key = None
 
     # =====================================================================
-    # STEP 4: PROMPT ENGINEERING (WITH JUDGE'S VERDICT INJECTED)
+    # STEP 6: PROMPT ENGINEERING (WITH JUDGE'S VERDICT INJECTED)
     # =====================================================================
     # Beginner Note: We tell Gemini that the system has already determined
     # the safety status. The AI's job is NOT to decide safety — it's to
@@ -560,7 +781,7 @@ USER QUERY:
 """
 
     # =====================================================================
-    # STEP 5: CIRCUIT BREAKER + ASYNC GEMINI GENERATION (Phase 4)
+    # STEP 7: CIRCUIT BREAKER + ASYNC GEMINI GENERATION (Phase 4)
     # =====================================================================
     # Beginner Note: This step is the heart of Phase 4's resilience upgrade.
     #
@@ -600,9 +821,13 @@ USER QUERY:
         # ------------------------------------------------------------------
         # Step 5b: Async Gemini Call with 5-Second Timeout
         # ------------------------------------------------------------------
-        model = genai.GenerativeModel('gemini-3.5-flash')
-
-        generation_config = genai.types.GenerationConfig(
+        # ---------------------------------------------------------------
+        # Modern google-genai SDK: synchronous Client.models.generate_content
+        # run in a thread pool so we don't block the event loop.
+        # Timeout raised to 30s — the new SDK connects faster (HTTP/2)
+        # but Gemini 2.5-flash may take a few seconds to warm up.
+        # ---------------------------------------------------------------
+        generation_config = _genai_types.GenerateContentConfig(
             temperature=0.0,
             response_mime_type="application/json",
             response_schema={
@@ -625,12 +850,16 @@ USER QUERY:
             },
         )
 
-        # Await the async Gemini call with a strict 5-second timeout.
-        # If Gemini does not respond within 5 seconds, asyncio.TimeoutError
-        # is raised and caught by the except block below.
+        # Run the synchronous SDK call in a thread pool so it doesn't
+        # block the FastAPI async event loop. Timeout is 30 seconds.
         response = await asyncio.wait_for(
-            model.generate_content_async(prompt, generation_config=generation_config),
-            timeout=5.0,
+            asyncio.to_thread(
+                gemini_client.models.generate_content,
+                model="gemini-flash-lite-latest",
+                contents=prompt,
+                config=generation_config,
+            ),
+            timeout=30.0,
         )
 
         # Record success in the circuit breaker.
@@ -695,7 +924,7 @@ USER QUERY:
         # In Phase 4, we do something much smarter:
         #
         #   We retrieve the Judge's deterministic verdict (computed in
-        #   STEP 2 above) and construct a ClinicalNarrativeSchema from it.
+        #   STEP 4 above) and construct a ClinicalNarrativeSchema from it.
         #
         # This means:
         #   - If the Judge said UNSAFE → fallback says UNSAFE with the
@@ -744,3 +973,4 @@ USER QUERY:
             "system_lock_reason": fallback_narrative.system_lock_reason,
             "citations": fallback_narrative.citations,
         }
+
