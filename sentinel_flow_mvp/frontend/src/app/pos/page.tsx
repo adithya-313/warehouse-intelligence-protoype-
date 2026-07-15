@@ -12,7 +12,6 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { DynamicCapsule } from "@/components/DynamicCapsule";
 import { api, PaymentMethod, fetchRecommendations, RecommendationResponse } from '@/services/api';
 import ClinicalCompanion from '@/components/pos/ClinicalCompanion';
-import { CriticalStockOverlay } from '@/components/CriticalStockOverlay';
 
 // Beginner Note: A single-click search result row. Clicking adds 1 unit to the cart.
 // Quantity adjustments happen inside the "Current Order" cart sidebar.
@@ -50,8 +49,6 @@ export default function POSDashboard() {
   const [isSearching, setIsSearching] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [lowestSearchStock, setLowestSearchStock] = useState<number | null>(null);
-  const [isAlertVisible, setIsAlertVisible] = useState<boolean>(false);
   // Dynamic Capsule success state
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
   const [receiptId, setReceiptId] = useState('');
@@ -117,29 +114,6 @@ export default function POSDashboard() {
     setSearchQuery('');
     setSearchResults([]);
     setHighlightedIndex(-1);
-    setIsAlertVisible(false);
-  };
-  
-  const handleSearchChange = (query: string) => {
-    setSearchQuery(query);
-    if (query.trim() === "") {
-      setIsAlertVisible(false);
-      setLowestSearchStock(null);
-    }
-  };
-  
-  const handleSearchResults = (results: any[]) => {
-    if (results.length > 0) {
-      const minStock = Math.min(...results.map(r => r.available_quantity));
-      setLowestSearchStock(minStock);
-      if (minStock < 50) {
-        setIsAlertVisible(true);
-      } else {
-        setIsAlertVisible(false);
-      }
-    } else {
-      setIsAlertVisible(false);
-    }
   };
 
   useEffect(() => {
@@ -154,7 +128,6 @@ export default function POSDashboard() {
       api.searchInventory(searchQuery)
         .then((data) => {
           setSearchResults(data);
-          handleSearchResults(data);
         })
         .catch((err) => {
           console.error("Search failed:", err);
@@ -222,10 +195,6 @@ export default function POSDashboard() {
       className="relative min-h-screen bg-[#fdfbfb] text-slate-800 selection:bg-blue-100"
     >
       <DynamicCapsule isOpen={checkoutSuccess} receiptId={receiptId} />
-      <CriticalStockOverlay 
-        stockCount={lowestSearchStock || 0} 
-        isVisible={isAlertVisible} 
-      />
       {/* Sonner Toast Renderer — renders above everything else */}
       <Toaster position="top-right" richColors closeButton />
 
@@ -338,7 +307,7 @@ export default function POSDashboard() {
                 <input 
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => handleSearchChange(e.target.value)}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   onBlur={() => {
                     // Delayed dismiss so onMouseDown on a result fires first
                     setTimeout(() => {
