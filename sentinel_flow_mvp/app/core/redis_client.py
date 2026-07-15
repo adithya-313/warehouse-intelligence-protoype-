@@ -193,3 +193,27 @@ async def release_inventory_lock(batch_id: str) -> None:
     """
     redis_client = await get_redis_client()
     await redis_client.delete(f"inventory_lock:{batch_id}")
+
+
+async def get_active_lock_count_for_sku(sku_id: str) -> int:
+    """
+    Calculates how many items of a given SKU are currently locked in active checkouts.
+    We find all keys matching 'inventory_lock:{sku_id}*' and sum their quantities.
+    """
+    redis_client = await get_redis_client()
+    # Batch IDs start with SKU ID (e.g., PAN40-BATCH-1)
+    pattern = f"inventory_lock:{sku_id}*"
+    keys = await redis_client.keys(pattern)
+    
+    if not keys:
+        return 0
+        
+    # Get values for all matching keys
+    values = await redis_client.mget(keys)
+    
+    total_locked = 0
+    for val in values:
+        if val:
+            total_locked += int(val)
+            
+    return total_locked

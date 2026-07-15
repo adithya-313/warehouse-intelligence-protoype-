@@ -144,7 +144,9 @@ test.describe('POS Clinical Companion Edge Cases', () => {
     await expect(page.locator('text=Ready for next patient')).toBeVisible({ timeout: 3000 });
 
     // Now resolve the stale delayed request
-    if (resolveRecRoute) resolveRecRoute();
+    if (resolveRecRoute) {
+      (resolveRecRoute as () => void)();
+    }
     await page.waitForTimeout(1500);
 
     // Assert: no crash, still in ready state

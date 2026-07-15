@@ -76,3 +76,45 @@ async def search_inventory(
         )
         for row in results
     ]
+
+# [STORY: THE REAL-TIME INVENTORY PROJECTION]
+# Chapter 1: The Illusion of Stock
+# In a busy pharmacy, what is on the shelf (Database) isn't always what is available to sell.
+# If another pharmacist has an item in their checkout cart, that item is "locked" in Redis.
+# To show the TRUE available stock, we must calculate: Database Quantity - Redis Locked Quantity.
+
+from sqlalchemy import func
+from app.core.redis_client import get_active_lock_count_for_sku
+
+@router.get("/projection/{sku_id}")
+async def get_real_time_stock_projection(sku_id: str, db: Session = Depends(get_database_session)):
+    """
+    Returns the true available stock by combining Database records and Redis locks.
+    """
+    logger.info(f"Checking stock projection for SKU: {sku_id}")
+    
+    # Scene 1: Look at the physical shelves (PostgreSQL)
+    # We sum up all the available quantity across all non-expired batches for this SKU.
+    db_stock = db.query(MedicationBatchModel)\
+                 .filter(MedicationBatchModel.sku_id == sku_id)\
+                 .with_entities(func.sum(MedicationBatchModel.available_quantity))\
+                 .scalar() or 0
+                 
+    # Scene 2: Check the active shopping carts (Redis)
+    # How many of these items are currently locked in other transactions?
+    locked_stock = await get_active_lock_count_for_sku(sku_id)
+    
+    # Scene 3: The Truth
+    # The actual stock we can safely show to the user.
+    true_available_stock = db_stock - locked_stock
+    
+    # We return a psychological health indicator along with the data.
+    health_status = "CRITICAL" if true_available_stock <= 5 else "HEALTHY"
+    
+    return {
+        "sku_id": sku_id,
+        "database_stock": int(db_stock),
+        "locked_in_carts": locked_stock,
+        "true_available_stock": int(true_available_stock),
+        "health_status": health_status
+    }

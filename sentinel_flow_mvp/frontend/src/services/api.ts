@@ -143,6 +143,12 @@ async function request<T extends z.ZodTypeAny>(
 }
 
 export const api = {
+  get: async (url: string) => {
+    const res = await fetch(url, { headers: { 'X-Tenant-ID': DEFAULT_TENANT } });
+    if (!res.ok) throw new Error(`API Error: ${res.status}`);
+    return res.json();
+  },
+
   health: () =>
     request('GET', '/api/v1/ingestion/health', HealthResponse),
 

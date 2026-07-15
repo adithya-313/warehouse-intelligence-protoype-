@@ -12,6 +12,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { DynamicCapsule } from "@/components/DynamicCapsule";
 import { api, PaymentMethod, fetchRecommendations, RecommendationResponse } from '@/services/api';
 import ClinicalCompanion from '@/components/pos/ClinicalCompanion';
+import { StockPulse } from '@/components/StockPulse';
 
 // Beginner Note: A single-click search result row. Clicking adds 1 unit to the cart.
 // Quantity adjustments happen inside the "Current Order" cart sidebar.
@@ -393,6 +394,13 @@ export default function POSDashboard() {
                 )}
               </AnimatePresence>
             </div>
+
+            {/* REAL-TIME INVENTORY PULSE */}
+            {cart.length > 0 && (
+              <div className="mb-4">
+                <StockPulse skuId={cart[cart.length - 1].sku_id} />
+              </div>
+            )}
 
             {/* CLINICAL COMPANION CANVAS */}
               <ClinicalCompanion
