@@ -31,7 +31,7 @@ from chronos import ChronosPipeline
 
 from app.api.dependencies import verify_api_key
 
-from app.api.v1 import audit, federated, ingestion, patients, risk, stream_router, stats, knowledge_base, settings, inventory
+from app.api.v1 import audit, federated, ingestion, patients, risk, stream_router, stats, knowledge_base, settings, inventory, triage
 from app.services.kafka_producer import start_kafka_producer, stop_kafka_producer
 from app.core.redis_client import get_redis_client, close_redis_client
 from app.api.pos_router import router as pos_router
@@ -302,6 +302,7 @@ def create_application() -> FastAPI:
     application_instance.include_router(patients.router, prefix="/api/v1/patients", tags=["CRM & Adherence"])
     application_instance.include_router(settings.router, prefix="/api/v1/settings", tags=["Tenant Settings"])
     application_instance.include_router(inventory.router, prefix="/api/v1/inventory", tags=["Inventory"])
+    application_instance.include_router(triage.router, prefix="/api/v1/inventory", tags=["Inventory"])
 
     # Mount the Prometheus metrics endpoint at /metrics
     # This allows Prometheus to scrape metrics from the API

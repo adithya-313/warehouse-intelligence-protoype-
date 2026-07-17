@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bot, Settings, BarChart3, ShoppingBag, Barcode, History, Banknote, QrCode, CreditCard } from 'lucide-react';
+import { Search, Bot, Settings, BarChart3, ShoppingBag, Barcode, History, Banknote, QrCode, CreditCard, Package } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { usePOSStore } from '@/store/posStore';
 import CopilotPanel from '@/components/pos/CopilotPanel';
@@ -12,6 +12,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { DynamicCapsule } from "@/components/DynamicCapsule";
 import { api, PaymentMethod, fetchRecommendations, RecommendationResponse } from '@/services/api';
 import ClinicalCompanion from '@/components/pos/ClinicalCompanion';
+import { InventoryTriageModal } from '@/components/InventoryTriageModal';
 
 // Beginner Note: A single-click search result row. Clicking adds 1 unit to the cart.
 // Quantity adjustments happen inside the "Current Order" cart sidebar.
@@ -55,6 +56,8 @@ export default function POSDashboard() {
   // Progressive Disclosure: controls whether we show the "Customer Name" input
   // after a phone number was typed but no match was found.
   const [showNameInput, setShowNameInput] = useState(false);
+  // Triage Dashboard: blurred-glass modal showing inventory intelligence
+  const [isTriageOpen, setIsTriageOpen] = useState(false);
   // Debounce timer reference so we don't spam the backend on every keystroke
   const phoneLookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -195,6 +198,8 @@ export default function POSDashboard() {
       className="relative min-h-screen bg-[#fdfbfb] text-slate-800 selection:bg-blue-100"
     >
       <DynamicCapsule isOpen={checkoutSuccess} receiptId={receiptId} />
+      {/* Inventory Triage Modal */}
+      <InventoryTriageModal isOpen={isTriageOpen} onClose={() => setIsTriageOpen(false)} />
       {/* Sonner Toast Renderer — renders above everything else */}
       <Toaster position="top-right" richColors closeButton />
 
@@ -272,6 +277,12 @@ export default function POSDashboard() {
                 <BarChart3 size={18} /> Vendors
               </motion.button>
             </Link>
+            <button
+              onClick={() => setIsTriageOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-2xl transition-colors"
+            >
+              <Package size={18} /> Triage
+            </button>
             <Link href="/admin/settings">
               <motion.button 
                 suppressHydrationWarning={true}
