@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_database_session
-from app.infrastructure.models import PurchaseOrderModel, Tenant
+from app.infrastructure.models import MedicationModel, PurchaseOrderModel, Tenant
 from app.domain.schemas import PurchaseOrderBulkCreate, PurchaseOrderReceiveBulk
 import logging
 
@@ -31,26 +31,19 @@ def list_purchase_orders(db: Session = Depends(get_database_session)):
                 "total_value_rupees": 0.0,
             }
         ledger[po.po_id]["item_count"] += 1
-        ledger[po.po_id]["total_value_rupees"] += (po.ordered_qty * po.cost_price)
+        ledger[po.po_id]["total_value_rupees"] += float(po.ordered_qty * po.cost_price)
 
     return list(ledger.values())
 
-# Typeahead Catalog (mocked for MVP)
-MOCK_CATALOG = [
-    {"sku_id": "AMOX500", "name": "Amoxicillin 500mg"},
-    {"sku_id": "PAN40", "name": "Pantoprazole 40mg"},
-    {"sku_id": "PCM500", "name": "Paracetamol 500mg"},
-    {"sku_id": "AZI500", "name": "Azithromycin 500mg"},
-    {"sku_id": "LIP40", "name": "Lipitor 40mg"},
-]
-
-
 @router.get("/purchase-orders/catalog/search")
-def search_catalog(q: str = ""):
+def search_catalog(q: str = "", db: Session = Depends(get_database_session)):
     query = q.lower()
+    results = db.query(MedicationModel).filter(
+        MedicationModel.sku_id.ilike(f"%{query}%")
+    ).all()
     return [
-        item for item in MOCK_CATALOG
-        if query in item["sku_id"].lower() or query in item["name"].lower()
+        {"sku_id": row.sku_id, "name": row.sku_id}
+        for row in results
     ]
 
 
