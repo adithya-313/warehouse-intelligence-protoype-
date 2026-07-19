@@ -3,17 +3,23 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, Plus, Search } from 'lucide-react';
 import Scorecard from '@/components/suppliers/Scorecard';
 import { AddVendorModal } from '@/components/suppliers/AddVendorModal';
 
 export default function SuppliersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [vendors, setVendors] = useState([
     { supplierId: "SUPP-001", label: "Elite Performance" },
     { supplierId: "SUPP-002", label: "Average Performance (SLA Warning)" },
     { supplierId: "SUPP-003", label: "Critical Risk" },
   ]);
+
+  const filteredVendors = vendors.filter((v: any) =>
+    v.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    v.supplierId.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const handleVendorCreated = (newVendor: any) => {
     setVendors((prev) => [
@@ -59,21 +65,40 @@ export default function SuppliersPage() {
             </div>
           </div>
 
-          {/* ADD VENDOR BUTTON */}
-          <motion.button
-            onClick={() => setIsModalOpen(true)}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.95 }}
-            className="flex items-center gap-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-medium rounded-xl shadow-md transition-all"
-          >
-            <Plus size={18} />
-            Add Vendor
-          </motion.button>
+          <div className="flex items-center gap-3">
+            {/* ZERO-LATENCY SEARCH */}
+            <div className="relative group w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
+              <input
+                type="text"
+                placeholder="Search vendors..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-white/50 border border-white/60 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 shadow-sm backdrop-blur-md transition-all"
+              />
+            </div>
+
+            {/* ADD VENDOR BUTTON */}
+            <motion.button
+              onClick={() => setIsModalOpen(true)}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.95 }}
+              className="flex items-center gap-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-medium rounded-xl shadow-md transition-all"
+            >
+              <Plus size={18} />
+              Add Vendor
+            </motion.button>
+          </div>
         </header>
 
         {/* SPATIAL SCORECARD MATRIX */}
         <div className="flex-1 flex flex-col gap-12 items-center justify-start pb-24">
-          {vendors.map((v, idx) => (
+          {filteredVendors.length === 0 && (
+            <div className="w-full text-center mt-20">
+              <p className="text-slate-400 text-lg font-medium">No vendors match your search.</p>
+            </div>
+          )}
+          {filteredVendors.map((v, idx) => (
             <React.Fragment key={v.supplierId}>
               {idx > 0 && (
                 <div className="w-full text-center mt-8 mb-4">
