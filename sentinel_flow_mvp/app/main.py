@@ -37,6 +37,7 @@ from app.core.redis_client import get_redis_client, close_redis_client
 from app.api.pos_router import router as pos_router
 from app.api.erp_router import router as erp_router
 from app.api.supplier_router import router as supplier_router
+from app.api.purchase_order_router import router as purchase_order_router
 from app.api.v1.procurement_router import router as procurement_router
 from app.api.v1.notification_router import router as notif_router
 from app.core.config import get_application_settings
@@ -295,6 +296,7 @@ def create_application() -> FastAPI:
     application_instance.include_router(pos_router, prefix="/api/v1/pos", tags=["Point of Sale (Event Mesh)"])
     application_instance.include_router(erp_router, prefix="/api/v1/erp", tags=["Legacy ERP Bridge"])
     application_instance.include_router(supplier_router, prefix="/api/v1/suppliers", tags=["Distributor Management"])
+    application_instance.include_router(purchase_order_router, prefix="/api/v1", tags=["Purchase Orders"])
 
     application_instance.include_router(procurement_router, prefix="/api/v1")
     application_instance.include_router(notif_router, prefix="/api/v1")

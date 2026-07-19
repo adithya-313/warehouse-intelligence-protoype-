@@ -823,6 +823,15 @@ class DistributorScorecardResponse(BaseModel):
     risk_level: str
     recent_failures: int
 
+class PurchaseOrderCreate(BaseModel):
+    """Input contract for creating a purchase order."""
+    supplier_id: str
+    sku_id: str = Field(..., min_length=2)
+    ordered_qty: int = Field(..., gt=0)
+    cost_price: float = Field(..., gt=0)
+    expected_mrp: float = Field(..., gt=0)
+    expected_delivery_date: date
+
 class SupplierCreateRequest(BaseModel):
     """Input contract for onboarding a new vendor."""
     name: str

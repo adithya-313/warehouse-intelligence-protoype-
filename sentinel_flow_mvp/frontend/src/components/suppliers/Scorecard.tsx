@@ -4,10 +4,12 @@ import React, { useEffect, useState } from 'react';
 import { motion, useMotionValue, useTransform, useSpring } from 'framer-motion';
 import { TrendingDown, Truck, ShieldAlert, AlertOctagon, CheckCircle2, ShoppingCart } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { OrderStockPanel } from '@/components/suppliers/OrderStockPanel';
 
 export default function Scorecard({ supplierId = "SUPP-001" }: { supplierId?: string }) {
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
 
   // 3D Spatial Parallax Hooks
   const x = useMotionValue(0);
@@ -91,7 +93,7 @@ export default function Scorecard({ supplierId = "SUPP-001" }: { supplierId?: st
             </div>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => console.log(`INITIATE_PO: ${data.supplier_id}`)}
+                onClick={() => setIsPanelOpen(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl transition-all active:scale-95 text-sm font-medium shadow-sm"
               >
                 <ShoppingCart size={16} />
@@ -193,6 +195,13 @@ export default function Scorecard({ supplierId = "SUPP-001" }: { supplierId?: st
           </div>
         </div>
       </motion.div>
+
+      <OrderStockPanel
+        isOpen={isPanelOpen}
+        onClose={() => setIsPanelOpen(false)}
+        supplierId={data.supplier_id}
+        supplierName={data.name}
+      />
     </div>
   );
 }
