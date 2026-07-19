@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bot, Settings, BarChart3, ShoppingBag, Barcode, History, Banknote, QrCode, CreditCard, Boxes } from 'lucide-react';
-import { toast, Toaster } from 'sonner';
+import { Search, Bot, Settings, BarChart3, ShoppingBag, Barcode, History, Banknote, QrCode, CreditCard, Boxes, ClipboardList } from 'lucide-react';
+import { toast } from 'sonner';
 import { usePOSStore } from '@/store/posStore';
 import CopilotPanel from '@/components/pos/CopilotPanel';
 import { PreemptiveWarningBanner } from "@/components/PreemptiveWarningBanner";
@@ -200,9 +200,6 @@ export default function POSDashboard() {
       <DynamicCapsule isOpen={checkoutSuccess} receiptId={receiptId} />
       {/* Inventory Triage Modal */}
       <InventoryTriageModal isOpen={isTriageOpen} onClose={() => setIsTriageOpen(false)} />
-      {/* Sonner Toast Renderer — renders above everything else */}
-      <Toaster position="top-right" richColors closeButton />
-
       {/* ETHEREAL BIOLOGICAL ORBS */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none flex items-center justify-center z-0">
         <motion.div 
@@ -275,6 +272,16 @@ export default function POSDashboard() {
                 className="px-5 py-2.5 bg-white/60 hover:bg-white border border-gray-200/50 text-slate-600 rounded-2xl text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
               >
                 <BarChart3 size={18} /> Vendors
+              </motion.button>
+            </Link>
+            <Link href="/orders">
+              <motion.button
+                suppressHydrationWarning={true}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="px-5 py-2.5 bg-white/60 hover:bg-white border border-gray-200/50 text-slate-600 rounded-2xl text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
+              >
+                <ClipboardList size={18} /> Orders
               </motion.button>
             </Link>
             <button

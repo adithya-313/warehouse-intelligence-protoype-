@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingCart, Calendar, Search, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { X, ShoppingCart, Calendar, Search, Trash2, ClipboardList } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '@/services/api';
 
 interface LineItem {
@@ -52,10 +54,10 @@ export const OrderStockPanel: React.FC<any> = ({ isOpen, onClose, supplierId, su
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (items.length === 0) return alert("Add at least one item");
+    if (items.length === 0) return toast.error("Add at least one item");
 
     const hasInvalidFields = items.some(i => !i.qty || !i.cost || !i.mrp);
-    if (hasInvalidFields) return alert("Please fill out all Quantity, Cost, and MRP fields with positive values.");
+    if (hasInvalidFields) return toast.error("Please fill out all Quantity, Cost, and MRP fields with positive values.");
 
     setIsSubmitting(true);
     try {
@@ -72,10 +74,10 @@ export const OrderStockPanel: React.FC<any> = ({ isOpen, onClose, supplierId, su
       setItems([]);
       setDeliveryDate('');
       onClose();
-      alert("Purchase Order Successfully Transmitted!");
+      toast.success("Purchase Order Successfully Transmitted!");
     } catch (error: any) {
       console.error("Failed to submit Bulk PO", error);
-      alert("Failed to submit order. Check console for validation errors.");
+      toast.error("Failed to submit order. Check console for validation errors.");
     } finally {
       setIsSubmitting(false);
     }
@@ -156,10 +158,16 @@ export const OrderStockPanel: React.FC<any> = ({ isOpen, onClose, supplierId, su
               </div>
             </div>
 
-            <div className="p-6 border-t bg-slate-50">
+            <div className="p-6 border-t bg-slate-50 space-y-3">
               <button onClick={handleSubmit} disabled={isSubmitting || items.length === 0 || !deliveryDate} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl disabled:opacity-50 transition-all">
                 {isSubmitting ? "Generating Manifest..." : `Submit Order (${items.length} Items)`}
               </button>
+              <Link href="/orders">
+                <button className="w-full py-2.5 bg-white border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-100 font-medium rounded-xl transition-all text-sm flex items-center justify-center gap-2">
+                  <ClipboardList size={16} />
+                  View Orders in Ledger
+                </button>
+              </Link>
             </div>
           </motion.div>
         </>

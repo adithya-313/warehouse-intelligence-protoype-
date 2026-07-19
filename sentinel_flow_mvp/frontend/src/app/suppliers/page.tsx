@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, Search } from 'lucide-react';
+import { ArrowLeft, Plus, Search, ClipboardList } from 'lucide-react';
 import Scorecard from '@/components/suppliers/Scorecard';
 import { AddVendorModal } from '@/components/suppliers/AddVendorModal';
 
@@ -92,6 +92,16 @@ export default function SuppliersPage() {
               <Plus size={18} />
               Add Vendor
             </motion.button>
+            <Link href="/orders">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.95 }}
+                className="flex items-center gap-2 px-5 py-2.5 bg-white/60 hover:bg-white border border-gray-200/50 text-slate-600 rounded-2xl text-sm font-semibold transition-colors shadow-sm"
+              >
+                <ClipboardList size={18} />
+                Order Ledger
+              </motion.button>
+            </Link>
           </div>
         </header>
 
