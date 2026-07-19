@@ -823,6 +823,12 @@ class DistributorScorecardResponse(BaseModel):
     risk_level: str
     recent_failures: int
 
+class SupplierCreateRequest(BaseModel):
+    """Input contract for onboarding a new vendor."""
+    name: str
+    contact_email: str
+    industry_vertical: str = "PHARMACEUTICALS"
+
 class KnowledgeIngestionRequest(BaseModel):
     """Contract for ingesting new clinical guidelines."""
     sku_id: str = Field(..., description="The Medication SKU ID")

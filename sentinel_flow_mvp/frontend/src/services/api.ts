@@ -149,6 +149,16 @@ export const api = {
     return res.json();
   },
 
+  post: async (url: string, body: any) => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': DEFAULT_TENANT },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`API Error: ${res.status}`);
+    return res.json();
+  },
+
   health: () =>
     request('GET', '/api/v1/ingestion/health', HealthResponse),
 
