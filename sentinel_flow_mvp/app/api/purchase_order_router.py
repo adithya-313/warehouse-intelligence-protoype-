@@ -11,6 +11,30 @@ import logging
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
+@router.get("/purchase-orders")
+def list_purchase_orders(db: Session = Depends(get_database_session)):
+    pos = db.query(PurchaseOrderModel).order_by(
+        PurchaseOrderModel.order_date.desc()
+    ).all()
+
+    ledger = {}
+    for po in pos:
+        if po.po_id not in ledger:
+            ledger[po.po_id] = {
+                "po_id": po.po_id,
+                "supplier_id": po.supplier_id,
+                "order_date": po.order_date.isoformat() if po.order_date else None,
+                "expected_delivery_date": po.expected_delivery_date.isoformat() if po.expected_delivery_date else None,
+                "status": po.status,
+                "item_count": 0,
+                "total_value_rupees": 0.0,
+            }
+        ledger[po.po_id]["item_count"] += 1
+        ledger[po.po_id]["total_value_rupees"] += (po.ordered_qty * po.cost_price)
+
+    return list(ledger.values())
+
 # Typeahead Catalog (mocked for MVP)
 MOCK_CATALOG = [
     {"sku_id": "AMOX500", "name": "Amoxicillin 500mg"},
