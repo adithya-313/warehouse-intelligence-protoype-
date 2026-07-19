@@ -48,44 +48,57 @@ export const InventoryTriageModal: React.FC<InventoryTriageModalProps> = ({ isOp
     item.sku_id.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
 
-  // Scene 3: The Physics Engine Rules
-  // These dictate how the modal and its items spring into existence.
+  // Scene 3: The Optimized Physics Engine
+  // Tuned for zero-jerk, buttery smooth entry/exit.
+  // Lower stiffness + higher damping = Apple-grade spatial elasticity.
   const backdropVariants = {
     hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { duration: 0.3 } },
+    visible: { opacity: 1, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } },
+    exit: { opacity: 0, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } },
   };
 
   const modalVariants = {
-    hidden: { opacity: 0, scale: 0.95, y: 20 },
-    visible: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", damping: 25, stiffness: 300 } },
-    exit: { opacity: 0, scale: 0.95, y: 20, transition: { duration: 0.2 } },
+    hidden: { opacity: 0, scale: 0.96, y: 15 },
+    visible: {
+      opacity: 1,
+      scale: 1,
+      y: 0,
+      transition: { type: "spring", damping: 30, stiffness: 250, mass: 0.8 },
+    },
+    exit: {
+      opacity: 0,
+      scale: 0.96,
+      y: 10,
+      transition: { duration: 0.2, ease: "easeOut" },
+    },
   };
 
   const listVariants = {
     hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.05 } },
+    visible: { opacity: 1, transition: { staggerChildren: 0.04, delayChildren: 0.1 } },
   };
 
   const itemVariants = {
-    hidden: { opacity: 0, x: -10 },
-    visible: { opacity: 1, x: 0, transition: { type: "spring", damping: 20 } },
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0, transition: { type: "spring", damping: 25, stiffness: 300 } },
   };
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {isOpen && (
         <motion.div
+          key="triage-backdrop"
           variants={backdropVariants}
           initial="hidden"
           animate="visible"
-          exit="hidden"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4 sm:p-8"
+          exit="exit"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/10 backdrop-blur-md p-4 sm:p-8 transform-gpu will-change-transform"
         >
-          {/* The Glassmorphic Modal Body — Matching the Light Sentinel Palette */}
+          {/* The Glassmorphic Modal Body — Hardware Accelerated */}
           <motion.div
+            key="triage-modal"
             variants={modalVariants}
-            exit="exit"
-            className="w-full max-w-5xl h-[85vh] flex flex-col rounded-3xl shadow-2xl overflow-hidden bg-white/60 backdrop-blur-2xl border border-white/80"
+            className="w-full max-w-5xl h-[85vh] flex flex-col rounded-[2rem] shadow-2xl overflow-hidden bg-white/70 backdrop-blur-2xl border border-white/80 transform-gpu will-change-transform"
           >
 
             {/* Header & Search Section */}
@@ -121,37 +134,35 @@ export const InventoryTriageModal: React.FC<InventoryTriageModalProps> = ({ isOp
             </div>
 
             {/* Main Content Area */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar">
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar transform-gpu">
               {loading ? (
-                // Skeleton Loader with Liquid Mercury Gradient
                 <div className="space-y-4 animate-pulse">
                    <div className="h-24 bg-gradient-to-r from-gray-100 via-white/80 to-gray-100 rounded-2xl w-full border border-white/50"></div>
                    <div className="h-16 bg-gradient-to-r from-gray-100 via-white/80 to-gray-100 rounded-xl w-full border border-white/50 mt-8"></div>
-                   <div className="h-16 bg-gradient-to-r from-gray-100 via-white/80 to-gray-100 rounded-xl w-full border border-white/50"></div>
                    <div className="h-16 bg-gradient-to-r from-gray-100 via-white/80 to-gray-100 rounded-xl w-full border border-white/50"></div>
                 </div>
               ) : (
                 <>
                   {/* Financial Telemetry Banner */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-white/50 p-5 rounded-2xl border border-white shadow-sm flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
+                    <div className="bg-white/50 p-5 rounded-2xl border border-white shadow-sm flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 transform-gpu">
                       <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Total Asset Value</p>
                       <p className="text-3xl font-bold tracking-tight text-slate-800">₹{data?.metrics?.total_value_inr?.toLocaleString()}</p>
                     </div>
 
-                    <div className="relative bg-rose-50/80 p-5 rounded-2xl border border-rose-200/50 shadow-sm flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 overflow-hidden">
+                    <div className="relative bg-rose-50/80 p-5 rounded-2xl border border-rose-200/50 shadow-sm flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 overflow-hidden transform-gpu">
                       <div className="absolute -right-4 -top-4 opacity-10"><TrendingDown size={100} className="text-rose-500"/></div>
                       <p className="text-xs font-semibold uppercase tracking-wider text-rose-600 mb-2 flex items-center gap-1"><AlertTriangle size={14}/> Capital at Risk ({"<"} 30d)</p>
                       <p className="text-3xl font-bold tracking-tight text-rose-700">₹{data?.metrics?.capital_at_risk_inr?.toLocaleString()}</p>
                     </div>
 
-                    <div className="bg-white/50 p-5 rounded-2xl border border-white shadow-sm flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 transition-all duration-300">
+                    <div className="bg-white/50 p-5 rounded-2xl border border-white shadow-sm flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 transform-gpu">
                       <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Out of Stock SKUs</p>
                       <p className="text-3xl font-bold tracking-tight text-slate-800">{data?.metrics?.out_of_stock_skus}</p>
                     </div>
                   </div>
 
-                  {/* Action Swimlanes with Kinetic Staggering */}
+                  {/* Action Swimlanes */}
                   <motion.div variants={listVariants} initial="hidden" animate="visible" className="space-y-3">
                     {filteredItems.length === 0 ? (
                       <div className="text-center py-12 text-slate-400 font-medium">No medications found matching "{searchQuery}"</div>
@@ -174,10 +185,10 @@ export const InventoryTriageModal: React.FC<InventoryTriageModalProps> = ({ isOp
                           <motion.div
                             key={item.sku_id}
                             variants={itemVariants}
-                            className={`group flex items-center justify-between p-4 rounded-xl border ${border} ${bg} shadow-sm backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md cursor-default`}
+                            className={`group flex items-center justify-between p-4 rounded-xl border ${border} ${bg} shadow-sm backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md cursor-default transform-gpu will-change-transform`}
                           >
                             <div className="flex items-center gap-4">
-                              <div className={`p-2 rounded-lg ${badgeBg} shadow-sm group-hover:scale-110 transition-transform duration-300`}>
+                              <div className={`p-2 rounded-lg ${badgeBg} shadow-sm group-hover:scale-110 transition-transform duration-300 transform-gpu`}>
                                 <Icon size={20} />
                               </div>
                               <div>
