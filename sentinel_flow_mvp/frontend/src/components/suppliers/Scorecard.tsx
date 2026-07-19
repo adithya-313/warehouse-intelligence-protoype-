@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion, useMotionValue, useTransform, useSpring } from 'framer-motion';
-import { TrendingDown, Truck, ShieldAlert, AlertOctagon, CheckCircle2 } from 'lucide-react';
+import { TrendingDown, Truck, ShieldAlert, AlertOctagon, CheckCircle2, ShoppingCart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function Scorecard({ supplierId = "SUPP-001" }: { supplierId?: string }) {
@@ -89,11 +89,20 @@ export default function Scorecard({ supplierId = "SUPP-001" }: { supplierId?: st
               </h2>
               <p className="text-slate-500 text-sm mt-2 font-medium tracking-wide uppercase">ID: {data.supplier_id} • Real-time Vendor Telemetry</p>
             </div>
-            <div className={cn(
-              "px-5 py-2 rounded-2xl text-sm font-bold tracking-widest uppercase shadow-sm border",
-              isHighRisk ? "bg-rose-50 text-rose-600 border-rose-100" : "bg-emerald-50 text-emerald-600 border-emerald-100"
-            )}>
-              {data.risk_level || (isHighRisk ? "HIGH RISK" : "TRUSTED")}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => console.log(`INITIATE_PO: ${data.supplier_id}`)}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl transition-all active:scale-95 text-sm font-medium shadow-sm"
+              >
+                <ShoppingCart size={16} />
+                Order Stock
+              </button>
+              <div className={cn(
+                "px-5 py-2 rounded-2xl text-sm font-bold tracking-widest uppercase shadow-sm border",
+                isHighRisk ? "bg-rose-50 text-rose-600 border-rose-100" : "bg-emerald-50 text-emerald-600 border-emerald-100"
+              )}>
+                {data.risk_level || (isHighRisk ? "HIGH RISK" : "TRUSTED")}
+              </div>
             </div>
           </div>
 

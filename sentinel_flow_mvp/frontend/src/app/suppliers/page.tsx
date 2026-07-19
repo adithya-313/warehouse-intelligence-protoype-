@@ -11,9 +11,9 @@ export default function SuppliersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [vendors, setVendors] = useState([
-    { supplierId: "SUPP-001", label: "Elite Performance" },
-    { supplierId: "SUPP-002", label: "Average Performance (SLA Warning)" },
-    { supplierId: "SUPP-003", label: "Critical Risk" },
+    { supplierId: "SUPP-001", name: "MediCorp Global", label: "Elite Performance" },
+    { supplierId: "SUPP-002", name: "Relief Logistics", label: "Standard Vendor" },
+    { supplierId: "SUPP-003", name: "Apex Pharma", label: "High Risk" },
   ]);
 
   const filteredVendors = vendors.filter((v: any) => {
@@ -24,10 +24,12 @@ export default function SuppliersPage() {
   });
 
   const handleVendorCreated = (newVendor: any) => {
-    setVendors((prev) => [
-      ...prev,
-      { supplierId: newVendor.supplier_id, label: "Newly Onboarded" },
-    ]);
+    setVendors((prev) => [...prev, {
+      supplierId: newVendor.supplier_id,
+      name: newVendor.name,
+      label: "Newly Onboarded",
+    }]);
+    setSearchQuery("");
   };
 
   return (
