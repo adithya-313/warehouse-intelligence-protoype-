@@ -20,8 +20,7 @@ from app.core.redis_client import (
     mark_checkout_completed,
     is_above_checkout_rate_limit,
     try_acquire_inventory_lock,
-    verify_inventory_lock_exists,
-    release_inventory_lock,
+
 )
 
 from pydantic import BaseModel
@@ -359,37 +358,6 @@ async def process_checkout(
         )
 
     # =====================================================================
-    # GUARD 3: INVENTORY LOCK VERIFICATION (Redis — FEFO Saga pattern)
-    # =====================================================================
-    # Beginner Note: When the pharmacist searched for an item (via FEFO routing),
-    # a temporary 60-second lock was created in Redis for the selected batch.
-    # We verify that lock still exists and has enough quantity reserved.
-    # If the lock expired (e.g., the pharmacist took too long), the inventory
-    # might have been sold to another customer — we reject and ask the frontend
-    # to refresh the cart with fresh availability data.
-    for cartItem in payload.items:
-        is_lock_valid: bool = await verify_inventory_lock_exists(
-            batch_id=cartItem.batch_id,
-            expected_quantity=cartItem.quantity,
-        )
-        if not is_lock_valid:
-            logger.warning(
-                f"FEFO inventory lock expired for batch={cartItem.batch_id} "
-                f"(sku={cartItem.sku_id}, qty={cartItem.quantity})"
-            )
-            # Beginner Note: We use 409 Conflict (not 400 Bad Request) because
-            # this is a resource contention error — another checkout already
-            # claimed this batch. 409 tells the frontend it must re-scan to
-            # get a fresh FEFO routing (which may return a different batch).
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    f"The batch {cartItem.batch_id} ({cartItem.sku_id}) is no longer reserved. "
-                    "Please scan the item again to get fresh availability."
-                )
-            )
-
-    # =====================================================================
     # TRANSACTION START: Database writes begin here
     # =====================================================================
     
@@ -513,11 +481,7 @@ async def process_checkout(
         # even if a malicious client sends different UUIDs for the same cart.
         await mark_checkout_completed(deterministic_idempotency_hash)
 
-        # 9. Release all inventory locks so other checkouts can reserve these batches
-        for cartItem in payload.items:
-            await release_inventory_lock(cartItem.batch_id)
-
-        # 10. The Courier: Trigger the background task to relay the outbox events to Kafka
+        # 9. The Courier: Trigger the background task to relay the outbox events to Kafka
         background_tasks.add_task(relay_outbox_events_to_kafka, db)
 
         # 11. Return success to the frontend
