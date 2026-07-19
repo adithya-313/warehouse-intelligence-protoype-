@@ -812,14 +812,16 @@ class MedicationSoldEvent(BaseModel):
 
 class DistributorScorecardResponse(BaseModel):
     """
-    The financial scorecard returned to the frontend dashboard.
+    The financial scorecard returned to the frontend vendor dashboard.
+    Matches the 7 fields expected by the Scorecard UI component.
     """
     supplier_id: str
-    total_orders_analyzed: int
-    on_time_delivery_rate: float = Field(..., description="Percentage of orders delivered on time")
-    total_shortfall_items: int = Field(..., description="Total units the distributor failed to deliver")
-    financial_loss_rupees: float = Field(..., description="Total profit lost due to shortfalls (in ₹)")
-    recommendation: str = Field(..., description="AI-generated negotiation advice")
+    name: str
+    financial_loss_rupees: float
+    delivery_success_rate: int
+    trust_score: int
+    risk_level: str
+    recent_failures: int
 
 class KnowledgeIngestionRequest(BaseModel):
     """Contract for ingesting new clinical guidelines."""
