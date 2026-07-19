@@ -50,17 +50,17 @@ export default function SuppliersPage() {
           <div className="w-full text-center mb-4">
             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Elite Performance</p>
           </div>
-          <Scorecard supplierId="DEMO-GOOD" />
+          <Scorecard supplierId="SUPP-001" />
           
           <div className="w-full text-center mt-8 mb-4">
             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Average Performance (SLA Warning)</p>
           </div>
-          <Scorecard supplierId="DEMO-AVG" />
+          <Scorecard supplierId="SUPP-002" />
           
           <div className="w-full text-center mt-8 mb-4">
             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Critical Risk</p>
           </div>
-          <Scorecard supplierId="DEMO-BAD" />
+          <Scorecard supplierId="SUPP-003" />
         </div>
 
       </div>
