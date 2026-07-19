@@ -8,9 +8,9 @@ import { api } from '@/services/api';
 interface LineItem {
   id: string;
   sku_id: string;
-  qty: number;
-  cost: number;
-  mrp: number;
+  qty: number | '';
+  cost: number | '';
+  mrp: number | '';
 }
 
 export const OrderStockPanel: React.FC<any> = ({ isOpen, onClose, supplierId, supplierName }) => {
@@ -37,12 +37,12 @@ export const OrderStockPanel: React.FC<any> = ({ isOpen, onClose, supplierId, su
 
   const addItemToCart = (sku: string) => {
     if (items.find(i => i.sku_id === sku)) return;
-    setItems([...items, { id: Math.random().toString(), sku_id: sku, qty: 100, cost: 0, mrp: 0 }]);
+    setItems([...items, { id: Math.random().toString(), sku_id: sku, qty: '' as any, cost: '' as any, mrp: '' as any }]);
     setSearchQuery('');
     setSuggestions([]);
   };
 
-  const updateItem = (id: string, field: keyof LineItem, value: number) => {
+  const updateItem = (id: string, field: keyof LineItem, value: number | '') => {
     setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
   };
 
@@ -53,24 +53,29 @@ export const OrderStockPanel: React.FC<any> = ({ isOpen, onClose, supplierId, su
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (items.length === 0) return alert("Add at least one item");
-    setIsSubmitting(true);
 
+    const hasEmptyFields = items.some(i => i.qty === '' || i.cost === '' || i.mrp === '');
+    if (hasEmptyFields) return alert("Please fill out all Quantity, Cost, and MRP fields.");
+
+    setIsSubmitting(true);
     try {
       await api.post('/api/v1/purchase-orders', {
         supplier_id: supplierId,
         expected_delivery_date: deliveryDate,
         items: items.map(i => ({
           sku_id: i.sku_id,
-          ordered_qty: i.qty,
-          cost_price: i.cost,
-          expected_mrp: i.mrp,
+          ordered_qty: Number(i.qty),
+          cost_price: Number(i.cost),
+          expected_mrp: Number(i.mrp),
         })),
       });
       setItems([]);
       setDeliveryDate('');
       onClose();
-    } catch (error) {
+      alert("Purchase Order Successfully Transmitted!");
+    } catch (error: any) {
       console.error("Failed to submit Bulk PO", error);
+      alert("Failed to submit order. Check console for validation errors.");
     } finally {
       setIsSubmitting(false);
     }
@@ -134,15 +139,15 @@ export const OrderStockPanel: React.FC<any> = ({ isOpen, onClose, supplierId, su
                       <div className="w-1/4 font-bold text-slate-700">{item.sku_id}</div>
                       <div className="w-1/4">
                         <label className="text-xs text-slate-500 mb-1 block">Qty</label>
-                        <input type="number" min="1" value={item.qty} onChange={e => updateItem(item.id, 'qty', parseInt(e.target.value) || 0)} className="w-full px-2 py-1 border rounded focus:ring-1 outline-none" />
+                        <input type="number" min="1" value={item.qty} onChange={e => updateItem(item.id, 'qty', parseInt(e.target.value) || '')} className="w-full px-2 py-1 border rounded focus:ring-1 outline-none" />
                       </div>
                       <div className="w-1/4">
                         <label className="text-xs text-slate-500 mb-1 block">Cost (₹)</label>
-                        <input type="number" min="0.1" step="0.1" value={item.cost} onChange={e => updateItem(item.id, 'cost', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1 border rounded focus:ring-1 outline-none" />
+                        <input type="number" min="0.1" step="0.1" value={item.cost} onChange={e => updateItem(item.id, 'cost', parseFloat(e.target.value) || '')} className="w-full px-2 py-1 border rounded focus:ring-1 outline-none" />
                       </div>
                       <div className="w-1/4">
                         <label className="text-xs text-slate-500 mb-1 block">MRP (₹)</label>
-                        <input type="number" min="0.1" step="0.1" value={item.mrp} onChange={e => updateItem(item.id, 'mrp', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1 border rounded focus:ring-1 outline-none" />
+                        <input type="number" min="0.1" step="0.1" value={item.mrp} onChange={e => updateItem(item.id, 'mrp', parseFloat(e.target.value) || '')} className="w-full px-2 py-1 border rounded focus:ring-1 outline-none" />
                       </div>
                       <button onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-600 mt-5"><Trash2 size={18} /></button>
                     </motion.div>
