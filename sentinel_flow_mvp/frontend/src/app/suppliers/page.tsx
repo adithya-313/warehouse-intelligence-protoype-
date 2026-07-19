@@ -16,10 +16,12 @@ export default function SuppliersPage() {
     { supplierId: "SUPP-003", label: "Critical Risk" },
   ]);
 
-  const filteredVendors = vendors.filter((v: any) =>
-    v.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    v.supplierId.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredVendors = vendors.filter((v: any) => {
+    const vendorName = (v.name || v.label || "").toLowerCase();
+    const vendorId = (v.supplier_id || v.supplierId || "").toLowerCase();
+    const query = (searchQuery || "").toLowerCase();
+    return vendorName.includes(query) || vendorId.includes(query);
+  });
 
   const handleVendorCreated = (newVendor: any) => {
     setVendors((prev) => [
