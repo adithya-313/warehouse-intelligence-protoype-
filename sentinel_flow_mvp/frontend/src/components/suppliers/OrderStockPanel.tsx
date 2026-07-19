@@ -76,8 +76,9 @@ export const OrderStockPanel: React.FC<any> = ({ isOpen, onClose, supplierId, su
       onClose();
       toast.success("Purchase Order Successfully Transmitted!");
     } catch (error: any) {
-      console.error("Failed to submit Bulk PO", error);
-      toast.error("Failed to submit order. Check console for validation errors.");
+      const msg = error?.message || "Unknown error";
+      console.error("Failed to submit Bulk PO", msg);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }

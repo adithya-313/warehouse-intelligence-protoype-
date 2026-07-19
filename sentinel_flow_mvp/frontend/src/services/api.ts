@@ -155,7 +155,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': DEFAULT_TENANT },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`API Error: ${res.status}`);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`API Error ${res.status}: ${text.slice(0, 300)}`);
+    }
     return res.json();
   },
 
