@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useState } from 'react';
 import { Package, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
 import { api } from '@/services/api';
