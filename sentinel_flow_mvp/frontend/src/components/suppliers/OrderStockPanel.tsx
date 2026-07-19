@@ -54,8 +54,8 @@ export const OrderStockPanel: React.FC<any> = ({ isOpen, onClose, supplierId, su
     e.preventDefault();
     if (items.length === 0) return alert("Add at least one item");
 
-    const hasEmptyFields = items.some(i => i.qty === '' || i.cost === '' || i.mrp === '');
-    if (hasEmptyFields) return alert("Please fill out all Quantity, Cost, and MRP fields.");
+    const hasInvalidFields = items.some(i => !i.qty || !i.cost || !i.mrp);
+    if (hasInvalidFields) return alert("Please fill out all Quantity, Cost, and MRP fields with positive values.");
 
     setIsSubmitting(true);
     try {
@@ -64,9 +64,9 @@ export const OrderStockPanel: React.FC<any> = ({ isOpen, onClose, supplierId, su
         expected_delivery_date: deliveryDate,
         items: items.map(i => ({
           sku_id: i.sku_id,
-          ordered_qty: Number(i.qty),
-          cost_price: Number(i.cost),
-          expected_mrp: Number(i.mrp),
+          ordered_qty: Math.max(1, Number(i.qty) || 1),
+          cost_price: Math.max(0.01, Number(i.cost) || 0.01),
+          expected_mrp: Math.max(0.01, Number(i.mrp) || 0.01),
         })),
       });
       setItems([]);
