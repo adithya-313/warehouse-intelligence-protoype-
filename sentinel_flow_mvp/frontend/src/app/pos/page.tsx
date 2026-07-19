@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bot, Settings, BarChart3, ShoppingBag, Barcode, History, Banknote, QrCode, CreditCard, Package } from 'lucide-react';
+import { Search, Bot, Settings, BarChart3, ShoppingBag, Barcode, History, Banknote, QrCode, CreditCard, Boxes } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { usePOSStore } from '@/store/posStore';
 import CopilotPanel from '@/components/pos/CopilotPanel';
@@ -279,9 +279,10 @@ export default function POSDashboard() {
             </Link>
             <button
               onClick={() => setIsTriageOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-2xl transition-colors"
+              title="Inventory Intelligence"
+              className="flex items-center justify-center w-10 h-10 bg-white border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-2xl shadow-sm transition-all active:scale-95"
             >
-              <Package size={18} /> Triage
+              <Boxes size={20} strokeWidth={2} />
             </button>
             <Link href="/admin/settings">
               <motion.button 
