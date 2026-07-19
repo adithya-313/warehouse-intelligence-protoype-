@@ -823,14 +823,18 @@ class DistributorScorecardResponse(BaseModel):
     risk_level: str
     recent_failures: int
 
-class PurchaseOrderCreate(BaseModel):
-    """Input contract for creating a purchase order."""
-    supplier_id: str
+class POLineItemCreate(BaseModel):
+    """A single item within a bulk purchase order."""
     sku_id: str = Field(..., min_length=2)
     ordered_qty: int = Field(..., gt=0)
     cost_price: float = Field(..., gt=0)
     expected_mrp: float = Field(..., gt=0)
+
+class PurchaseOrderBulkCreate(BaseModel):
+    """Bulk purchase order with multiple line items."""
+    supplier_id: str
     expected_delivery_date: date
+    items: List[POLineItemCreate] = Field(..., min_length=1)
 
 class SupplierCreateRequest(BaseModel):
     """Input contract for onboarding a new vendor."""
