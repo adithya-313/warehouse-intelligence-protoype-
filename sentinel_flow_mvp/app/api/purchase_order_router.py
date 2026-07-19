@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_database_session
 from app.infrastructure.models import PurchaseOrderModel, Tenant
-from app.domain.schemas import PurchaseOrderBulkCreate
+from app.domain.schemas import PurchaseOrderBulkCreate, PurchaseOrderReceiveBulk
 import logging
 
 router = APIRouter()
@@ -75,4 +75,43 @@ def create_bulk_purchase_order(
         raise HTTPException(
             status_code=500,
             detail="Database transaction failed during Bulk PO creation.",
+        )
+
+
+@router.post("/purchase-orders/receive")
+def receive_bulk_purchase_order(
+    payload: PurchaseOrderReceiveBulk,
+    db: Session = Depends(get_database_session)
+):
+    po_items = db.query(PurchaseOrderModel).filter(
+        PurchaseOrderModel.po_id == payload.po_id,
+        PurchaseOrderModel.status == "SUBMITTED"
+    ).all()
+
+    if not po_items:
+        raise HTTPException(
+            status_code=404,
+            detail="Active Purchase Order not found or already fulfilled."
+        )
+
+    delivery_map = {item.sku_id.upper(): item.delivered_qty for item in payload.items}
+
+    try:
+        for po in po_items:
+            delivered = delivery_map.get(po.sku_id, 0)
+            po.actual_delivery_date = payload.actual_delivery_date
+            po.delivered_qty = delivered
+            po.status = "FULFILLED"
+
+        db.commit()
+        return {
+            "po_id": payload.po_id,
+            "status": "FULFILLED",
+            "lines_processed": len(po_items),
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Database transaction failed during Intake.",
         )

@@ -836,6 +836,17 @@ class PurchaseOrderBulkCreate(BaseModel):
     expected_delivery_date: date
     items: List[POLineItemCreate] = Field(..., min_length=1)
 
+class POItemReceive(BaseModel):
+    """A single item received in a delivery."""
+    sku_id: str
+    delivered_qty: int = Field(..., ge=0)
+
+class PurchaseOrderReceiveBulk(BaseModel):
+    """Bulk goods receipt for a purchase order."""
+    po_id: str
+    actual_delivery_date: date
+    items: list[POItemReceive]
+
 class SupplierCreateRequest(BaseModel):
     """Input contract for onboarding a new vendor."""
     name: str
