@@ -19,8 +19,29 @@ import logging
 import difflib
 from sqlalchemy.orm import Session
 from app.services.rag_pipeline import get_known_drug_catalog
+from app.infrastructure.models import ClinicalKnowledgeBase
 
 logger = logging.getLogger(__name__)
+
+def translate_to_sku(db: Session, match_str: str, known_skus: set[str]) -> str:
+    """Translate a brand/generic name to its actual SKU ID via DB lookup."""
+    if match_str in known_skus:
+        return match_str
+        
+    # TODO (Optimization): This re-queries the full ClinicalKnowledgeBase table. 
+    # Since it's called in a loop for multiple choices, it creates an N-query pattern.
+    # While N is small (capped at 3), a future optimization should have 
+    # get_known_drug_catalog() return a pre-built brand-to-SKU dictionary mapping.
+    ckb_rows = db.query(ClinicalKnowledgeBase.sku_id, ClinicalKnowledgeBase.metadata_payload).all()
+    for row in ckb_rows:
+        payload = row.metadata_payload or {}
+        if isinstance(payload, dict):
+            brand = payload.get("brand_name", "").upper()
+            generic = payload.get("generic_name", "").upper()
+            if match_str == brand or match_str == generic:
+                return row.sku_id
+                
+    return match_str
 
 def resolve_drug_entity(db: Session, query: str) -> dict:
     """
@@ -60,8 +81,9 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
     if matched_entities:
         # Sort by length descending, pick the longest specific identifier.
         best_exact_match = sorted(set(matched_entities), key=len, reverse=True)[0]
-        logger.info(f"DrugResolver: Exact match found -> {best_exact_match}")
-        return {"status": "resolved", "sku_id": best_exact_match, "confidence": "exact"}
+        real_sku = translate_to_sku(db, best_exact_match, known_skus)
+        logger.info(f"DrugResolver: Exact match found -> {best_exact_match} (Resolved to SKU: {real_sku})")
+        return {"status": "resolved", "sku_id": real_sku, "confidence": "exact"}
 
     # Step 3: If no exact match, attempt FUZZY match.
     # We break the query into tokens and check against the catalog.
@@ -108,12 +130,21 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
     # Cap choices at 3
     sorted_choices = sorted_choices[:3]
 
-    if len(sorted_choices) == 1:
+    # Translate choices to real SKUs so downstream logic doesn't fail on brand names
+    real_choices = []
+    seen = set()
+    for choice in sorted_choices:
+        real_sku = translate_to_sku(db, choice, known_skus)
+        if real_sku not in seen:
+            seen.add(real_sku)
+            real_choices.append(real_sku)
+
+    if len(real_choices) == 1:
         # Step 4: Exactly one close match found -> confident fuzzy resolve
-        match = sorted_choices[0]
-        logger.info(f"DrugResolver: Confident fuzzy match found -> {match}")
+        match = real_choices[0]
+        logger.info(f"DrugResolver: Confident fuzzy match found -> {sorted_choices[0]} (Resolved to SKU: {match})")
         return {"status": "resolved", "sku_id": match, "confidence": "fuzzy"}
     else:
         # Step 5: Two or more close matches -> ask the user to pick (disambiguate)
-        logger.info(f"DrugResolver: Ambiguous fuzzy match, disambiguating -> {sorted_choices}")
-        return {"status": "disambiguate", "choices": sorted_choices}
+        logger.info(f"DrugResolver: Ambiguous fuzzy match, disambiguating -> {real_choices}")
+        return {"status": "disambiguate", "choices": real_choices}
