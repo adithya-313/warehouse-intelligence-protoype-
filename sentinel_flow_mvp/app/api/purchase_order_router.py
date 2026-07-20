@@ -2,6 +2,7 @@ from typing import List
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_database_session
 from app.infrastructure.models import MedicationModel, PurchaseOrderModel, Tenant
@@ -86,6 +87,13 @@ def create_bulk_purchase_order(
             "status": "SUBMITTED",
             "items_processed": len(payload.items),
         }
+    except IntegrityError as e:
+        db.rollback()
+        logger.error(f"Bulk PO integrity error: {e}")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Duplicate or conflicting item in purchase order. Verify the SKU list has no duplicates. Error: {e}",
+        )
     except Exception as e:
         db.rollback()
         logger.error(f"Bulk PO creation failed: {e}")

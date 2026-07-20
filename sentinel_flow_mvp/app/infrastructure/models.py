@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Date, Index, Numeric, text, Text, JSON, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Float, ForeignKey, Integer, PrimaryKeyConstraint, String, Date, Index, Numeric, text, Text, JSON, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -233,7 +233,7 @@ class PurchaseOrderModel(Base):
     """
     __tablename__ = "purchase_orders"
 
-    po_id = Column(String, primary_key=True, index=True)
+    po_id = Column(String, index=True)
     
     # ================================================================
     # Phase 1: Multi-Tenant Isolation
@@ -250,7 +250,7 @@ class PurchaseOrderModel(Base):
     # Links to the supplier/distributor who is supposed to deliver this
     supplier_id = Column(String, ForeignKey("suppliers.supplier_id"), nullable=False)
     
-    # Links to the specific medication ordered
+    # Links to the specific medication ordered (part of composite PK)
     sku_id = Column(String, ForeignKey("medications.sku_id"), nullable=False)
     
     # Quantities
@@ -270,6 +270,7 @@ class PurchaseOrderModel(Base):
 
     # --- Structural Indexes ---
     __table_args__ = (
+        PrimaryKeyConstraint('po_id', 'sku_id', name='pk_purchase_orders'),
         Index('idx_tenant_po', 'tenant_id', 'po_id'),
     )
 
