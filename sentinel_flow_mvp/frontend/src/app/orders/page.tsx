@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Package, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
 import { api } from '@/services/api';
+import BackButton from '@/components/ui/BackButton';
 
 export default function OrderLedgerPage() {
   const [orders, setOrders] = useState<any[]>([]);
@@ -35,13 +36,11 @@ export default function OrderLedgerPage() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center gap-4">
+        <BackButton href="/pos" />
         <div>
-          <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
-            <Package className="text-indigo-600" size={32} />
-            Global Order Ledger
-          </h1>
-          <p className="text-slate-500 mt-2">Track all inbound manifests and capital allocation.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Global Order Ledger</h1>
+          <p className="text-slate-500 mt-1">Track all inbound manifests and capital allocation.</p>
         </div>
       </div>
 
