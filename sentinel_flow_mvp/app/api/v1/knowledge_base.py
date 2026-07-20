@@ -7,6 +7,8 @@ from app.workers.embedding_tasks import generate_and_store_embedding
 from app.services.semantic_search import execute_clinical_search, find_clinical_substitutes
 from app.services.rag_pipeline import route_and_process_query
 from app.services.sanitizer import QuerySanitizer
+from app.domain.intent import IntentBucket
+from app.domain.intent_gate import classify_intent
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +117,73 @@ async def ask_clinical_assistant(
     intents = sanitizer.extract_intents(cleaned_query)
 
     # =====================================================================
-    # STEP 1: HANDLE SUBSTITUTE INTENT
+    # STEP 1: INTENT GATE — TRAFFIC COP (Phase 1)
+    # =====================================================================
+    # Beginner Note: Before we do ANY database work, we classify the query
+    # into one of four buckets using only the query text and the extracted
+    # SKU. This is a pure function — no I/O, no DB, no vector search.
+    #
+    # The gate checks:
+    #   - Is there a drug (SKU) in the query? (cheap regex only)
+    #   - Is there an objective keyword ("price", "stock", etc.)?
+    #
+    # If NEITHER: NO_INTENT → return "please rephrase" immediately.
+    #   Zero DB calls, zero vector calls, zero LLM calls.
+    #
+    # If drug + keyword: INVENTORY → proceed to database path.
+    #   (Phase 3 will enhance this with SQL stock injection.)
+    #
+    # If drug but no keyword: AMBIGUOUS → proceed to clinical path.
+    #   (The existing pregnancy/pediatric/substitute checks further
+    #   downstream will resolve this to CLINICAL if a clinical keyword
+    #   is found. All other ambiguous queries default to the RAG pipeline,
+    #   which is the safe fail-safe.)
+    bucket = classify_intent(
+        query=cleaned_query,
+        sku_id=extracted_sku,
+        has_objective_keyword=intents["objective"],
+    )
+
+    # TEMP: minimal trace log for Phase 1 verification — Phase 4 will replace
+    # this with structured JSON covering the full funnel decision.
+    logger.info(
+        f"IntentGate decision: bucket={bucket.value} "
+        f"sku_id={extracted_sku} "
+        f"query_len={len(cleaned_query)}"
+    )
+
+    if bucket == IntentBucket.NO_INTENT:
+        # ------------------------------------------------------------------
+        # EARLY EXIT: No drug found → nothing to look up.
+        # ------------------------------------------------------------------
+        # We return a static message immediately without touching the
+        # database, the vector index, or Gemini. The user needs to rephrase
+        # their query with a medication name.
+        return RAGQueryResponse(
+            query=payload.query,
+            answer=(
+                "I could not identify a specific medication in your query. "
+                "Please include the medication name (e.g., 'PAN-40', "
+                "'TELMA-40', 'calpol 650'). If you need clinical advice, "
+                "ask with a drug name included."
+            ),
+            context_used=[],
+            is_safe_to_dispense=True,
+            system_lock_reason=None,
+            citations=[],
+        )
+
+    # ------------------------------------------------------------------
+    # INVENTORY + AMBIGUOUS both proceed to the existing pipeline below.
+    #   - INVENTORY will be caught by route_and_process_query()'s
+    #     objective-keyword check and answered from the database.
+    #   - AMBIGUOUS will fall through to the clinical/RAG path, which
+    #     preserves the existing fail-safe behavior but now by design
+    #     instead of by accident.
+    # ------------------------------------------------------------------
+
+    # =====================================================================
+    # STEP 2: HANDLE SUBSTITUTE INTENT
     # =====================================================================
     # Beginner Note: If the user asks for a "substitute" or "alternative"
     # for a drug, we route directly to the substitute finder instead of
@@ -158,7 +226,7 @@ async def ask_clinical_assistant(
         )
 
     # =====================================================================
-    # STEP 2: ROUTE TO ADAPTIVE PIPELINE (WITH INTENTS FOR THE JUDGE)
+    # STEP 3: ROUTE TO ADAPTIVE PIPELINE (WITH INTENTS FOR THE JUDGE)
     # =====================================================================
     # Pass the cleaned query and extracted SKU to the existing adaptive
     # router. If the SKU was already extracted by the sanitizer, the

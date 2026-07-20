@@ -87,25 +87,19 @@ def mock_redis_guards():
     """
     with patch("app.api.pos_router.is_duplicate_checkout_request", new_callable=AsyncMock) as mock_is_dup, \
          patch("app.api.pos_router.is_above_checkout_rate_limit", new_callable=AsyncMock) as mock_is_rate, \
-         patch("app.api.pos_router.verify_inventory_lock_exists", new_callable=AsyncMock) as mock_verify_lock, \
          patch("app.api.pos_router.mark_checkout_completed", new_callable=AsyncMock) as mock_mark_complete, \
-         patch("app.api.pos_router.release_inventory_lock", new_callable=AsyncMock) as mock_release_lock, \
          patch("app.api.pos_router.try_acquire_inventory_lock", new_callable=AsyncMock) as mock_acquire_lock:
 
         # Default safe values for a "happy path" checkout
         mock_is_dup.return_value = False
         mock_is_rate.return_value = False
-        mock_verify_lock.return_value = True
         mock_mark_complete.return_value = None
-        mock_release_lock.return_value = None
         mock_acquire_lock.return_value = True
 
         yield {
             "is_duplicate_checkout_request": mock_is_dup,
             "is_above_checkout_rate_limit": mock_is_rate,
-            "verify_inventory_lock_exists": mock_verify_lock,
             "mark_checkout_completed": mock_mark_complete,
-            "release_inventory_lock": mock_release_lock,
             "try_acquire_inventory_lock": mock_acquire_lock,
         }
 

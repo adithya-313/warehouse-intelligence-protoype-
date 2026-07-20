@@ -92,22 +92,10 @@ def get_gemini_circuit_breaker() -> AegisLiteCircuitBreaker:
 # The list of keywords that indicate an objective, fact-based question.
 # These are questions that can be answered by simply querying the database
 # without any AI reasoning.
-OBJECTIVE_KEYWORDS_LIST = [
-    "mrp",
-    "price",
-    "stock",
-    "left",
-    "quantity",
-    "available",
-    "cost",
-    "expiry",
-    "expire",
-    "expires",
-    "expiration",
-    "mfg",
-    "manufacture",
-    "batch",
-]
+#
+# IMPORTANT: This is imported from the canonical source in app.domain.
+# If you need to add a keyword, add it to app/domain/intent_keywords.py.
+from app.domain.intent_keywords import OBJECTIVE_KEYWORDS as OBJECTIVE_KEYWORDS_LIST
 
 
 async def route_and_process_query(

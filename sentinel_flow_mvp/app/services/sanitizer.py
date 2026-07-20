@@ -43,6 +43,10 @@ import difflib       # Standard library — provides get_close_matches for fuzzy
 import logging       # Standard library — for logging what the sanitizer does
 import re            # Standard library — for regex-based SKU extraction
 
+# Canonical source of truth for what counts as an "objective" keyword.
+# Every file that needs to check for objective keywords imports from here.
+from app.domain.intent_keywords import OBJECTIVE_KEYWORDS
+
 # Set up a logger so we can see what the sanitizer is doing
 logger = logging.getLogger(__name__)
 
@@ -112,24 +116,8 @@ class QuerySanitizer:
         "replace",
     ]
 
-    # Keywords that indicate the user is asking an objective, fact-based
-    # question that can be answered by querying the database directly
-    # (price, stock, expiry, etc.) without needing AI reasoning.
-    OBJECTIVE_KEYWORDS = [
-        "mrp",
-        "price",
-        "stock",
-        "quantity",
-        "available",
-        "cost",
-        "expiry",
-        "expire",
-        "expires",
-        "expiration",
-        "mfg",
-        "manufacture",
-        "batch",
-    ]
+    # OBJECTIVE_KEYWORDS is now imported from app/domain/intent_keywords.py
+    # (the canonical single source of truth). See top of this file.
 
     # ==================================================================
     # METHOD 1: clean_drug_names(query, valid_names) -> str
@@ -313,8 +301,10 @@ class QuerySanitizer:
                 break
 
         # --- Check for objective intent ---
+        # We use the module-level OBJECTIVE_KEYWORDS imported from
+        # app/domain/intent_keywords.py (the canonical source).
         objective_detected = False
-        for keyword in self.OBJECTIVE_KEYWORDS:
+        for keyword in OBJECTIVE_KEYWORDS:
             if keyword in query_lower:
                 objective_detected = True
                 logger.info(
