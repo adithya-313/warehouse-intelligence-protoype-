@@ -5,6 +5,25 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ScanLine, Plus, Zap, TrendingUp } from 'lucide-react';
 import { CrossSellItem, GenericAlternative } from '@/services/api';
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    transition: { type: "spring", stiffness: 260, damping: 20 }
+  },
+};
+
 interface ClinicalCompanionProps {
   loading: boolean;
   crossSells: CrossSellItem[];
@@ -21,10 +40,7 @@ function CrossSellCard({ item, onAdd }: { item: CrossSellItem; onAdd: () => void
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.2 }}
+      variants={itemVariants}
       className="flex-shrink-0 w-52 bg-white/70 backdrop-blur-xl rounded-2xl border border-slate-100/60 shadow-sm p-4 flex flex-col gap-3 hover:shadow-md transition-shadow"
     >
       <div className="flex items-start justify-between gap-2">
@@ -55,10 +71,7 @@ function GenericCard({ item, onAdd }: { item: GenericAlternative; onAdd: () => v
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.2, delay: 0.05 }}
+      variants={itemVariants}
       className="flex-shrink-0 w-52 bg-white/70 backdrop-blur-xl rounded-2xl border border-slate-100/60 shadow-sm p-4 flex flex-col gap-3 hover:shadow-md transition-shadow"
     >
       <div className="min-w-0">
@@ -97,11 +110,18 @@ export default function ClinicalCompanion({ loading, crossSells, genericAlts, on
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="flex-1 flex items-center justify-center"
+              className="w-full"
             >
-              <div className="flex items-center gap-3 text-slate-400">
-                <div className="w-5 h-5 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
-                <span className="text-sm font-medium">Loading recommendations...</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-pulse p-6">
+                {[...Array(2)].map((_, i) => (
+                  <div key={i} className="h-32 bg-slate-100/80 rounded-2xl border border-slate-200">
+                    <div className="p-4 space-y-3">
+                      <div className="h-4 bg-slate-200 rounded w-1/3"></div>
+                      <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                      <div className="mt-4 h-8 bg-slate-200 rounded-lg w-full"></div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </motion.div>
           ) : !hasData ? (
@@ -122,10 +142,9 @@ export default function ClinicalCompanion({ loading, crossSells, genericAlts, on
           ) : (
             <motion.div
               key="recommendations"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
               className="flex-1 flex flex-col gap-6 p-6 overflow-y-auto"
             >
               {crossSells.length > 0 && (
