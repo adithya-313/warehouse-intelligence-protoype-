@@ -905,6 +905,15 @@ class RAGQueryResponse(BaseModel):
         default_factory=list,
         description="List of clinical citation strings used to generate the answer.",
     )
+    # Phase 2: Added for Fuzzy Resolution & Disambiguation
+    status: str | None = Field(
+        default=None,
+        description="Resolution status, e.g., 'resolved', 'disambiguate', 'no_match'.",
+    )
+    choices: list[str] | None = Field(
+        default=None,
+        description="List of drug name choices if status is 'disambiguate'.",
+    )
 
 
 # --- Phase 3: Structured Clinical Narrative Schema ---

@@ -19,6 +19,9 @@ export interface ChatMessage {
   // proceed with the transaction until a senior pharmacist overrides.
   is_safe_to_dispense?: boolean;
   system_lock_reason?: string;
+  // Phase 2: Disambiguation fields
+  status?: string;
+  choices?: string[];
 }
 
 interface POSState {

@@ -53,12 +53,16 @@ export default function CopilotPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [chatHistory, isLoading]);
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
-    const userText = input.trim();
-    setInput('');
+  const handleSend = async (overrideText?: any) => {
+    // If called via onClick, it might receive an Event. We only want a string.
+    const textToSend = typeof overrideText === 'string' ? overrideText : input.trim();
+    if (!textToSend) return;
     
-    addChatMessage({ id: Date.now().toString(), role: 'user', content: userText });
+    if (typeof overrideText !== 'string') {
+      setInput('');
+    }
+    
+    addChatMessage({ id: Date.now().toString(), role: 'user', content: textToSend });
     setIsLoading(true);
 
     try {
@@ -69,7 +73,7 @@ export default function CopilotPanel() {
       const response = await fetch('/api/v1/knowledge-base/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': 'PHARM-001' },
-        body: JSON.stringify({ query: userText + cartContext, top_k: 3 }),
+        body: JSON.stringify({ query: textToSend + cartContext, top_k: 3 }),
       });
 
       if (!response.ok) {
@@ -88,6 +92,8 @@ export default function CopilotPanel() {
       // will contain the reason code (e.g. CRITICAL_PREGNANCY_CONTRAINDICATION).
       const isSafe: boolean | undefined = data.is_safe_to_dispense;
       const lockReason: string | undefined = data.system_lock_reason;
+      const status: string | undefined = data.status;
+      const choices: string[] | undefined = data.choices;
 
       // Step 3: Broadcast the safety verdict to the Zustand store.
       // When is_safe_to_dispense is false, the global activeSafetyLock
@@ -105,6 +111,8 @@ export default function CopilotPanel() {
         sources: data.context_used,
         is_safe_to_dispense: isSafe,
         system_lock_reason: lockReason,
+        status: status,
+        choices: choices,
       });
     } catch (error: any) {
       addChatMessage({ 
@@ -215,6 +223,23 @@ export default function CopilotPanel() {
                             ))}
                           </div>
                         )}
+                        
+                        {/* Phase 2: Disambiguation choices */}
+                        {msg.status === "disambiguate" && msg.choices && msg.choices.length > 0 && (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {msg.choices.map((choice: string, idx: number) => (
+                              <motion.button
+                                key={idx}
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handleSend(choice)}
+                                className="px-3 py-1.5 bg-white border border-cyan-200 text-cyan-700 hover:bg-cyan-50 text-sm rounded-xl transition-colors shadow-sm"
+                              >
+                                {choice}
+                              </motion.button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </motion.div>
                   ))}
@@ -257,7 +282,7 @@ export default function CopilotPanel() {
                     <motion.button 
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
-                      onClick={handleSend}
+                      onClick={() => handleSend()}
                       disabled={isLoading || !input.trim()}
                       className="absolute right-2 p-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-xl transition-colors shadow-md flex items-center justify-center"
                     >

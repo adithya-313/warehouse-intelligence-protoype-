@@ -167,81 +167,118 @@ class TestClassifyIntent:
 
 
 class TestNoIntentShortCircuit:
-    """Prove that a NO_INTENT query triggers zero DB/vector/Gemini calls."""
+    """Prove that a NO_INTENT query triggers zero DB/vector/Gemini calls.
 
-    @pytest.mark.skip(
-        reason="Windows torch/torchvision DLL crash — same pre-existing issue "
-        "blocking test_ask_endpoint_*. Requires Linux CI to execute."
-    )
+    NOTE: This test uses httpx.ASGITransport (the modern httpx API) instead of
+    starlette's TestClient because the Docker environment has httpx 0.28.1 /
+    starlette 0.36.3 where TestClient passes the removed 'app' kwarg to httpx.
+    """
+
     def test_no_intent_query_never_calls_downstream_services(self):
         """
         ARRANGE: Override get_database_session with a mock via FastAPI's
-                 dependency_overrides so the dependency resolution uses our
-                 mock. Also patch route_and_process_query at module level
-                 to catch any attempt to call it.
+                 dependency_overrides. Patch route_and_process_query to
+                 catch any attempt to call it.
 
         ACT:     POST to /ask with a NO_INTENT query (no drug, no keyword).
 
         ASSERT:  Response is 200 with "could not identify" message.
                  route_and_process_query was NEVER called.
-                 DB session's query() was NEVER called.
+                 DB session was NEVER queried.
         """
-        # ------------------------------------------------------------------
-        # Set up mocks BEFORE building the app so the router's dependencies
-        # are resolved against our overrides, not the real functions.
-        # ------------------------------------------------------------------
+        import json as _json
+        import httpx
+
         mock_db = MagicMock()
         mock_route = AsyncMock()
 
-        from fastapi import FastAPI, Depends
-        from fastapi.testclient import TestClient
+        from fastapi import FastAPI
         from app.api.v1.knowledge_base import router as kb_router
         from app.infrastructure.database import get_database_session
 
         app = FastAPI()
         app.include_router(kb_router, prefix="/api/v1/knowledge-base")
-
-        # Override the DB dependency with our mock.
-        # This is the CORRECT FastAPI way to mock dependencies — patching
-        # the module-level name does NOT work because FastAPI stores the
-        # original function reference at route registration time.
         app.dependency_overrides[get_database_session] = lambda: mock_db
 
-        # Also patch route_and_process_query on the module so that if the
-        # NO_INTENT path DOESN'T short-circuit (which is what we're testing),
-        # we will catch it via the mock assertion.
         with patch(
             "app.api.v1.knowledge_base.route_and_process_query",
             mock_route,
         ):
-            client = TestClient(app)
+            # Build an ASGI transport manually using httpx's internal
+            # transport protocol. httpx 0.28.1 dropped the 'app' kwarg
+            # from Client.__init__ but the ASGI transport still works
+            # via handle_async_request.
+            async def asgi_app_handler(scope, receive, send):
+                await app(scope, receive, send)
 
-            response = client.post(
-                "/api/v1/knowledge-base/ask",
-                json={"query": "can you help me please"},
-            )
+            # Use an in-memory request/response via ASGI directly.
+            from starlette.requests import Request
+            from starlette.responses import JSONResponse
+
+            # We bypass httpx entirely and test the handler function
+            # by constructing the ASGI scope manually and invoking the
+            # application. This avoids all httpx version compat issues.
+            scope = {
+                "type": "http",
+                "asgi": {"version": "3.0"},
+                "http_version": "1.1",
+                "method": "POST",
+                "scheme": "http",
+                "path": "/api/v1/knowledge-base/ask",
+                "raw_path": b"/api/v1/knowledge-base/ask",
+                "query_string": b"",
+                "root_path": "",
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", b"37"),
+                    (b"host", b"testserver"),
+                ],
+                "client": ("127.0.0.1", 50000),
+                "server": ("testserver", 80),
+            }
+
+            body = _json.dumps(
+                {"query": "can you help me please"}
+            ).encode("utf-8")
+
+            response_status = None
+            response_body = b""
+            response_headers = []
+
+            async def receive():
+                return {
+                    "type": "http.request",
+                    "body": body,
+                    "more_body": False,
+                }
+
+            async def send(message):
+                nonlocal response_status, response_body, response_headers
+                if message["type"] == "http.response.start":
+                    response_status = message["status"]
+                    response_headers = message["headers"]
+                elif message["type"] == "http.response.body":
+                    response_body = message["body"]
+
+            import asyncio
+            asyncio.run(app(scope, receive, send))
 
             # --- Assertion 1: 200 with NO_INTENT message ---
-            assert response.status_code == 200, (
-                f"Expected 200. Got {response.status_code}: {response.text}"
+            assert response_status == 200, (
+                f"Expected 200. Got {response_status}"
             )
-            response_data = response.json()
+            response_data = _json.loads(response_body)
             assert "could not identify" in response_data["answer"].lower(), (
                 f"Expected NO_INTENT message. Got: {response_data['answer']}"
             )
 
             # --- Assertion 2: route_and_process_query was NEVER called ---
-            # If this assertion fails, it means the NO_INTENT short-circuit
-            # was bypassed and the query fell through to the RAG pipeline.
             mock_route.assert_not_called()
             assert mock_route.call_count == 0, (
                 "NO_INTENT query must not call route_and_process_query."
             )
 
             # --- Assertion 3: DB was never queried ---
-            # The mock_db is only accessible inside the handler if
-            # get_database_session was resolved. Since NO_INTENT returns
-            # before the handler body uses 'db', this should be 0.
             assert mock_db.query.call_count == 0, (
                 "NO_INTENT query must not call the database."
             )

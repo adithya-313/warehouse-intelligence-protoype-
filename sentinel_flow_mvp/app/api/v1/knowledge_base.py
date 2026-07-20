@@ -3,6 +3,7 @@ from fastapi import APIRouter, status, Depends
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_database_session
 from app.domain.schemas import KnowledgeIngestionRequest, KnowledgeIngestionResponse, SemanticSearchRequest, SemanticSearchResponse, RAGQueryRequest, RAGQueryResponse, SubstituteRequestSchema, SubstituteResponseSchema, SubstituteItemSchema
+from app.domain.drug_resolver import resolve_drug_entity
 from app.workers.embedding_tasks import generate_and_store_embedding
 from app.services.semantic_search import execute_clinical_search, find_clinical_substitutes
 from app.services.rag_pipeline import route_and_process_query
@@ -181,6 +182,39 @@ async def ask_clinical_assistant(
     #     preserves the existing fail-safe behavior but now by design
     #     instead of by accident.
     # ------------------------------------------------------------------
+
+    # =====================================================================
+    # PHASE 2: DRUG ENTITY RESOLVER (Disambiguation)
+    # =====================================================================
+    resolution = resolve_drug_entity(db, cleaned_query)
+    
+    if resolution["status"] == "no_match":
+        return RAGQueryResponse(
+            query=payload.query,
+            answer=(
+                "I could not find a match for that medication in our catalog. "
+                "Please check the spelling and try again."
+            ),
+            context_used=[],
+            is_safe_to_dispense=True,
+            system_lock_reason=None,
+            citations=[],
+            status="no_match"
+        )
+    elif resolution["status"] == "disambiguate":
+        return RAGQueryResponse(
+            query=payload.query,
+            answer="I found multiple matches. Did you mean one of these?",
+            context_used=[],
+            is_safe_to_dispense=True,
+            system_lock_reason=None,
+            citations=[],
+            status="disambiguate",
+            choices=resolution["choices"]
+        )
+    elif resolution["status"] == "resolved":
+        extracted_sku = resolution["sku_id"]
+
 
     # =====================================================================
     # STEP 2: HANDLE SUBSTITUTE INTENT

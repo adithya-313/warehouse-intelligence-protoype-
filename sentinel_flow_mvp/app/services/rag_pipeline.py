@@ -311,34 +311,28 @@ async def route_and_process_query(
 # safety data.
 
 
-def extract_known_entities(
-    db: Session,
-    query: str,
-) -> list[dict]:
+def get_known_drug_catalog(db: Session) -> tuple[set[str], set[str]]:
     """
-    Scan the query for known drug identifiers and return matching
-    clinical knowledge records via direct SQL lookup.
-
-    Parameters:
-        db: Active database session.
-        query: The user's raw query string.
-
+    Fetch all known identifiers from the database.
+    We collect SKU IDs (e.g., "PAN40", "TELMA40") from the medications
+    table AND brand names + generic names from the clinical knowledge
+    metadata payload. These are our "catalog" of known entities.
+    
+    Beginner Note:
+        This is separated out so that both exact matching (extract_known_entities)
+        and fuzzy matching (resolve_drug_entity) can share the same database
+        lookups without duplicating the queries.
+        
     Returns:
-        A list of dicts, each with keys 'sku_id' and 'content'
-        (matching the format of vector search results so they can be
-        merged seamlessly). Returns an empty list if no entities found.
+        A tuple of (known_skus, known_brands) where both sets are in UPPERCASE.
     """
-    # Step 1: Fetch all known identifiers from the database.
-    # We collect SKU IDs (e.g., "PAN40", "TELMA40") from the medications
-    # table AND brand names + generic names from the clinical knowledge
-    # metadata payload. These are our "catalog" of known entities.
     try:
         # Fetch all SKU IDs from the medications table
         sku_rows = (
             db.query(MedicationModel.sku_id)
             .all()
         )
-        known_skus: set[str] = {row.sku_id for row in sku_rows}
+        known_skus: set[str] = {row.sku_id.upper() for row in sku_rows if row.sku_id}
 
         # Fetch brand names and generic names from clinical knowledge
         # metadata. The metadata_payload column is a JSONB dict that
@@ -360,10 +354,36 @@ def extract_known_entities(
                     known_brands.add(brand.upper())
                 if generic:
                     known_brands.add(generic.upper())
+                    
+        return known_skus, known_brands
     except Exception as e:
         logger.warning(
             f"Entity Extraction: Could not load known identifiers: {e}"
         )
+        return set(), set()
+
+
+def extract_known_entities(
+    db: Session,
+    query: str,
+) -> list[dict]:
+    """
+    Scan the query for known drug identifiers and return matching
+    clinical knowledge records via direct SQL lookup.
+
+    Parameters:
+        db: Active database session.
+        query: The user's raw query string.
+
+    Returns:
+        A list of dicts, each with keys 'sku_id' and 'content'
+        (matching the format of vector search results so they can be
+        merged seamlessly). Returns an empty list if no entities found.
+    """
+    # Step 1: Fetch all known identifiers from the database.
+    known_skus, known_brands = get_known_drug_catalog(db)
+    
+    if not known_skus and not known_brands:
         return []
 
     # Step 2: Scan the query for each known identifier.
