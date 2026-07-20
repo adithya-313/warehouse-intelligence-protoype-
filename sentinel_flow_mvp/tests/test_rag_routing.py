@@ -24,7 +24,9 @@ class TestAdaptiveRoutingObjective:
     the Gemini API.
     """
 
-    def test_objective_mrp_query_returns_database_answer(self):
+    import pytest
+    @pytest.mark.anyio
+    async def test_objective_mrp_query_returns_database_answer(self):
         """
         ARRANGE: Create a mock database session that returns a batch with
         known MRP and stock values. The query contains the keyword "mrp"
@@ -66,7 +68,7 @@ class TestAdaptiveRoutingObjective:
         ) as mock_gemini:
             from app.services.rag_pipeline import route_and_process_query
 
-            result = route_and_process_query(
+            result = await route_and_process_query(
                 db=mock_db,
                 query="What is the MRP for this medication?",
                 sku_id="SKU-001",
@@ -96,7 +98,9 @@ class TestAdaptiveRoutingObjective:
                 "because no RAG pipeline was executed."
             )
 
-    def test_objective_stock_query_returns_database_answer(self):
+    import pytest
+    @pytest.mark.anyio
+    async def test_objective_stock_query_returns_database_answer(self):
         """
         ARRANGE: Same as above, but the query uses the "stock" keyword.
 
@@ -121,7 +125,7 @@ class TestAdaptiveRoutingObjective:
         with patch("app.services.rag_pipeline.generate_clinical_response") as mock_gemini:
             from app.services.rag_pipeline import route_and_process_query
 
-            result = route_and_process_query(
+            result = await route_and_process_query(
                 db=mock_db,
                 query="How many units are in stock?",
                 sku_id="SKU-001",
@@ -131,7 +135,9 @@ class TestAdaptiveRoutingObjective:
             assert "120" in result["answer"]
             assert result["context_used"] == []
 
-    def test_objective_query_without_sku_id_falls_to_gemini(self):
+    import pytest
+    @pytest.mark.anyio
+    async def test_objective_query_without_sku_id_falls_to_gemini(self):
         """
         ARRANGE: Query contains an objective keyword ("price") but NO
         sku_id is provided.
@@ -152,7 +158,7 @@ class TestAdaptiveRoutingObjective:
         ) as mock_gemini:
             from app.services.rag_pipeline import route_and_process_query
 
-            result = route_and_process_query(
+            result = await route_and_process_query(
                 db=mock_db,
                 query="What is the price?",
                 sku_id=None,  # No SKU provided
@@ -172,7 +178,9 @@ class TestAdaptiveRoutingSubjective:
     delegates to the Gemini RAG pipeline.
     """
 
-    def test_clinical_query_calls_gemini_rag(self):
+    import pytest
+    @pytest.mark.anyio
+    async def test_clinical_query_calls_gemini_rag(self):
         """
         ARRANGE: Query contains NO objective keywords (MRP, price, stock, etc.)
         It is a purely clinical question about drug safety during pregnancy.
@@ -203,7 +211,7 @@ class TestAdaptiveRoutingSubjective:
             # ==================================================================
             # ACT: Call the routing function with a clinical query
             # ==================================================================
-            result = route_and_process_query(
+            result = await route_and_process_query(
                 db=mock_db,
                 query="Is paracetamol safe for a pregnant patient?",
                 sku_id="SKU-001",
@@ -224,7 +232,9 @@ class TestAdaptiveRoutingSubjective:
             assert result["answer"] == expected_answer
             assert result["context_used"] == expected_context
 
-    def test_clinical_query_no_sku_id_still_calls_gemini(self):
+    import pytest
+    @pytest.mark.anyio
+    async def test_clinical_query_no_sku_id_still_calls_gemini(self):
         """
         ARRANGE: Clinical query with NO objective keywords and NO sku_id.
 
@@ -245,7 +255,7 @@ class TestAdaptiveRoutingSubjective:
         ) as mock_gemini:
             from app.services.rag_pipeline import route_and_process_query
 
-            result = route_and_process_query(
+            result = await route_and_process_query(
                 db=mock_db,
                 query="Can this be taken with metformin?",
                 sku_id=None,
