@@ -46,7 +46,20 @@ export default function OrderLedgerPage() {
 
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
         {isLoading ? (
-          <div className="p-10 text-center text-slate-500">Loading ledger data...</div>
+          <div className="w-full animate-pulse">
+            <div className="h-12 bg-slate-50 border-b border-slate-200 flex items-center px-4 gap-4">
+              {[...Array(7)].map((_, i) => (
+                <div key={i} className="h-4 bg-slate-200 rounded flex-1"></div>
+              ))}
+            </div>
+            {[...Array(5)].map((_, row) => (
+              <div key={row} className="flex items-center px-4 py-4 border-b border-slate-100 gap-4">
+                {[...Array(7)].map((_, col) => (
+                  <div key={col} className={`h-4 bg-slate-100 rounded flex-1 ${col === 6 ? 'max-w-[100px]' : ''}`}></div>
+                ))}
+              </div>
+            ))}
+          </div>
         ) : orders.length === 0 ? (
           <div className="p-10 text-center text-slate-500">No purchase orders found.</div>
         ) : (
