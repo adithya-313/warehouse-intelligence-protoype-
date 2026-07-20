@@ -332,3 +332,177 @@ class TestDrugResolver:
             assert result["confidence"] == "fuzzy"
             
             mock_db.query.assert_called()
+
+    def test_rca_case_2_pn40(self):
+        """Case 2: Short SKU-shaped token ('pn40') reaches fuzzy matcher."""
+        mock_db = MagicMock()
+        mock_db.query().all.return_value = []
+        with patch('app.domain.drug_resolver.get_known_drug_catalog') as mock_catalog, \
+             patch('app.domain.drug_resolver.translate_to_sku', side_effect=lambda db, m, skus: m):
+            mock_catalog.return_value = ({"PN40", "PAN40"}, set())
+            result = resolve_drug_entity(mock_db, "price of pn40")
+            assert result["status"] == "resolved"
+            assert result["sku_id"] == "PN40"
+
+    def test_rca_case_4_punctuation(self):
+        """Case 4: Token with quotes/commas resolves correctly."""
+        mock_db = MagicMock()
+        mock_db.query().all.return_value = []
+        with patch('app.domain.drug_resolver.get_known_drug_catalog') as mock_catalog, \
+             patch('app.domain.drug_resolver.translate_to_sku', side_effect=lambda db, m, skus: m):
+            mock_catalog.return_value = ({"TELMA40"}, set())
+            result = resolve_drug_entity(mock_db, "what is the price of 'TELMA-40',")
+            assert result["status"] == "resolved"
+            assert result["sku_id"] == "TELMA40"
+
+    def test_hyphenated_vs_bare_mismatch(self):
+        """Fix B: Hyphenated query token matches bare catalog SKU."""
+        mock_db = MagicMock()
+        mock_db.query().all.return_value = []
+        with patch('app.domain.drug_resolver.get_known_drug_catalog') as mock_catalog, \
+             patch('app.domain.drug_resolver.translate_to_sku', side_effect=lambda db, m, skus: m):
+            mock_catalog.return_value = ({"TELMA40"}, set())
+            result = resolve_drug_entity(mock_db, "TELMA-40")
+            assert result["status"] == "resolved"
+            assert result["sku_id"] == "TELMA40"
+
+class TestRCARegression:
+    """Test suite for the Phase 2.1 RCA regression queries."""
+    
+    def test_rca_funnel_queries(self):
+        import json as _json
+        from fastapi import FastAPI
+        from app.api.v1.knowledge_base import router as kb_router
+        from app.infrastructure.database import get_database_session
+        
+        mock_db = MagicMock()
+        mock_route = AsyncMock()
+        mock_route.return_value = {
+            "answer": "Here is the price",
+            "context_used": [],
+            "is_safe_to_dispense": True,
+            "system_lock_reason": None,
+            "citations": []
+        }
+        
+        app = FastAPI()
+        app.include_router(kb_router, prefix="/api/v1/knowledge-base")
+        app.dependency_overrides[get_database_session] = lambda: mock_db
+        
+        class MockRow:
+            def __init__(self, sku_id, brand_name):
+                self.sku_id = sku_id
+                self.metadata_payload = {"brand_name": brand_name}
+        
+        mock_ckb_query = MagicMock()
+        mock_ckb_query.all.return_value = [
+            MockRow("PAN40", "Pan 40"),
+            MockRow("TELMA40", "Telma 40"),
+            MockRow("PARACETAMOL500", "Paracetamol"),
+            MockRow("CROCIN500", "Crocin"),
+            MockRow("PN40", "PN 40")
+        ]
+        mock_db.query.return_value = mock_ckb_query
+        
+        with patch('app.domain.drug_resolver.get_known_drug_catalog') as mock_catalog, \
+             patch('app.api.v1.knowledge_base.route_and_process_query', mock_route):
+             
+            mock_catalog.return_value = ({"PAN40", "TELMA40", "PARACETAMOL500", "PN40", "CROCIN500"}, {"PAN 40", "TELMA 40", "PARACETAMOL", "CROCIN"})
+            
+            async def run_query(q):
+                scope = {
+                    "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST",
+                    "scheme": "http", "path": "/api/v1/knowledge-base/ask",
+                    "raw_path": b"/api/v1/knowledge-base/ask", "query_string": b"",
+                    "headers": [(b"content-type", b"application/json"), (b"host", b"testserver")],
+                }
+                body = _json.dumps({"query": q, "sku_id": None}).encode("utf-8")
+                response_status = None
+                response_body = b""
+                async def receive(): return {"type": "http.request", "body": body, "more_body": False}
+                async def send(message):
+                    nonlocal response_status, response_body
+                    if message["type"] == "http.response.start": response_status = message["status"]
+                    elif message["type"] == "http.response.body": response_body = message["body"]
+                
+                import asyncio
+                await app(scope, receive, send)
+                return _json.loads(response_body)
+            
+            import asyncio
+            
+            # Case 1: "price of PARCTMOL" -> no_intent (genuinely fails 0.85 cutoff)
+            res = asyncio.run(run_query("price of PARCTMOL"))
+            assert res.get("status") == "no_intent"
+            assert mock_route.call_count == 0
+            mock_route.reset_mock()
+            
+            # Case 2: "price of pn40" -> resolved
+            res = asyncio.run(run_query("price of pn40"))
+            assert mock_route.call_count == 1
+            assert mock_route.call_args[1]["sku_id"] == "PN40"
+            mock_route.reset_mock()
+            
+            # Case 3: "price of Pan" -> no_intent (fails exact/fuzzy match, falls back to intent gate)
+            res = asyncio.run(run_query("price of Pan"))
+            assert res.get("status") == "no_intent"
+            assert mock_route.call_count == 0
+            mock_route.reset_mock()
+            
+            # Case 4: "what is the price of 'TELMA-40'," -> resolved
+            res = asyncio.run(run_query("what is the price of 'TELMA-40',"))
+            assert mock_route.call_count == 1
+            assert mock_route.call_args[1]["sku_id"] == "TELMA40"
+            mock_route.reset_mock()
+            
+            # Case 5: "what is the price of pan 40" -> resolved
+            res = asyncio.run(run_query("what is the price of pan 40"))
+            assert mock_route.call_count == 1
+            assert mock_route.call_args[1]["sku_id"] == "PAN40"
+            mock_route.reset_mock()
+            
+            # Case 6: "what is the price of CROCCIN" -> resolved
+            res = asyncio.run(run_query("what is the price of CROCCIN"))
+            assert mock_route.call_count == 1
+            assert mock_route.call_args[1]["sku_id"] == "CROCIN500"
+            mock_route.reset_mock()
+            
+    def test_no_drug_no_db_call(self):
+        """A true no-drug-at-all control case (e.g. 'what\'s the weather today')
+        must STILL return NO_INTENT's short message with zero DB calls."""
+        import json as _json
+        from fastapi import FastAPI
+        from app.api.v1.knowledge_base import router as kb_router
+        from app.infrastructure.database import get_database_session
+        
+        mock_db = MagicMock()
+        mock_route = AsyncMock()
+        
+        app = FastAPI()
+        app.include_router(kb_router, prefix="/api/v1/knowledge-base")
+        app.dependency_overrides[get_database_session] = lambda: mock_db
+        
+        with patch('app.api.v1.knowledge_base.resolve_drug_entity') as mock_resolve, \
+             patch('app.api.v1.knowledge_base.route_and_process_query', mock_route):
+             
+            scope = {
+                "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST",
+                "scheme": "http", "path": "/api/v1/knowledge-base/ask",
+                "raw_path": b"/api/v1/knowledge-base/ask", "query_string": b"",
+                "headers": [(b"content-type", b"application/json"), (b"host", b"testserver")],
+            }
+            body = _json.dumps({"query": "what's the weather today", "sku_id": None}).encode("utf-8")
+            response_status = None
+            response_body = b""
+            async def receive(): return {"type": "http.request", "body": body, "more_body": False}
+            async def send(message):
+                nonlocal response_status, response_body
+                if message["type"] == "http.response.start": response_status = message["status"]
+                elif message["type"] == "http.response.body": response_body = message["body"]
+            
+            import asyncio
+            asyncio.run(app(scope, receive, send))
+            
+            data = _json.loads(response_body)
+            assert data.get("status") == "no_intent"
+            mock_resolve.assert_not_called()

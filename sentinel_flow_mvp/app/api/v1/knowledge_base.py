@@ -153,13 +153,13 @@ async def ask_clinical_assistant(
         f"query_len={len(cleaned_query)}"
     )
 
-    if bucket == IntentBucket.NO_INTENT:
-        # ------------------------------------------------------------------
-        # EARLY EXIT: No drug found → nothing to look up.
-        # ------------------------------------------------------------------
-        # We return a static message immediately without touching the
-        # database, the vector index, or Gemini. The user needs to rephrase
-        # their query with a medication name.
+    # =====================================================================
+    # PHASE 2: DRUG ENTITY RESOLVER (Disambiguation)
+    # =====================================================================
+    # Fix A: We only want to run the resolver if there's a chance of rescuing
+    # the query. If the query has absolutely NO intents AND no regex SKU 
+    # (e.g. "what's the weather today"), we exit immediately with 0 DB calls.
+    if bucket == IntentBucket.NO_INTENT and not any(intents.values()):
         return RAGQueryResponse(
             query=payload.query,
             answer=(
@@ -172,22 +172,40 @@ async def ask_clinical_assistant(
             is_safe_to_dispense=True,
             system_lock_reason=None,
             citations=[],
+            status="no_intent"
         )
-
-    # ------------------------------------------------------------------
-    # INVENTORY + AMBIGUOUS both proceed to the existing pipeline below.
-    #   - INVENTORY will be caught by route_and_process_query()'s
-    #     objective-keyword check and answered from the database.
-    #   - AMBIGUOUS will fall through to the clinical/RAG path, which
-    #     preserves the existing fail-safe behavior but now by design
-    #     instead of by accident.
-    # ------------------------------------------------------------------
-
-    # =====================================================================
-    # PHASE 2: DRUG ENTITY RESOLVER (Disambiguation)
-    # =====================================================================
+        
     resolution = resolve_drug_entity(db, cleaned_query)
-    
+
+    if bucket == IntentBucket.NO_INTENT:
+        # If the regex found no drug, but the DB catalog resolver DID find one
+        # (either exact brand match or fuzzy), we rescue the query!
+        if resolution["status"] in ("resolved", "disambiguate"):
+            logger.info("IntentGate rescued by DrugResolver: Found catalog match despite no regex SKU.")
+            if intents["objective"]:
+                bucket = IntentBucket.INVENTORY
+            else:
+                bucket = IntentBucket.AMBIGUOUS
+        else:
+            # ------------------------------------------------------------------
+            # FINAL FAIL-SAFE: No regex drug AND no catalog match.
+            # ------------------------------------------------------------------
+            return RAGQueryResponse(
+                query=payload.query,
+                answer=(
+                    "I could not identify a specific medication in your query. "
+                    "Please include the medication name (e.g., 'PAN-40', "
+                    "'TELMA-40', 'calpol 650'). If you need clinical advice, "
+                    "ask with a drug name included."
+                ),
+                context_used=[],
+                is_safe_to_dispense=True,
+                system_lock_reason=None,
+                citations=[],
+                status="no_intent" # Tag for tests
+            )
+
+    # Now handle the resolver's short-circuits (no_match and disambiguate)
     if resolution["status"] == "no_match":
         return RAGQueryResponse(
             query=payload.query,

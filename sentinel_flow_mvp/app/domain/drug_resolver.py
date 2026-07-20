@@ -66,16 +66,26 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
         logger.warning("DrugResolver: Catalog is empty.")
         return {"status": "no_match", "reason": "empty_catalog"}
 
-    query_upper = query.upper()
+    # Fix D: Strip punctuation before tokenizing or matching.
+    # Case 4 RCA: Quotes and commas degraded difflib ratio from >0.9 to 0.77.
+    # We strip trailing/leading punctuation from tokens and rebuild the query string.
+    raw_tokens = query.split()
+    tokens = [t.strip(".,;:'\"!?()") for t in raw_tokens if t.strip(".,;:'\"!?()")]
+    query_upper = " ".join(tokens).upper()
+    
+    # Fix B: SKU format mismatch. We normalize both the query and the catalog
+    # by stripping hyphens (e.g. "TELMA-40" vs "TELMA40") so they can match,
+    # but we append the original 'sku' or 'brand' so we return the real bare ID.
+    query_normalized = query_upper.replace("-", "")
     
     # Step 2: Attempt EXACT substring match.
     # We prefer longer exact matches just like extract_known_entities.
     matched_entities = []
     for sku in known_skus:
-        if sku in query_upper:
+        if sku.replace("-", "") in query_normalized:
             matched_entities.append(sku)
     for brand in known_brands:
-        if brand in query_upper:
+        if brand.replace("-", "") in query_normalized:
             matched_entities.append(brand)
             
     if matched_entities:
@@ -86,17 +96,20 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
         return {"status": "resolved", "sku_id": real_sku, "confidence": "exact"}
 
     # Step 3: If no exact match, attempt FUZZY match.
-    # We break the query into tokens and check against the catalog.
-    tokens = query.split()
     all_candidates = list(known_skus | known_brands)
+    # Map normalized candidates back to their real catalog identifiers
+    normalized_to_original = {c.replace("-", ""): c for c in all_candidates}
+    all_candidates_normalized = list(normalized_to_original.keys())
     
     fuzzy_matches = set()
     for token in tokens:
-        # We don't bother fuzzy matching tiny words
-        if len(token) <= 4:
+        # Fix C: Only skip pure alphabetic tokens that are <= 4 chars (e.g., "the", "for").
+        # If it has a digit (e.g. "pn40", "40"), it is likely a SKU and should NOT be skipped.
+        # This prevents skipping short-but-valid codes.
+        if token.isalpha() and len(token) <= 4:
             continue
             
-        token_upper = token.upper()
+        token_normalized = token.upper().replace("-", "")
         # difflib.get_close_matches finds close string similarities.
         # Beginner Note: The cutoff here is 0.85, which is intentionally tighter
         # than sanitizer.py's 0.6. Why? Because this function's job is
@@ -105,13 +118,13 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
         # we only match or disambiguate when the spelling is extremely close.
         # We request up to 3 matches for the disambiguation UI.
         close_matches = difflib.get_close_matches(
-            token_upper,
-            all_candidates,
+            token_normalized,
+            all_candidates_normalized,
             n=3,
             cutoff=0.85
         )
         for match in close_matches:
-            fuzzy_matches.add(match)
+            fuzzy_matches.add(normalized_to_original[match])
 
     if not fuzzy_matches:
         logger.info("DrugResolver: No close match found.")
@@ -122,8 +135,8 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
     # we sort again by max similarity against any query token just to be safe.
     sorted_choices.sort(
         key=lambda choice: max(
-            difflib.SequenceMatcher(None, choice, t.upper()).ratio() 
-            for t in tokens if len(t) > 4
+            difflib.SequenceMatcher(None, choice.replace("-", ""), t.upper().replace("-", "")).ratio() 
+            for t in tokens if not (t.isalpha() and len(t) <= 4)
         ),
         reverse=True
     )
