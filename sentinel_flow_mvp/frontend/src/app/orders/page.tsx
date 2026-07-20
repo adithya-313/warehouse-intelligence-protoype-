@@ -75,31 +75,49 @@ export default function OrderLedgerPage() {
         {/*
         AnimatePresence mode="wait" makes sure only one of these three
         states is mounted at any time: loading skeleton, empty message,
-        or the real table. When the skeleton fades out, the table slides
+        or the real table. When the skeleton fades out, the table fades
         in — no jarring instant-replacement flash.
         */}
         <AnimatePresence mode="wait">
           {isLoading ? (
+            // This "loading" table looks almost exactly like the real table below,
+            // except every cell shows a gray pulsing bar instead of real data.
+            // We use the SAME table-fixed layout and SAME column widths so that
+            // when the real data arrives, the table doesn't suddenly resize or
+            // reshape — it already has the right shape, just with placeholder content.
             <motion.div
               key="loading"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
-              className="w-full animate-pulse"
             >
-              <div className="h-12 bg-slate-50 border-b border-slate-200 flex items-center px-4 gap-4">
-                {[...Array(7)].map((_, i) => (
-                  <div key={i} className="h-4 bg-slate-200 rounded flex-1"></div>
-                ))}
-              </div>
-              {[...Array(5)].map((_, row) => (
-                <div key={row} className="flex items-center px-4 py-4 border-b border-slate-100 gap-4">
-                  {[...Array(7)].map((_, col) => (
-                    <div key={col} className={`h-4 bg-slate-100 rounded flex-1 ${col === 6 ? 'max-w-[100px]' : ''}`}></div>
+              <table className="w-full table-fixed text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-sm font-semibold text-slate-600">
+                    <th className="p-4 w-[14%]">PO ID</th>
+                    <th className="p-4 w-[14%]">Vendor ID</th>
+                    <th className="p-4 w-[16%]">Order Date</th>
+                    <th className="p-4 w-[16%]">Expected Delivery</th>
+                    <th className="p-4 w-[12%]">Line Items</th>
+                    <th className="p-4 w-[16%]">Capital Value</th>
+                    <th className="p-4 w-[12%]">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[1, 2, 3, 4, 5].map((rowNum) => (
+                    <tr key={rowNum} className="border-b border-slate-100">
+                      <td className="p-4"><div className="h-4 bg-slate-200 rounded animate-pulse"></div></td>
+                      <td className="p-4"><div className="h-4 bg-slate-200 rounded animate-pulse"></div></td>
+                      <td className="p-4"><div className="h-4 bg-slate-200 rounded animate-pulse"></div></td>
+                      <td className="p-4"><div className="h-4 bg-slate-200 rounded animate-pulse"></div></td>
+                      <td className="p-4"><div className="h-4 bg-slate-200 rounded animate-pulse"></div></td>
+                      <td className="p-4"><div className="h-4 bg-slate-200 rounded animate-pulse"></div></td>
+                      <td className="p-4"><div className="h-4 bg-slate-200 rounded animate-pulse"></div></td>
+                    </tr>
                   ))}
-                </div>
-              ))}
+                </tbody>
+              </table>
             </motion.div>
           ) : orders.length === 0 ? (
             <motion.div
@@ -113,23 +131,34 @@ export default function OrderLedgerPage() {
               No purchase orders found.
             </motion.div>
           ) : (
+            // This wrapper used to slide up AND fade in. The page itself (template.tsx) already
+            // slides up when you navigate here, and each row below already slides up when it
+            // appears. Having three things slide at once made everything look like it was
+            // jittering. This wrapper now only fades in — the sliding motion is handled once,
+            // by the rows, so it reads as one smooth reveal instead of three fighting animations.
             <motion.div
               key="table"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ type: "spring", stiffness: 260, damping: 20 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
             >
-              <table className="w-full text-left border-collapse">
+              {/*
+              Giving every column a fixed width — instead of letting the browser
+              guess based on content — means the table looks exactly the same
+              whether it's showing placeholder bars or real order data. Nothing
+              needs to resize when the data swaps in.
+              */}
+              <table className="w-full table-fixed text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-sm font-semibold text-slate-600">
-                    <th className="p-4">PO ID</th>
-                    <th className="p-4">Vendor ID</th>
-                    <th className="p-4">Order Date</th>
-                    <th className="p-4">Expected Delivery</th>
-                    <th className="p-4">Line Items</th>
-                    <th className="p-4">Capital Value</th>
-                    <th className="p-4">Status</th>
+                    <th className="p-4 w-[14%]">PO ID</th>
+                    <th className="p-4 w-[14%]">Vendor ID</th>
+                    <th className="p-4 w-[16%]">Order Date</th>
+                    <th className="p-4 w-[16%]">Expected Delivery</th>
+                    <th className="p-4 w-[12%]">Line Items</th>
+                    <th className="p-4 w-[16%]">Capital Value</th>
+                    <th className="p-4 w-[12%]">Status</th>
                   </tr>
                 </thead>
                 {/*
