@@ -88,7 +88,18 @@ def _mock_heavy_modules():
              "google.genai.types": MagicMock(),
              "app.services.semantic_search": search_mock,
          }):
-        yield helpers
+        try:
+            yield helpers
+        finally:
+            try:
+                from app.services.rag_pipeline import get_gemini_circuit_breaker
+                from app.core.circuit_breaker import CircuitStateEnum
+                cb = get_gemini_circuit_breaker()
+                cb.current_state = CircuitStateEnum.CLOSED
+                cb.failure_count = 0
+                cb.last_failure_time = None
+            except Exception:
+                pass
 
 
 # =====================================================================
