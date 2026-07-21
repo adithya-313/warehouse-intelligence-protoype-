@@ -11,6 +11,7 @@ save money and latency by not calling Gemini for simple price/stock questions.
 Every test follows the Arrange-Act-Assert (AAA) pattern.
 """
 
+import pytest
 from unittest.mock import MagicMock, patch
 from datetime import date
 
@@ -24,7 +25,6 @@ class TestAdaptiveRoutingObjective:
     the Gemini API.
     """
 
-    import pytest
     @pytest.mark.anyio
     async def test_objective_mrp_query_returns_database_answer(self):
         """
@@ -98,7 +98,6 @@ class TestAdaptiveRoutingObjective:
                 "because no RAG pipeline was executed."
             )
 
-    import pytest
     @pytest.mark.anyio
     async def test_objective_stock_query_returns_database_answer(self):
         """
@@ -135,7 +134,6 @@ class TestAdaptiveRoutingObjective:
             assert "120" in result["answer"]
             assert result["context_used"] == []
 
-    import pytest
     @pytest.mark.anyio
     async def test_objective_query_without_sku_id_falls_to_gemini(self):
         """
@@ -178,7 +176,6 @@ class TestAdaptiveRoutingSubjective:
     delegates to the Gemini RAG pipeline.
     """
 
-    import pytest
     @pytest.mark.anyio
     async def test_clinical_query_calls_gemini_rag(self):
         """
@@ -232,7 +229,6 @@ class TestAdaptiveRoutingSubjective:
             assert result["answer"] == expected_answer
             assert result["context_used"] == expected_context
 
-    import pytest
     @pytest.mark.anyio
     async def test_clinical_query_no_sku_id_still_calls_gemini(self):
         """
