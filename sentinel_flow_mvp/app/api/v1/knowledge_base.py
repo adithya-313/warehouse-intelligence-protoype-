@@ -1,3 +1,5 @@
+import uuid
+import time
 import logging
 from fastapi import APIRouter, status, Depends
 from sqlalchemy.orm import Session
@@ -84,112 +86,103 @@ async def ask_clinical_assistant(
              safety, pediatric dosage, substitute, or simple objective data).
     """
 
-    # =====================================================================
-    # STEP 0: SANITIZE THE QUERY
-    # =====================================================================
-    # Beginner Note: We build a list of valid drug names from the frontend
-    # payload (if a specific SKU was provided) or from the query text
-    # itself. The sanitizer will check each word against this list and
-    # correct any close misspellings (60% similarity threshold).
+    import uuid
+    import time
 
-    # Start with the query text as-is
-    raw_query = payload.query
+    correlation_id = str(uuid.uuid4())
+    start_time = time.monotonic()
+    
+    # This dict collects facts about this one request as we go, so we can log exactly
+    # one clean summary line at the very end, no matter which exit door the request leaves through.
+    request_metrics = {
+        "intent": None,
+        "path_taken": None,
+        "fallback_triggered": False,
+        "drug_resolved": None,
+        "disambiguation_triggered": False,
+    }
+    
+    try:
+        # =====================================================================
+        # STEP 0: SANITIZE THE QUERY
+        # =====================================================================
+        # Beginner Note: We build a list of valid drug names from the frontend
+        # payload (if a specific SKU was provided) or from the query text
+        # itself. The sanitizer will check each word against this list and
+        # correct any close misspellings (60% similarity threshold).
 
-    # Build a list of valid drug names to check against.
-    # If the frontend provided a SKU, include it so the user's
-    # misspelling of that SKU gets corrected.
-    valid_names_list = []
-    if payload.sku_id:
-        valid_names_list.append(payload.sku_id)
+        # Start with the query text as-is
+        raw_query = payload.query
 
-    # Run the fuzzy drug-name cleaner on the query.
-    # This replaces words like "Crooosin" with "CROCIN" so the
-    # search engine receives a correctly-spelled query.
-    cleaned_query = sanitizer.clean_drug_names(
-        query=raw_query,
-        valid_names=valid_names_list,
-    )
+        # Build a list of valid drug names to check against.
+        # If the frontend provided a SKU, include it so the user's
+        # misspelling of that SKU gets corrected.
+        valid_names_list = []
+        if payload.sku_id:
+            valid_names_list.append(payload.sku_id)
 
-    # Extract the SKU from the cleaned query text using the unified
-    # regex pattern (handles both "AMOXI-500" and "PAN40" formats).
-    extracted_sku = sanitizer.extract_sku(cleaned_query)
-
-    # Determine which intents are present in the query.
-    intents = sanitizer.extract_intents(cleaned_query)
-
-    # =====================================================================
-    # STEP 1: INTENT GATE — TRAFFIC COP (Phase 1)
-    # =====================================================================
-    # Beginner Note: Before we do ANY database work, we classify the query
-    # into one of four buckets using only the query text and the extracted
-    # SKU. This is a pure function — no I/O, no DB, no vector search.
-    #
-    # The gate checks:
-    #   - Is there a drug (SKU) in the query? (cheap regex only)
-    #   - Is there an objective keyword ("price", "stock", etc.)?
-    #
-    # If NEITHER: NO_INTENT → return "please rephrase" immediately.
-    #   Zero DB calls, zero vector calls, zero LLM calls.
-    #
-    # If drug + keyword: INVENTORY → proceed to database path.
-    #   (Phase 3 will enhance this with SQL stock injection.)
-    #
-    # If drug but no keyword: AMBIGUOUS → proceed to clinical path.
-    #   (The existing pregnancy/pediatric/substitute checks further
-    #   downstream will resolve this to CLINICAL if a clinical keyword
-    #   is found. All other ambiguous queries default to the RAG pipeline,
-    #   which is the safe fail-safe.)
-    bucket = classify_intent(
-        query=cleaned_query,
-        sku_id=extracted_sku,
-        has_objective_keyword=intents["objective"],
-    )
-
-    # TEMP: minimal trace log for Phase 1 verification — Phase 4 will replace
-    # this with structured JSON covering the full funnel decision.
-    logger.info(
-        f"IntentGate decision: bucket={bucket.value} "
-        f"sku_id={extracted_sku} "
-        f"query_len={len(cleaned_query)}"
-    )
-
-    # =====================================================================
-    # PHASE 2: DRUG ENTITY RESOLVER (Disambiguation)
-    # =====================================================================
-    # Fix A: We only want to run the resolver if there's a chance of rescuing
-    # the query. If the query has absolutely NO intents AND no regex SKU 
-    # (e.g. "what's the weather today"), we exit immediately with 0 DB calls.
-    if bucket == IntentBucket.NO_INTENT and not any(intents.values()):
-        return RAGQueryResponse(
-            query=payload.query,
-            answer=(
-                "I could not identify a specific medication in your query. "
-                "Please include the medication name (e.g., 'PAN-40', "
-                "'TELMA-40', 'calpol 650'). If you need clinical advice, "
-                "ask with a drug name included."
-            ),
-            context_used=[],
-            is_safe_to_dispense=True,
-            system_lock_reason=None,
-            citations=[],
-            status="no_intent"
+        # Run the fuzzy drug-name cleaner on the query.
+        # This replaces words like "Crooosin" with "CROCIN" so the
+        # search engine receives a correctly-spelled query.
+        cleaned_query = sanitizer.clean_drug_names(
+            query=raw_query,
+            valid_names=valid_names_list,
         )
-        
-    resolution = resolve_drug_entity(db, cleaned_query)
 
-    if bucket == IntentBucket.NO_INTENT:
-        # If the regex found no drug, but the DB catalog resolver DID find one
-        # (either exact brand match or fuzzy), we rescue the query!
-        if resolution["status"] in ("resolved", "disambiguate"):
-            logger.info("IntentGate rescued by DrugResolver: Found catalog match despite no regex SKU.")
-            if intents["objective"]:
-                bucket = IntentBucket.INVENTORY
-            else:
-                bucket = IntentBucket.AMBIGUOUS
-        else:
-            # ------------------------------------------------------------------
-            # FINAL FAIL-SAFE: No regex drug AND no catalog match.
-            # ------------------------------------------------------------------
+        # Extract the SKU from the cleaned query text using the unified
+        # regex pattern (handles both "AMOXI-500" and "PAN40" formats).
+        extracted_sku = sanitizer.extract_sku(cleaned_query)
+
+        # Determine which intents are present in the query.
+        intents = sanitizer.extract_intents(cleaned_query)
+
+        # =====================================================================
+        # STEP 1: INTENT GATE — TRAFFIC COP (Phase 1)
+        # =====================================================================
+        # Beginner Note: Before we do ANY database work, we classify the query
+        # into one of four buckets using only the query text and the extracted
+        # SKU. This is a pure function — no I/O, no DB, no vector search.
+        #
+        # The gate checks:
+        #   - Is there a drug (SKU) in the query? (cheap regex only)
+        #   - Is there an objective keyword ("price", "stock", etc.)?
+        #
+        # If NEITHER: NO_INTENT → return "please rephrase" immediately.
+        #   Zero DB calls, zero vector calls, zero LLM calls.
+        #
+        # If drug + keyword: INVENTORY → proceed to database path.
+        #   (Phase 3 will enhance this with SQL stock injection.)
+        #
+        # If drug but no keyword: AMBIGUOUS → proceed to clinical path.
+        #   (The existing pregnancy/pediatric/substitute checks further
+        #   downstream will resolve this to CLINICAL if a clinical keyword
+        #   is found. All other ambiguous queries default to the RAG pipeline,
+        #   which is the safe fail-safe.)
+        bucket = classify_intent(
+            query=cleaned_query,
+            sku_id=extracted_sku,
+            has_objective_keyword=intents["objective"],
+        )
+
+        # TEMP: minimal trace log for Phase 1 verification — Phase 4 will replace
+        # this with structured JSON covering the full funnel decision.
+        logger.info(
+            f"IntentGate decision: bucket={bucket.value} "
+            f"sku_id={extracted_sku} "
+            f"query_len={len(cleaned_query)}"
+        )
+
+        # =====================================================================
+        # PHASE 2: DRUG ENTITY RESOLVER (Disambiguation)
+        # =====================================================================
+        # Fix A: We only want to run the resolver if there's a chance of rescuing
+        # the query. If the query has absolutely NO intents AND no regex SKU 
+        # (e.g. "what's the weather today"), we exit immediately with 0 DB calls.
+        if bucket == IntentBucket.NO_INTENT and not any(intents.values()):
+            request_metrics["intent"] = bucket.value if hasattr(bucket, "value") else str(bucket)
+            request_metrics["path_taken"] = "none"
+            request_metrics["fallback_triggered"] = True
+            # drug_resolved is None since resolve_drug_entity was not called
             return RAGQueryResponse(
                 query=payload.query,
                 answer=(
@@ -202,114 +195,172 @@ async def ask_clinical_assistant(
                 is_safe_to_dispense=True,
                 system_lock_reason=None,
                 citations=[],
-                status="no_intent" # Tag for tests
+                status="no_intent"
             )
+            
+        resolution = resolve_drug_entity(db, cleaned_query)
 
-    # Now handle the resolver's short-circuits (no_match and disambiguate)
-    if resolution["status"] == "no_match":
-        return RAGQueryResponse(
-            query=payload.query,
-            answer=(
-                "I could not find a match for that medication in our catalog. "
-                "Please check the spelling and try again."
-            ),
-            context_used=[],
-            is_safe_to_dispense=True,
-            system_lock_reason=None,
-            citations=[],
-            status="no_match"
-        )
-    elif resolution["status"] == "disambiguate":
-        return RAGQueryResponse(
-            query=payload.query,
-            answer="I found multiple matches. Did you mean one of these?",
-            context_used=[],
-            is_safe_to_dispense=True,
-            system_lock_reason=None,
-            citations=[],
-            status="disambiguate",
-            choices=resolution["choices"]
-        )
-    elif resolution["status"] == "resolved":
-        extracted_sku = resolution["sku_id"]
-
-
-    # =====================================================================
-    # STEP 2: HANDLE SUBSTITUTE INTENT
-    # =====================================================================
-    # Beginner Note: If the user asks for a "substitute" or "alternative"
-    # for a drug, we route directly to the substitute finder instead of
-    # the general RAG pipeline. This bypasses the LLM entirely and
-    # returns real-time stock and pricing data from the database.
-
-    if intents["substitute"] and extracted_sku is not None:
-        logger.info(
-            f"QuerySanitizer: Routing substitute intent for SKU "
-            f"'{extracted_sku}' to substitute finder."
-        )
-
-        substitutes = find_clinical_substitutes(
-            db, target_sku=extracted_sku, threshold=0.80
-        )
-
-        if substitutes:
-            # Format the returned substitutes into a clean string
-            lines = [f"Found alternatives for {extracted_sku}:"]
-            for sub in substitutes:
-                lines.append(
-                    f"Found alternative: {sub['sku_id']} - "
-                    f"Stock: {sub['stock_qty']} - "
-                    f"Price: ₹{sub['unit_price_inr']:.2f}"
+        if bucket == IntentBucket.NO_INTENT:
+            # If the regex found no drug, but the DB catalog resolver DID find one
+            # (either exact brand match or fuzzy), we rescue the query!
+            if resolution["status"] in ("resolved", "disambiguate"):
+                logger.info("IntentGate rescued by DrugResolver: Found catalog match despite no regex SKU.")
+                if intents["objective"]:
+                    bucket = IntentBucket.INVENTORY
+                else:
+                    bucket = IntentBucket.AMBIGUOUS
+            else:
+                # ------------------------------------------------------------------
+                # FINAL FAIL-SAFE: No regex drug AND no catalog match.
+                # ------------------------------------------------------------------
+                return RAGQueryResponse(
+                    query=payload.query,
+                    answer=(
+                        "I could not identify a specific medication in your query. "
+                        "Please include the medication name (e.g., 'PAN-40', "
+                        "'TELMA-40', 'calpol 650'). If you need clinical advice, "
+                        "ask with a drug name included."
+                    ),
+                    context_used=[],
+                    is_safe_to_dispense=True,
+                    system_lock_reason=None,
+                    citations=[],
+                    status="no_intent" # Tag for tests
                 )
-            formatted_response = "\n".join(lines)
-        else:
-            formatted_response = (
-                f"No suitable clinical substitutes found for "
-                f"{extracted_sku} above 80% similarity threshold."
+
+        # Now handle the resolver's short-circuits (no_match and disambiguate)
+        if resolution["status"] == "no_match":
+            request_metrics["intent"] = bucket.value if hasattr(bucket, "value") else str(bucket)
+            request_metrics["drug_resolved"] = False
+            request_metrics["disambiguation_triggered"] = False
+            request_metrics["fallback_triggered"] = True
+            request_metrics["path_taken"] = "none"
+            return RAGQueryResponse(
+                query=payload.query,
+                answer=(
+                    "I could not find a match for that medication in our catalog. "
+                    "Please check the spelling and try again."
+                ),
+                context_used=[],
+                is_safe_to_dispense=True,
+                system_lock_reason=None,
+                citations=[],
+                status="no_match"
+            )
+        elif resolution["status"] == "disambiguate":
+            request_metrics["intent"] = bucket.value if hasattr(bucket, "value") else str(bucket)
+            request_metrics["drug_resolved"] = False
+            request_metrics["disambiguation_triggered"] = True
+            request_metrics["path_taken"] = "none"
+            return RAGQueryResponse(
+                query=payload.query,
+                answer="I found multiple matches. Did you mean one of these?",
+                context_used=[],
+                is_safe_to_dispense=True,
+                system_lock_reason=None,
+                citations=[],
+                status="disambiguate",
+                choices=resolution["choices"]
+            )
+        elif resolution["status"] == "resolved":
+            extracted_sku = resolution["sku_id"]
+
+
+        # =====================================================================
+        # STEP 2: HANDLE SUBSTITUTE INTENT
+        # =====================================================================
+        # Beginner Note: If the user asks for a "substitute" or "alternative"
+        # for a drug, we route directly to the substitute finder instead of
+        # the general RAG pipeline. This bypasses the LLM entirely and
+        # returns real-time stock and pricing data from the database.
+
+        if intents["substitute"] and extracted_sku is not None:
+            logger.info(
+                f"QuerySanitizer: Routing substitute intent for SKU "
+                f"'{extracted_sku}' to substitute finder."
             )
 
-        return RAGQueryResponse(
-            query=payload.query,
-            answer=formatted_response,
-            context_used=[],
-            is_safe_to_dispense=True,
-            system_lock_reason=None,
-            citations=[],
+            substitutes = find_clinical_substitutes(
+                db, target_sku=extracted_sku, threshold=0.80
+            )
+
+            if substitutes:
+                # Format the returned substitutes into a clean string
+                lines = [f"Found alternatives for {extracted_sku}:"]
+                for sub in substitutes:
+                    lines.append(
+                        f"Found alternative: {sub['sku_id']} - "
+                        f"Stock: {sub['stock_qty']} - "
+                        f"Price: ₹{sub['unit_price_inr']:.2f}"
+                    )
+                formatted_response = "\n".join(lines)
+            else:
+                formatted_response = (
+                    f"No suitable clinical substitutes found for "
+                    f"{extracted_sku} above 80% similarity threshold."
+                )
+
+            request_metrics["intent"] = bucket.value if hasattr(bucket, "value") else str(bucket)
+            request_metrics["drug_resolved"] = True
+            request_metrics["disambiguation_triggered"] = False
+            request_metrics["path_taken"] = "substitute"
+            return RAGQueryResponse(
+                query=payload.query,
+                answer=formatted_response,
+                context_used=[],
+                is_safe_to_dispense=True,
+                system_lock_reason=None,
+                citations=[],
+            )
+
+        # =====================================================================
+        # STEP 3: ROUTE TO ADAPTIVE PIPELINE (WITH INTENTS FOR THE JUDGE)
+        # =====================================================================
+        # Pass the cleaned query and extracted SKU to the existing adaptive
+        # router. If the SKU was already extracted by the sanitizer, the
+        # router will skip its own SKU extraction and use ours.
+        # If no SKU was found (extracted_sku is None), the router will
+        # fall back to its own extraction logic or to Gemini.
+        #
+        # Phase 3 addition: We also pass the intents dict so the Rule Engine
+        # (ClinicalSafetyJudge) can perform deterministic safety checks
+        # BEFORE the LLM is called. The intents tell the Judge whether the
+        # patient is pregnant, pediatric, or asking for a substitute.
+
+        # Use the extracted SKU if found, otherwise fall back to the
+        # frontend-provided SKU (payload.sku_id).
+        final_sku = extracted_sku or payload.sku_id
+
+        rag_data = await route_and_process_query(
+            db=db,
+            query=cleaned_query,
+            sku_id=final_sku,
+            intents=intents,
         )
 
-    # =====================================================================
-    # STEP 3: ROUTE TO ADAPTIVE PIPELINE (WITH INTENTS FOR THE JUDGE)
-    # =====================================================================
-    # Pass the cleaned query and extracted SKU to the existing adaptive
-    # router. If the SKU was already extracted by the sanitizer, the
-    # router will skip its own SKU extraction and use ours.
-    # If no SKU was found (extracted_sku is None), the router will
-    # fall back to its own extraction logic or to Gemini.
-    #
-    # Phase 3 addition: We also pass the intents dict so the Rule Engine
-    # (ClinicalSafetyJudge) can perform deterministic safety checks
-    # BEFORE the LLM is called. The intents tell the Judge whether the
-    # patient is pregnant, pediatric, or asking for a substitute.
-
-    # Use the extracted SKU if found, otherwise fall back to the
-    # frontend-provided SKU (payload.sku_id).
-    final_sku = extracted_sku or payload.sku_id
-
-    rag_data = await route_and_process_query(
-        db=db,
-        query=cleaned_query,
-        sku_id=final_sku,
-        intents=intents,
-    )
-
-    return RAGQueryResponse(
-        query=payload.query,
-        answer=rag_data["answer"],
-        context_used=rag_data["context_used"],
-        is_safe_to_dispense=rag_data.get("is_safe_to_dispense", True),
-        system_lock_reason=rag_data.get("system_lock_reason"),
-        citations=rag_data.get("citations", []),
-    )
+        request_metrics["intent"] = bucket.value if hasattr(bucket, "value") else str(bucket)
+        request_metrics["drug_resolved"] = True
+        request_metrics["disambiguation_triggered"] = False
+        request_metrics["path_taken"] = rag_data.get("path_taken")
+        return RAGQueryResponse(
+            query=payload.query,
+            answer=rag_data["answer"],
+            context_used=rag_data["context_used"],
+            is_safe_to_dispense=rag_data.get("is_safe_to_dispense", True),
+            system_lock_reason=rag_data.get("system_lock_reason"),
+            citations=rag_data.get("citations", []),
+        )
+    except Exception:
+        # we don't know the outcome, but log what we captured so far
+        raise
+    finally:
+        latency_ms = round((time.monotonic() - start_time) * 1000, 2)
+        request_metrics["latency_ms"] = latency_ms
+        request_metrics["correlation_id"] = correlation_id
+        logger.info(
+            "request_completed",
+            extra=request_metrics,
+        )
 
 
 # =========================================================================
