@@ -245,6 +245,7 @@ async def route_and_process_query(
                 "is_safe_to_dispense": True,
                 "system_lock_reason": None,
                 "citations": [],
+                "path_taken": "inventory",
             }
 
         else:
@@ -258,6 +259,7 @@ async def route_and_process_query(
                 "is_safe_to_dispense": True,
                 "system_lock_reason": None,
                 "citations": [],
+                "path_taken": "inventory",
             }
 
     # =====================================================================
@@ -278,12 +280,17 @@ async def route_and_process_query(
         "Routing to Gemini RAG pipeline."
     )
 
-    return await generate_clinical_response(
+    clinical_result = await generate_clinical_response(
         db=db,
         query=query,
         sku_id=sku_id,
         intents=intents or {},
     )
+    
+    # We tag the result here so the endpoint knows which path was taken, 
+    # without needing to change the clinical function itself.
+    clinical_result["path_taken"] = "clinical"
+    return clinical_result
 
 
 # =====================================================================
