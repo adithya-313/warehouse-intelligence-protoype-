@@ -150,6 +150,7 @@ class TestResultCache:
             "is_safe_to_dispense": True,
             "system_lock_reason": None,
             "citations": [],
+            "path_taken": "clinical",
         }
 
         mock_redis = AsyncMock()
