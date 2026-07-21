@@ -16,6 +16,17 @@ from datetime import datetime, timezone
 from typing import Optional
 
 
+# Standard LogRecord attributes that are handled natively by Python's logging system.
+# We define this set so that any custom fields passed via `extra={...}` (such as 
+# latency_ms or path_taken) can be automatically included in the JSON output, 
+# while skipping these internal or already-handled fields.
+STANDARD_LOG_RECORD_KEYS = {
+    "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
+    "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
+    "created", "msecs", "relativeCreated", "thread", "threadName",
+    "processName", "process", "correlation_id", "message", "asctime", "taskName"
+}
+
 class JSONLogFormatter(logging.Formatter):
     """Emit log records as newline-delimited JSON objects.
 
@@ -44,6 +55,12 @@ class JSONLogFormatter(logging.Formatter):
 
         if record.exc_info and record.exc_info[0] is not None:
             log_entry["exception"] = self.formatException(record.exc_info)
+
+        # Loop over the raw log record dict and copy any custom extra fields 
+        # (like latency_ms) into the final JSON output.
+        for key, value in record.__dict__.items():
+            if key not in STANDARD_LOG_RECORD_KEYS:
+                log_entry[key] = value
 
         return json.dumps(log_entry, default=str)
 
