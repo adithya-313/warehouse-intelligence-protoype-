@@ -34,5 +34,9 @@ def get_optimal_fefo_batch(db: Session, sku_id: str, required_qty: int = 1):
         "expiry_date": optimal_batch.expiry_date,
         "available_quantity": optimal_batch.available_quantity,
         "shelf_location": optimal_batch.shelf_location,
+        # We also hand back the price here now, since Phase 3's clinical
+        # narration needs it — every other caller just ignores this new key,
+        # so nothing existing breaks.
+        "max_retail_price": optimal_batch.max_retail_price,
         "instruction": f"Pull from {optimal_batch.shelf_location}. Batch {optimal_batch.batch_id} expires on {optimal_batch.expiry_date}."
     }

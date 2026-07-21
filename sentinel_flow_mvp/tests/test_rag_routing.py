@@ -259,3 +259,100 @@ class TestAdaptiveRoutingSubjective:
 
             mock_gemini.assert_called_once()
             assert result["answer"] == "AI answer about drug interactions"
+
+class TestClinicalNarrationStockInjection:
+    """
+    Tests for Phase 3 stock injection into the clinical narration path.
+    """
+
+    @pytest.mark.anyio
+    async def test_clinical_response_includes_stock_when_available(self):
+        """
+        ARRANGE: Mock the DB and get_optimal_fefo_batch to return stock data.
+                 Mock execute_clinical_search to return a clinical context item.
+        
+        ACT: Call generate_clinical_response.
+        
+        ASSERT: The injected stock text appears in the context given to Gemini.
+        """
+        mock_db = MagicMock()
+        
+        with patch("app.services.rag_pipeline.get_optimal_fefo_batch") as mock_fefo, \
+             patch("app.services.semantic_search.execute_clinical_search") as mock_search, \
+             patch("google.genai.Client") as mock_client_class:
+            
+            # Setup semantic search mock
+            mock_search.return_value = {"results": [{"content": "clinical data", "sku_id": "SKU-001"}]}
+            
+            # Setup FEFO stock mock
+            mock_fefo.return_value = {
+                "available_quantity": 100,
+                "max_retail_price": 50.0,
+                "expiry_date": date(2027, 12, 1)
+            }
+            
+            # Setup Gemini mock
+            mock_client_instance = MagicMock()
+            mock_client_class.return_value = mock_client_instance
+            mock_generate_content = mock_client_instance.models.generate_content
+            mock_generate_content.return_value = MagicMock(
+                text='{"is_safe_to_dispense": true, "narrative": "AI response", "system_lock_reason": null, "citations": []}'
+            )
+            
+            from app.services.rag_pipeline import generate_clinical_response
+            
+            result = await generate_clinical_response(
+                db=mock_db,
+                query="Is this safe?",
+                sku_id="SKU-001"
+            )
+            
+            mock_generate_content.assert_called_once()
+            call_kwargs = mock_generate_content.call_args[1]
+            prompt_text = call_kwargs["contents"]
+            
+            assert "(In stock: 100 units, ₹50.0, expires 2027-12-01)" in prompt_text
+
+    @pytest.mark.anyio
+    async def test_clinical_response_handles_missing_stock_gracefully(self):
+        """
+        ARRANGE: Mock get_optimal_fefo_batch to return None (no stock).
+        
+        ACT: Call generate_clinical_response.
+        
+        ASSERT: The RAG pipeline still works, but no stock info is injected.
+        """
+        mock_db = MagicMock()
+        
+        with patch("app.services.rag_pipeline.get_optimal_fefo_batch") as mock_fefo, \
+             patch("app.services.semantic_search.execute_clinical_search") as mock_search, \
+             patch("google.genai.Client") as mock_client_class:
+            
+            # Setup semantic search mock
+            mock_search.return_value = {"results": [{"content": "clinical data", "sku_id": "SKU-001"}]}
+            
+            # Setup FEFO stock mock to return None
+            mock_fefo.return_value = None
+            
+            # Setup Gemini mock
+            mock_client_instance = MagicMock()
+            mock_client_class.return_value = mock_client_instance
+            mock_generate_content = mock_client_instance.models.generate_content
+            mock_generate_content.return_value = MagicMock(
+                text='{"is_safe_to_dispense": true, "narrative": "AI response", "system_lock_reason": null, "citations": []}'
+            )
+            
+            from app.services.rag_pipeline import generate_clinical_response
+            
+            result = await generate_clinical_response(
+                db=mock_db,
+                query="Is this safe?",
+                sku_id="SKU-001"
+            )
+            
+            mock_generate_content.assert_called_once()
+            call_kwargs = mock_generate_content.call_args[1]
+            prompt_text = call_kwargs["contents"]
+            
+            assert "In stock:" not in prompt_text
+            assert "clinical data" in prompt_text

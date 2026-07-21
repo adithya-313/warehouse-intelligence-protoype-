@@ -29,6 +29,7 @@ from app.infrastructure.models import (
     ClinicalKnowledgeBase,
 )
 from app.services.rule_engine import ClinicalSafetyJudge
+from app.services.fefo_engine import get_optimal_fefo_batch
 from app.domain.schemas import ClinicalNarrativeSchema
 from app.core.circuit_breaker import AegisLiteCircuitBreaker, CircuitStateEnum
 from app.core.cache import get_global_db_version, CACHE_TTL_SECONDS
@@ -607,6 +608,22 @@ async def generate_clinical_response(
                 f"record for SKU '{ctx_sku}': {e}"
             )
 
+        # Beginner Note: We also need to know if the pharmacy actually has this
+        # medication in stock right now, so Gemini can tell the patient. We reuse
+        # the exact same FEFO (First-Expire-First-Out) logic the checkout system
+        # trusts so we don't hallucinate inventory.
+        try:
+            batch = get_optimal_fefo_batch(db, ctx_sku, required_qty=1)
+            if batch:
+                ctx_item["stock_qty"] = batch["available_quantity"]
+                ctx_item["unit_price"] = batch["max_retail_price"]
+                ctx_item["expiry_date"] = batch["expiry_date"].isoformat()
+                logger.info(f"Stock enrichment: SKU={ctx_sku}, qty={ctx_item['stock_qty']}, price={ctx_item['unit_price']} — attached to context")
+            else:
+                logger.info(f"Stock enrichment: SKU={ctx_sku} — no stock data found, skipped")
+        except Exception as e:
+            logger.warning(f"Stock enrichment: Could not look up stock for SKU '{ctx_sku}': {e}")
+
     # Fallback: If no records were found by search but we have a SKU,
     # do a direct medication lookup so the Judge still has safety data
     # to evaluate. This prevents Category X/D drugs from slipping through
@@ -760,7 +777,17 @@ async def generate_clinical_response(
     # ClinicalNarrativeSchema. This is enforced by the response_schema
     # parameter in generation_config.
 
-    context_blocks = "\n\n".join([f"- {item['content']}" for item in context_items])
+    # Beginner Note: We build the context list as a string. If the enrichment
+    # loop found stock data for an item, we inject it directly into the line
+    # so Gemini can see the exact real-time inventory and price.
+    rendered_blocks = []
+    for item in context_items:
+        base_text = f"- {item['content']}"
+        if "stock_qty" in item and "unit_price" in item and "expiry_date" in item:
+            base_text += f" (In stock: {item['stock_qty']} units, ₹{item['unit_price']}, expires {item['expiry_date']})"
+        rendered_blocks.append(base_text)
+    
+    context_blocks = "\n\n".join(rendered_blocks)
 
     # Beginner Note: By this point the Judge has already run and determined
     # the transaction is safe. We pass its verdict into the prompt so the
