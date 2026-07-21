@@ -29,41 +29,65 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 @pytest.fixture(autouse=True, scope="function")
 def _mock_heavy_modules():
-    """Inject mocks for google.generativeai AND app.services.semantic_search.
+    """Inject mocks for google.genai (new SDK) AND app.services.semantic_search.
 
     Each test gets a fresh Gemini mock.  Yield a dict with::
 
-        helpers["set_fail"]()   → make Gemini.next call raise RuntimeError
+        helpers["set_fail"]()   → make the Gemini generate_content call raise RuntimeError
 
     Default: Gemini succeeds and returns valid ClinicalNarrativeSchema JSON.
     Semantic search always returns results from the test's mock_context_items.
+
+    Beginner Note: rag_pipeline.py uses a lazy import:
+        from google import genai as _genai
+        from google.genai import types as _genai_types
+    and calls:
+        gemini_client = _genai.Client(api_key=...)
+        gemini_client.models.generate_content(model=..., contents=..., config=...)
+    We must patch BOTH the module attribute AND sys.modules so both import
+    paths (from google import genai  AND  from google.genai import types)
+    receive our mock instead of the real SDK.
     """
-    # ---- Gemini ----
+    # ---- google.genai (new SDK) mock ----
     genai_mock = MagicMock()
-    model_mock = MagicMock()
-    model_mock.generate_content_async = AsyncMock()
-    model_mock.generate_content_async.return_value = AsyncMock()
-    model_mock.generate_content_async.return_value.text = json.dumps({
+
+    # Wire: genai_mock.Client(api_key=...).models.generate_content(...).text → JSON
+    response_mock = MagicMock()
+    response_mock.text = json.dumps({
         "is_safe_to_dispense": True,
         "narrative": "Mocked Gemini response.",
         "system_lock_reason": None,
         "citations": ["Mocked Citation"],
     })
-    genai_mock.GenerativeModel.return_value = model_mock
-    genai_mock.types.GenerationConfig = MagicMock()
+    genai_mock.Client.return_value.models.generate_content.return_value = response_mock
 
     # ---- Semantic search (avoids torch import chain) ----
     search_mock = MagicMock()
 
     def _set_fail():
-        model_mock.generate_content_async.side_effect = RuntimeError("Gemini API error")
+        # Target the method rag_pipeline.py actually calls (synchronous, new SDK):
+        #   asyncio.to_thread(gemini_client.models.generate_content, ...)
+        genai_mock.Client.return_value.models.generate_content.side_effect = RuntimeError(
+            "Gemini API error"
+        )
 
     helpers = {"set_fail": _set_fail}
 
+    # sys.modules["google.genai"] = genai_mock
+    #   → When `from google import genai` runs inside generate_clinical_response(),
+    #     Python checks sys.modules["google.genai"], finds our mock, sets it as the
+    #     attribute on the google namespace package, and returns it.
+    # sys.modules["google.genai.types"] = MagicMock()
+    #   → Ensures `from google.genai import types` also resolves to a MagicMock,
+    #     so _genai_types.GenerateContentConfig(...) returns a harmless MagicMock.
+    # NOTE: patch("google.genai", ...) is intentionally NOT used here — google is a
+    #   namespace package without a pre-existing "genai" attribute, so patch() would
+    #   raise AttributeError before the first import.
     with patch.dict("sys.modules", {
-        "google.generativeai": genai_mock,
-        "app.services.semantic_search": search_mock,
-    }):
+             "google.genai": genai_mock,
+             "google.genai.types": MagicMock(),
+             "app.services.semantic_search": search_mock,
+         }):
         yield helpers
 
 
@@ -92,6 +116,7 @@ def mock_context_items():
 class TestResultCache:
     """Verify the hash-based result cache works correctly."""
 
+    @pytest.mark.anyio
     @patch("app.services.rag_pipeline.get_redis_client")
     @patch("app.services.rag_pipeline.get_global_db_version")
     @patch("app.services.rag_pipeline.get_application_settings")
@@ -127,6 +152,7 @@ class TestResultCache:
 
         assert result == cached_answer
 
+    @pytest.mark.anyio
     @patch("app.services.rag_pipeline.get_redis_client")
     @patch("app.services.rag_pipeline.get_global_db_version")
     @patch("app.services.rag_pipeline.get_application_settings")
@@ -155,6 +181,7 @@ class TestResultCache:
         assert result["is_safe_to_dispense"] is True
         assert result["citations"] == ["Mocked Citation"]
 
+    @pytest.mark.anyio
     @patch("app.services.rag_pipeline.get_redis_client")
     @patch("app.services.rag_pipeline.get_global_db_version")
     @patch("app.services.rag_pipeline.get_application_settings")
@@ -178,6 +205,8 @@ class TestResultCache:
         mock_settings.return_value.GEMINI_API_KEY = "test-key"
 
         db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
         result = await route_and_process_query(db=db, query="Is DOLO-650 safe?", intents={})
 
         mock_redis.set.assert_called_once()
@@ -186,6 +215,7 @@ class TestResultCache:
         stored_value = json.loads(call_args[0][1])
         assert stored_value["answer"] == result["answer"]
 
+    @pytest.mark.anyio
     @patch("app.services.rag_pipeline.get_redis_client")
     @patch("app.services.rag_pipeline.get_global_db_version")
     @patch("app.services.rag_pipeline.get_application_settings")
@@ -219,6 +249,7 @@ class TestResultCache:
 class TestCircuitBreaker:
     """Verify the Gemini circuit breaker protects the pipeline."""
 
+    @pytest.mark.anyio
     @patch("app.services.rag_pipeline.get_redis_client")
     @patch("app.services.rag_pipeline.get_global_db_version")
     @patch("app.services.rag_pipeline.get_application_settings")
@@ -255,6 +286,7 @@ class TestCircuitBreaker:
         assert result["is_safe_to_dispense"] is True
         assert "SYSTEM_FALLBACK" in result["citations"]
 
+    @pytest.mark.anyio
     @patch("app.services.rag_pipeline.get_redis_client")
     @patch("app.services.rag_pipeline.get_global_db_version")
     @patch("app.services.rag_pipeline.get_application_settings")
@@ -295,6 +327,7 @@ class TestCircuitBreaker:
 class TestTimeoutFallback:
     """Verify that a slow Gemini call triggers degraded mode."""
 
+    @pytest.mark.anyio
     @patch("app.services.rag_pipeline.get_redis_client")
     @patch("app.services.rag_pipeline.get_global_db_version")
     @patch("app.services.rag_pipeline.get_application_settings")
@@ -326,6 +359,7 @@ class TestTimeoutFallback:
         assert result["is_safe_to_dispense"] is True
         assert "SYSTEM_FALLBACK" in result["citations"]
 
+    @pytest.mark.anyio
     @patch("app.services.rag_pipeline.get_redis_client")
     @patch("app.services.rag_pipeline.get_global_db_version")
     @patch("app.services.rag_pipeline.get_application_settings")
@@ -367,6 +401,7 @@ class TestTimeoutFallback:
 class TestDegradedMode:
     """Verify the degraded mode fallback constructs correct narratives."""
 
+    @pytest.mark.anyio
     @patch("app.services.rag_pipeline.get_redis_client")
     @patch("app.services.rag_pipeline.get_global_db_version")
     @patch("app.services.rag_pipeline.get_application_settings")
@@ -398,6 +433,7 @@ class TestDegradedMode:
         assert result["is_safe_to_dispense"] is True
         assert result["system_lock_reason"] is None
 
+    @pytest.mark.anyio
     @patch("app.services.rag_pipeline.get_redis_client")
     @patch("app.services.rag_pipeline.get_global_db_version")
     @patch("app.services.rag_pipeline.get_application_settings")
@@ -430,6 +466,13 @@ class TestDegradedMode:
         mock_settings.return_value.GEMINI_API_KEY = "test-key"
 
         db = MagicMock()
+        # Ensure the db enrichment loop (rag_pipeline.py Step 3) does NOT
+        # overwrite pregnancy_category="X" from the mock search results.
+        # Without this, db.query(...).filter(...).first() returns a truthy
+        # MagicMock, causing ctx_item["pregnancy_category"] to be set to
+        # MagicMock().pregnancy_category — which the Judge then fails to
+        # recognise as "X", making it return is_safe=True instead of False.
+        db.query.return_value.filter.return_value.first.return_value = None
         result = await route_and_process_query(
             db=db,
             query="Is ISO-200 safe for pregnancy?",
@@ -448,6 +491,7 @@ class TestDegradedMode:
 class TestVersionInvalidation:
     """Verify that incrementing the DB version invalidates cached responses."""
 
+    @pytest.mark.anyio
     @patch("app.services.rag_pipeline.get_redis_client")
     @patch("app.services.rag_pipeline.get_global_db_version")
     @patch("app.services.rag_pipeline.get_application_settings")
@@ -474,6 +518,7 @@ class TestVersionInvalidation:
             db = MagicMock()
             await route_and_process_query(db=db, query="Is DOLO-650 safe?", intents={})
 
+    @pytest.mark.anyio
     @patch("app.services.rag_pipeline.get_redis_client")
     @patch("app.services.rag_pipeline.get_global_db_version")
     @patch("app.services.rag_pipeline.get_application_settings")
