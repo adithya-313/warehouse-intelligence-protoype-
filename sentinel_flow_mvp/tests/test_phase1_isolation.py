@@ -40,6 +40,7 @@ Beginner Note:
 
 import pytest
 from sqlalchemy import Column, ForeignKey, String, Integer  # For type introspection
+from unittest.mock import patch
 
 
 # ======================================================================
@@ -430,7 +431,8 @@ class TestScraperResilience:
             "feed content for debugging."
         )
 
-    def test_scraper_handles_database_offline_gracefully(self):
+    @patch("psycopg2.connect")
+    def test_scraper_handles_database_offline_gracefully(self, mock_connect):
         """
         Verify that ``try_database_connection()`` returns False when
         the database is unreachable, and does NOT raise an exception.
@@ -447,6 +449,7 @@ class TestScraperResilience:
         # The database is offline (Docker Desktop is not running in
         # this development environment). We verify that the function
         # returns False without raising an exception.
+        mock_connect.side_effect = Exception("Database connection failed")
         result = try_database_connection()
 
         assert result is False, (
