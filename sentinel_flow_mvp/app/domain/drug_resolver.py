@@ -103,7 +103,7 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
     sql = text("""
         SELECT sku_id, alias_text, similarity(alias_text, :query) AS score
         FROM drug_brand_aliases
-        WHERE alias_text %% :query
+        WHERE alias_text % :query
         ORDER BY score DESC
         LIMIT 3;
     """)

@@ -462,3 +462,31 @@ class TestRCARegression:
             data = _json.loads(response_body)
             assert data.get("status") == "no_intent"
             mock_resolve.assert_not_called()
+
+class TestDrugResolverRealDB:
+    """
+    Real-DB regression test for the fuzzy-matching SQL path with realistic full sentences,
+    to ensure we catch SQL syntax errors like the %% vs % operator mismatch.
+    """
+    def test_real_db_fuzzy_match_sql_syntax(self):
+        from app.infrastructure.database import SessionLocal
+        from sqlalchemy.exc import OperationalError, ProgrammingError, DataError
+        
+        try:
+            real_db = SessionLocal()
+            # We run the exact queries that previously crashed with %% operator bug.
+            queries = [
+                "is dolo650 safe for a pregnant woman",
+                "what is the dose of crocin for kids",
+                "AMLOK5 side effects"
+            ]
+            for query in queries:
+                # If there's a SQL syntax error, this will throw an exception.
+                result = resolve_drug_entity(real_db, query)
+                assert isinstance(result, dict)
+                assert "status" in result
+        except OperationalError:
+            pytest.skip("Real database not available for this test.")
+        finally:
+            if 'real_db' in locals():
+                real_db.close()
