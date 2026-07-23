@@ -340,6 +340,14 @@ class TestAskEndpointWithSanitizer:
         """Mimics the conftest.py mock_db_session fixture."""
         from sqlalchemy.orm import Session
         session = MagicMock(spec=Session)
+        
+        def mock_execute(query, params=None):
+            result = MagicMock()
+            result.fetchone.return_value = None
+            result.fetchall.return_value = []
+            return result
+        session.execute.side_effect = mock_execute
+        
         mock_query = MagicMock()
         mock_filter = MagicMock()
         mock_filter.first.return_value = None

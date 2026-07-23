@@ -5,61 +5,59 @@ from app.domain.drug_resolver import resolve_drug_entity
 class TestDrugResolver:
     """Test suite for the fuzzy drug resolver (Phase 2)."""
 
+    def _make_mock_db(self, exact_sku=None, exact_alias=None, fuzzy_results=None):
+        mock_db = MagicMock()
+        def mock_execute(query, params=None):
+            query_str = str(query)
+            result = MagicMock()
+            if "FROM medications" in query_str:
+                result.fetchone.return_value = (exact_sku,) if exact_sku else None
+            elif "WHERE REPLACE(alias_text" in query_str:
+                result.fetchone.return_value = (exact_alias,) if exact_alias else None
+            elif "similarity(alias_text" in query_str:
+                result.fetchall.return_value = fuzzy_results or []
+            else:
+                result.fetchone.return_value = None
+                result.fetchall.return_value = []
+            return result
+        mock_db.execute.side_effect = mock_execute
+        return mock_db
+
     def test_exact_match(self):
         """a. Exact match → status 'resolved', confidence 'exact'."""
-        mock_db = MagicMock()
+        mock_db = self._make_mock_db(exact_alias="PAN-40")
         
-        with patch('app.domain.drug_resolver.get_known_drug_catalog') as mock_catalog, \
-             patch('app.domain.drug_resolver.translate_to_sku', side_effect=lambda db, m, skus: m):
-            mock_catalog.return_value = ({"PAN-40", "TELMA-40"}, {"CROCIN", "CALPOL"})
-            
-            result = resolve_drug_entity(mock_db, "price of pan-40")
-            assert result["status"] == "resolved"
-            assert result["sku_id"] == "PAN-40"
-            assert result["confidence"] == "exact"
+        result = resolve_drug_entity(mock_db, "price of pan-40")
+        assert result["status"] == "resolved"
+        assert result["sku_id"] == "PAN-40"
+        assert result["confidence"] == "exact"
 
     def test_fuzzy_match_single(self):
         """b. Deliberately misspelled real drug name (single close match) → status 'resolved', confidence 'fuzzy'."""
-        mock_db = MagicMock()
+        mock_db = self._make_mock_db(fuzzy_results=[("PARACETAMOL", "PARACETAMOL", 0.95)])
         
-        with patch('app.domain.drug_resolver.get_known_drug_catalog') as mock_catalog, \
-             patch('app.domain.drug_resolver.translate_to_sku', side_effect=lambda db, m, skus: m):
-            mock_catalog.return_value = ({"PAN-40", "TELMA-40", "PARACETAMOL"}, set())
-            
-            # Note: cutoff is 0.85, so we need a very close misspelling.
-            # "PARACETAMOL" vs "PARCETAMOL" ratio is ~0.95
-            result = resolve_drug_entity(mock_db, "price of PARCETAMOL")
-            assert result["status"] == "resolved"
-            assert result["sku_id"] == "PARACETAMOL"
-            assert result["confidence"] == "fuzzy"
+        result = resolve_drug_entity(mock_db, "price of PARCETAMOL")
+        assert result["status"] == "resolved"
+        assert result["sku_id"] == "PARACETAMOL"
+        assert result["confidence"] == "fuzzy"
 
     def test_disambiguate_multiple_matches(self):
         """c. Deliberately misspelled name with 2+ plausible matches → status 'disambiguate'."""
-        mock_db = MagicMock()
+        mock_db = self._make_mock_db(fuzzy_results=[("TELMA-40", "TELMA-40", 0.93), ("TELMI-40", "TELMI-40", 0.93)])
         
-        with patch('app.domain.drug_resolver.get_known_drug_catalog') as mock_catalog, \
-             patch('app.domain.drug_resolver.translate_to_sku', side_effect=lambda db, m, skus: m):
-            mock_catalog.return_value = ({"TELMA-40", "TELMA-80", "TELMI-40"}, set())
-            
-            # TELM-40 is very close to TELMA-40 and TELMI-40 (ratio > 0.85)
-            # TELMA-40 ratio: 0.93, TELMI-40 ratio: 0.93
-            result = resolve_drug_entity(mock_db, "price of TELM-40")
-            assert result["status"] == "disambiguate"
-            assert "choices" in result
-            assert 2 <= len(result["choices"]) <= 3
-            assert "TELMA-40" in result["choices"]
+        result = resolve_drug_entity(mock_db, "price of TELM-40")
+        assert result["status"] == "disambiguate"
+        assert "choices" in result
+        assert 2 <= len(result["choices"]) <= 3
+        assert "TELMA-40" in result["choices"]
 
     def test_no_match_gibberish(self):
         """d. Gibberish input with zero plausible matches → status 'no_match'."""
-        mock_db = MagicMock()
+        mock_db = self._make_mock_db()
         
-        with patch('app.domain.drug_resolver.get_known_drug_catalog') as mock_catalog, \
-             patch('app.domain.drug_resolver.translate_to_sku', side_effect=lambda db, m, skus: m):
-            mock_catalog.return_value = ({"PAN-40", "TELMA-40"}, set())
-            
-            result = resolve_drug_entity(mock_db, "price of xyzzy1234")
-            assert result["status"] == "no_match"
-            assert result["reason"] == "no_close_match_found"
+        result = resolve_drug_entity(mock_db, "price of xyzzy1234")
+        assert result["status"] == "no_match"
+        assert result["reason"] == "no_close_match_found"
 
     def test_pipeline_disambiguate_short_circuit(self):
         """Test that disambiguate status bypasses route_and_process_query."""
@@ -273,98 +271,45 @@ class TestDrugResolver:
 
     def test_brand_match_exact(self):
         """f. Brand name exact match is translated to real SKU ID."""
-        mock_db = MagicMock()
-        
-        # Setup mock DB response for translate_to_sku
-        class MockRow:
-            def __init__(self, sku_id, brand_name):
-                self.sku_id = sku_id
-                self.metadata_payload = {"brand_name": brand_name}
-                
-        mock_ckb_query = MagicMock()
-        mock_ckb_query.all.return_value = [
-            MockRow("PARA-500", "CROCIN"),
-            MockRow("TELM-40", "TELMA")
-        ]
-        
-        # When querying CKB, return our mock query
-        mock_db.query.return_value = mock_ckb_query
-        
-        with patch('app.domain.drug_resolver.get_known_drug_catalog') as mock_catalog:
-            mock_catalog.return_value = ({"PARA-500", "TELM-40"}, {"CROCIN", "TELMA"})
+        mock_db = self._make_mock_db(exact_alias="PARA-500")
             
-            result = resolve_drug_entity(mock_db, "price of crocin")
-            
-            assert result["status"] == "resolved"
-            assert result["sku_id"] == "PARA-500"  # Translated!
-            assert result["confidence"] == "exact"
-            
-            # Verify subsequent DB lookup for the returned SKU would work by asserting
-            # that we queried the DB and found it.
-            # In our mock, CROCIN mapped to PARA-500. We assert that mock_db.query was called.
-            mock_db.query.assert_called()
+        result = resolve_drug_entity(mock_db, "price of crocin")
+        
+        assert result["status"] == "resolved"
+        assert result["sku_id"] == "PARA-500"  # Translated!
+        assert result["confidence"] == "exact"
 
     def test_brand_match_fuzzy(self):
         """g. Brand name fuzzy match is translated to real SKU ID."""
-        mock_db = MagicMock()
-        
-        class MockRow:
-            def __init__(self, sku_id, brand_name):
-                self.sku_id = sku_id
-                self.metadata_payload = {"brand_name": brand_name}
-                
-        mock_ckb_query = MagicMock()
-        mock_ckb_query.all.return_value = [
-            MockRow("PARA-500", "CROCIN"),
-            MockRow("TELM-40", "TELMA")
-        ]
-        
-        mock_db.query.return_value = mock_ckb_query
-        
-        with patch('app.domain.drug_resolver.get_known_drug_catalog') as mock_catalog:
-            mock_catalog.return_value = ({"PARA-500", "TELM-40"}, {"CROCIN", "TELMA"})
+        mock_db = self._make_mock_db(fuzzy_results=[("PARA-500", "CROCIN", 0.90)])
             
-            # "CROCCIN" is misspelled but very close to "CROCIN"
-            result = resolve_drug_entity(mock_db, "price of CROCCIN")
-            
-            assert result["status"] == "resolved"
-            assert result["sku_id"] == "PARA-500"  # Translated!
-            assert result["confidence"] == "fuzzy"
-            
-            mock_db.query.assert_called()
+        # "CROCCIN" is misspelled but very close to "CROCIN"
+        result = resolve_drug_entity(mock_db, "price of CROCCIN")
+        
+        assert result["status"] == "resolved"
+        assert result["sku_id"] == "PARA-500"  # Translated!
+        assert result["confidence"] == "fuzzy"
 
     def test_rca_case_2_pn40(self):
         """Case 2: Short SKU-shaped token ('pn40') reaches fuzzy matcher."""
-        mock_db = MagicMock()
-        mock_db.query().all.return_value = []
-        with patch('app.domain.drug_resolver.get_known_drug_catalog') as mock_catalog, \
-             patch('app.domain.drug_resolver.translate_to_sku', side_effect=lambda db, m, skus: m):
-            mock_catalog.return_value = ({"PN40", "PAN40"}, set())
-            result = resolve_drug_entity(mock_db, "price of pn40")
-            assert result["status"] == "resolved"
-            assert result["sku_id"] == "PN40"
+        mock_db = self._make_mock_db(fuzzy_results=[("PN40", "PN 40", 0.85)])
+        result = resolve_drug_entity(mock_db, "price of pn40")
+        assert result["status"] == "resolved"
+        assert result["sku_id"] == "PN40"
 
     def test_rca_case_4_punctuation(self):
         """Case 4: Token with quotes/commas resolves correctly."""
-        mock_db = MagicMock()
-        mock_db.query().all.return_value = []
-        with patch('app.domain.drug_resolver.get_known_drug_catalog') as mock_catalog, \
-             patch('app.domain.drug_resolver.translate_to_sku', side_effect=lambda db, m, skus: m):
-            mock_catalog.return_value = ({"TELMA40"}, set())
-            result = resolve_drug_entity(mock_db, "what is the price of 'TELMA-40',")
-            assert result["status"] == "resolved"
-            assert result["sku_id"] == "TELMA40"
+        mock_db = self._make_mock_db(exact_alias="TELMA40")
+        result = resolve_drug_entity(mock_db, "what is the price of 'TELMA-40',")
+        assert result["status"] == "resolved"
+        assert result["sku_id"] == "TELMA40"
 
     def test_hyphenated_vs_bare_mismatch(self):
         """Fix B: Hyphenated query token matches bare catalog SKU."""
-        mock_db = MagicMock()
-        mock_db.query().all.return_value = []
-        with patch('app.domain.drug_resolver.get_known_drug_catalog') as mock_catalog, \
-             patch('app.domain.drug_resolver.translate_to_sku', side_effect=lambda db, m, skus: m):
-            mock_catalog.return_value = ({"TELMA40"}, set())
-            result = resolve_drug_entity(mock_db, "TELMA-40")
-            assert result["status"] == "resolved"
-            assert result["sku_id"] == "TELMA40"
+        mock_db = self._make_mock_db(exact_alias="TELMA40")
+        result = resolve_drug_entity(mock_db, "TELMA-40")
+        assert result["status"] == "resolved"
+        assert result["sku_id"] == "TELMA40"
 
 class TestRCARegression:
     """Test suite for the Phase 2.1 RCA regression queries."""
@@ -389,26 +334,37 @@ class TestRCARegression:
         app.include_router(kb_router, prefix="/api/v1/knowledge-base")
         app.dependency_overrides[get_database_session] = lambda: mock_db
         
-        class MockRow:
-            def __init__(self, sku_id, brand_name):
-                self.sku_id = sku_id
-                self.metadata_payload = {"brand_name": brand_name}
-        
-        mock_ckb_query = MagicMock()
-        mock_ckb_query.all.return_value = [
-            MockRow("PAN40", "Pan 40"),
-            MockRow("TELMA40", "Telma 40"),
-            MockRow("PARACETAMOL500", "Paracetamol"),
-            MockRow("CROCIN500", "Crocin"),
-            MockRow("PN40", "PN 40")
-        ]
-        mock_db.query.return_value = mock_ckb_query
-        
-        with patch('app.domain.drug_resolver.get_known_drug_catalog') as mock_catalog, \
-             patch('app.api.v1.knowledge_base.route_and_process_query', mock_route):
-             
-            mock_catalog.return_value = ({"PAN40", "TELMA40", "PARACETAMOL500", "PN40", "CROCIN500"}, {"PAN 40", "TELMA 40", "PARACETAMOL", "CROCIN"})
+        def mock_execute(query, params=None):
+            query_str = str(query)
+            result = MagicMock()
+            q_param = (params or {}).get("query", "").upper()
             
+            if "FROM medications" in query_str:
+                result.fetchone.return_value = None
+            elif "WHERE REPLACE(alias_text" in query_str:
+                if "TELMA40" in q_param or "TELMA 40" in q_param:
+                    result.fetchone.return_value = ("TELMA40",)
+                elif "PAN40" in q_param or "PAN 40" in q_param:
+                    result.fetchone.return_value = ("PAN40",)
+                elif "PN40" in q_param or "PN 40" in q_param:
+                    result.fetchone.return_value = ("PN40",)
+                else:
+                    result.fetchone.return_value = None
+            elif "similarity(alias_text" in query_str:
+                if "CROCCIN" in q_param:
+                    result.fetchall.return_value = [("CROCIN500", "CROCIN", 0.90)]
+                elif "PN40" in q_param:
+                    result.fetchall.return_value = [("PN40", "PN 40", 0.90)]
+                else:
+                    result.fetchall.return_value = []
+            else:
+                result.fetchone.return_value = None
+                result.fetchall.return_value = []
+            return result
+            
+        mock_db.execute.side_effect = mock_execute
+        
+        with patch('app.api.v1.knowledge_base.route_and_process_query', mock_route):
             async def run_query(q):
                 scope = {
                     "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST",
