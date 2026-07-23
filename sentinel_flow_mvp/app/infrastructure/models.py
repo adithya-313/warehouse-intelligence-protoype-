@@ -540,3 +540,32 @@ class RegulatoryDiffLogModel(Base):
 
     # The human curator who reviewed this change (nullable until reviewed)
     curator_id = Column(String, nullable=True)
+
+
+class DrugBrandAlias(Base):
+    """
+    Domain Model: Drug Brand Aliases
+    
+    Beginner Note:
+        This table stores a flat list of all brand and generic names mapping
+        back to a clinical knowledge base SKU. It uses a GIN index with
+        trigram operations (pg_trgm) to allow incredibly fast fuzzy matching
+        directly inside the database, avoiding the N+1 problem of looping
+        and using difflib in Python.
+    """
+    __tablename__ = "drug_brand_aliases"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    sku_id = Column(String, nullable=False, index=True)
+    alias_text = Column(String, nullable=False)
+    alias_type = Column(String, nullable=True) # 'brand_name' or 'generic_name'
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index(
+            'ix_drug_brand_aliases_trgm', 
+            'alias_text', 
+            postgresql_using='gin', 
+            postgresql_ops={'alias_text': 'gin_trgm_ops'}
+        ),
+    )

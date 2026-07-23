@@ -24,28 +24,35 @@ from app.infrastructure.models import ClinicalKnowledgeBase
 logger = logging.getLogger(__name__)
 
 def translate_to_sku(db: Session, match_str: str, known_skus: set[str]) -> str:
-    """Translate a brand/generic name to its actual SKU ID via DB lookup."""
+    """
+    Translate a brand/generic name to its actual SKU ID via DB lookup.
+    
+    Beginner Note:
+        If we found an exact match against a bare SKU (like "PAN40"), we
+        just return it. Otherwise, we query the new drug_brand_aliases
+        table to find the SKU that owns this specific brand name.
+    """
     if match_str in known_skus:
         return match_str
         
-    # TODO (Optimization): This re-queries the full ClinicalKnowledgeBase table. 
-    # Since it's called in a loop for multiple choices, it creates an N-query pattern.
-    # While N is small (capped at 3), a future optimization should have 
-    # get_known_drug_catalog() return a pre-built brand-to-SKU dictionary mapping.
-    ckb_rows = db.query(ClinicalKnowledgeBase.sku_id, ClinicalKnowledgeBase.metadata_payload).all()
-    for row in ckb_rows:
-        payload = row.metadata_payload or {}
-        if isinstance(payload, dict):
-            brand = payload.get("brand_name", "").upper()
-            generic = payload.get("generic_name", "").upper()
-            if match_str == brand or match_str == generic:
-                return row.sku_id
-                
+    from sqlalchemy import text
+    sql = text("SELECT sku_id FROM drug_brand_aliases WHERE alias_text = :match_str LIMIT 1")
+    result = db.execute(sql, {"match_str": match_str.upper()}).fetchone()
+    if result:
+        return result[0]
+        
     return match_str
 
 def resolve_drug_entity(db: Session, query: str) -> dict:
     """
     Resolve a drug name from the user's query against the catalog.
+
+    Beginner Note:
+        Instead of pulling tens of thousands of strings into Python and 
+        running difflib (which causes an N+1 scaling issue and OOM crashes), 
+        we push the fuzzy matching down into PostgreSQL. The pg_trgm extension 
+        uses a GIN index to instantly find the closest matching brand or 
+        generic name in milliseconds.
 
     Parameters:
         db: Active database session.
@@ -57,107 +64,80 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
             - {"status": "disambiguate", "choices": [<match1>, <match2>, ...]}
             - {"status": "no_match", "reason": "no_close_match_found"}
     """
-    # Step 1: Fetch the complete catalog of known drug identifiers.
-    # We reuse the exact same helper from rag_pipeline to ensure we are
-    # looking at the exact same catalog without duplicating DB logic.
-    known_skus, known_brands = get_known_drug_catalog(db)
+    from sqlalchemy import text
     
-    if not known_skus and not known_brands:
-        logger.warning("DrugResolver: Catalog is empty.")
-        return {"status": "no_match", "reason": "empty_catalog"}
-
-    # Fix D: Strip punctuation before tokenizing or matching.
-    # Case 4 RCA: Quotes and commas degraded difflib ratio from >0.9 to 0.77.
-    # We strip trailing/leading punctuation from tokens and rebuild the query string.
+    # Step 1: Clean the query string
     raw_tokens = query.split()
     tokens = [t.strip(".,;:'\"!?()") for t in raw_tokens if t.strip(".,;:'\"!?()")]
-    query_upper = " ".join(tokens).upper()
     
-    # Fix B: SKU format mismatch. We normalize both the query and the catalog
-    # by stripping hyphens (e.g. "TELMA-40" vs "TELMA40") so they can match,
-    # but we append the original 'sku' or 'brand' so we return the real bare ID.
-    query_normalized = query_upper.replace("-", "")
+    if not tokens:
+        logger.warning("DrugResolver: Empty query after stripping punctuation.")
+        return {"status": "no_match", "reason": "empty_query"}
+        
+    # We strip hyphens because "PAN-40" should match "PAN 40" or "PAN40"
+    query_clean = " ".join(tokens).upper().replace("-", "")
     
-    # Step 2: Attempt EXACT substring match.
-    # We prefer longer exact matches just like extract_known_entities.
-    matched_entities = []
-    for sku in known_skus:
-        if sku.replace("-", "") in query_normalized:
-            matched_entities.append(sku)
-    for brand in known_brands:
-        if brand.replace("-", "") in query_normalized:
-            matched_entities.append(brand)
-            
-    if matched_entities:
-        # Sort by length descending, pick the longest specific identifier.
-        best_exact_match = sorted(set(matched_entities), key=len, reverse=True)[0]
-        real_sku = translate_to_sku(db, best_exact_match, known_skus)
-        logger.info(f"DrugResolver: Exact match found -> {best_exact_match} (Resolved to SKU: {real_sku})")
-        return {"status": "resolved", "sku_id": real_sku, "confidence": "exact"}
+    # Check if they typed the exact raw SKU first (like "PAN40")
+    # since bare SKUs aren't in the alias table.
+    sku_check = text("SELECT sku_id FROM medications WHERE sku_id ILIKE :query LIMIT 1")
+    exact_sku = db.execute(sku_check, {"query": query_clean}).fetchone()
+    if exact_sku:
+        logger.info(f"DrugResolver: Exact bare SKU match found -> {exact_sku[0]}")
+        return {"status": "resolved", "sku_id": exact_sku[0], "confidence": "exact"}
+        
+    # Step 2: Exact alias match
+    # Sometimes users type the exact brand name without hyphens (e.g. "PAN 40").
+    exact_alias_check = text("""
+        SELECT sku_id FROM drug_brand_aliases 
+        WHERE REPLACE(alias_text, '-', '') = :query OR REPLACE(alias_text, ' ', '') = :query 
+        LIMIT 1
+    """)
+    exact_alias = db.execute(exact_alias_check, {"query": query_clean.replace(" ", "")}).fetchone()
+    if exact_alias:
+        logger.info(f"DrugResolver: Exact alias match found -> {exact_alias[0]}")
+        return {"status": "resolved", "sku_id": exact_alias[0], "confidence": "exact"}
 
-    # Step 3: If no exact match, attempt FUZZY match.
-    all_candidates = list(known_skus | known_brands)
-    # Map normalized candidates back to their real catalog identifiers
-    normalized_to_original = {c.replace("-", ""): c for c in all_candidates}
-    all_candidates_normalized = list(normalized_to_original.keys())
+    # Step 3: Use pg_trgm to find the best fuzzy matches
+    # We want to match the query against the trigram index.
+    # The default similarity threshold is 0.3. We order by score.
+    sql = text("""
+        SELECT sku_id, alias_text, similarity(alias_text, :query) AS score
+        FROM drug_brand_aliases
+        WHERE alias_text %% :query
+        ORDER BY score DESC
+        LIMIT 3;
+    """)
+    # We pass the query with spaces intact for trigram matching
+    query_for_trgm = " ".join(tokens).upper()
+    results = db.execute(sql, {"query": query_for_trgm}).fetchall()
     
-    fuzzy_matches = set()
-    for token in tokens:
-        # Fix C: Only skip pure alphabetic tokens that are <= 4 chars (e.g., "the", "for").
-        # If it has a digit (e.g. "pn40", "40"), it is likely a SKU and should NOT be skipped.
-        # This prevents skipping short-but-valid codes.
-        if token.isalpha() and len(token) <= 4:
-            continue
-            
-        token_normalized = token.upper().replace("-", "")
-        # difflib.get_close_matches finds close string similarities.
-        # Beginner Note: The cutoff here is 0.85, which is intentionally tighter
-        # than sanitizer.py's 0.6. Why? Because this function's job is
-        # confident disambiguation. If we use 0.6 here, we might confidently
-        # guess the wrong drug and dispense wrong clinical advice. 0.85 ensures
-        # we only match or disambiguate when the spelling is extremely close.
-        # We request up to 3 matches for the disambiguation UI.
-        close_matches = difflib.get_close_matches(
-            token_normalized,
-            all_candidates_normalized,
-            n=3,
-            cutoff=0.85
-        )
-        for match in close_matches:
-            fuzzy_matches.add(normalized_to_original[match])
-
-    if not fuzzy_matches:
-        logger.info("DrugResolver: No close match found.")
+    if not results:
+        logger.info("DrugResolver: No close match found via pg_trgm.")
         return {"status": "no_match", "reason": "no_close_match_found"}
         
-    sorted_choices = list(fuzzy_matches)
-    # difflib already sorts by score per token, but since we gathered a set
-    # we sort again by max similarity against any query token just to be safe.
-    sorted_choices.sort(
-        key=lambda choice: max(
-            difflib.SequenceMatcher(None, choice.replace("-", ""), t.upper().replace("-", "")).ratio() 
-            for t in tokens if not (t.isalpha() and len(t) <= 4)
-        ),
-        reverse=True
-    )
-    # Cap choices at 3
-    sorted_choices = sorted_choices[:3]
-
-    # Translate choices to real SKUs so downstream logic doesn't fail on brand names
-    real_choices = []
+    # Step 4: We have matches. Group by SKU to avoid returning the same SKU multiple times.
+    unique_skus = []
     seen = set()
-    for choice in sorted_choices:
-        real_sku = translate_to_sku(db, choice, known_skus)
-        if real_sku not in seen:
-            seen.add(real_sku)
-            real_choices.append(real_sku)
-
-    if len(real_choices) == 1:
-        # Step 4: Exactly one close match found -> confident fuzzy resolve
-        match = real_choices[0]
-        logger.info(f"DrugResolver: Confident fuzzy match found -> {sorted_choices[0]} (Resolved to SKU: {match})")
+    
+    for row in results:
+        sku = row[0]
+        score = row[2]
+        if sku not in seen:
+            seen.add(sku)
+            unique_skus.append({"sku": sku, "score": score})
+            
+    # If there is only one match, or the top match is significantly better than the second
+    if len(unique_skus) == 1:
+        match = unique_skus[0]["sku"]
+        logger.info(f"DrugResolver: Confident fuzzy match found -> {match}")
         return {"status": "resolved", "sku_id": match, "confidence": "fuzzy"}
     else:
-        # Step 5: Two or more close matches -> ask the user to pick (disambiguate)
-        logger.info(f"DrugResolver: Ambiguous fuzzy match, disambiguating -> {real_choices}")
-        return {"status": "disambiguate", "choices": real_choices}
+        # If the top match is very strong and clearly beats the runner-up
+        if unique_skus[0]["score"] > 0.5 and (unique_skus[0]["score"] - unique_skus[1]["score"] > 0.15):
+            match = unique_skus[0]["sku"]
+            logger.info(f"DrugResolver: Confident fuzzy match (best score) -> {match}")
+            return {"status": "resolved", "sku_id": match, "confidence": "fuzzy"}
+            
+        choices = [u["sku"] for u in unique_skus]
+        logger.info(f"DrugResolver: Ambiguous fuzzy match, disambiguating -> {choices}")
+        return {"status": "disambiguate", "choices": choices[:3]}
