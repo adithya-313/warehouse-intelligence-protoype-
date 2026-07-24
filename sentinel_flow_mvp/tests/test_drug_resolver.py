@@ -131,7 +131,12 @@ class TestDrugResolver:
             assert response_status == 200
             data = _json.loads(response_body)
             assert data["status"] == "disambiguate"
-            assert data["choices"] == ["TELMA-40", "TELMI-40"]
+            # choices is a list of {"sku_id": ..., "display_name": ...} objects
+            # The mock returns plain strings, which the knowledge_base display-name
+            # lookup wraps into dicts. Verify sku_ids are present.
+            returned_sku_ids = [c["sku_id"] for c in data["choices"]]
+            assert "TELMA-40" in returned_sku_ids
+            assert "TELMI-40" in returned_sku_ids
             
             # Assert route_and_process_query was never called
             mock_route.assert_not_called()
