@@ -175,29 +175,9 @@ async def ask_clinical_assistant(
         # =====================================================================
         # PHASE 2: DRUG ENTITY RESOLVER (Disambiguation)
         # =====================================================================
-        # Fix A: We only want to run the resolver if there's a chance of rescuing
-        # the query. If the query has absolutely NO intents AND no regex SKU 
-        # (e.g. "what's the weather today"), we exit immediately with 0 DB calls.
-        if bucket == IntentBucket.NO_INTENT and not any(intents.values()):
-            request_metrics["intent"] = bucket.value if hasattr(bucket, "value") else str(bucket)
-            request_metrics["path_taken"] = "none"
-            request_metrics["fallback_triggered"] = True
-            # drug_resolved is None since resolve_drug_entity was not called
-            return RAGQueryResponse(
-                query=payload.query,
-                answer=(
-                    "I could not identify a specific medication in your query. "
-                    "Please include the medication name (e.g., 'PAN-40', "
-                    "'TELMA-40', 'calpol 650'). If you need clinical advice, "
-                    "ask with a drug name included."
-                ),
-                context_used=[],
-                is_safe_to_dispense=True,
-                system_lock_reason=None,
-                citations=[],
-                status="no_intent"
-            )
-            
+        # Fix A: We ALWAYS run the resolver first so we can rescue queries that
+        # contain a generic/brand name but no explicit regex SKU or intents
+        # (e.g. "is amoxycillin safe with alcohol").
         resolution = resolve_drug_entity(db, cleaned_query)
 
         if bucket == IntentBucket.NO_INTENT:
@@ -213,20 +193,27 @@ async def ask_clinical_assistant(
                 # ------------------------------------------------------------------
                 # FINAL FAIL-SAFE: No regex drug AND no catalog match.
                 # ------------------------------------------------------------------
-                return RAGQueryResponse(
-                    query=payload.query,
-                    answer=(
-                        "I could not identify a specific medication in your query. "
-                        "Please include the medication name (e.g., 'PAN-40', "
-                        "'TELMA-40', 'calpol 650'). If you need clinical advice, "
-                        "ask with a drug name included."
-                    ),
-                    context_used=[],
-                    is_safe_to_dispense=True,
-                    system_lock_reason=None,
-                    citations=[],
-                    status="no_intent" # Tag for tests
-                )
+                # If there are NO intents (e.g. "what's the weather today"), treat as NO_INTENT.
+                if not any(intents.values()):
+                    request_metrics["intent"] = bucket.value if hasattr(bucket, "value") else str(bucket)
+                    request_metrics["path_taken"] = "none"
+                    request_metrics["fallback_triggered"] = True
+                    return RAGQueryResponse(
+                        query=payload.query,
+                        answer=(
+                            "I could not identify a specific medication in your query. "
+                            "Please include the medication name (e.g., 'PAN-40', "
+                            "'TELMA-40', 'calpol 650'). If you need clinical advice, "
+                            "ask with a drug name included."
+                        ),
+                        context_used=[],
+                        is_safe_to_dispense=True,
+                        system_lock_reason=None,
+                        citations=[],
+                        status="no_intent"
+                    )
+                # If there ARE intents but no drug (e.g. "is it safe for pregnancy?"), let it fall through 
+                # to the "no_match" handler below.
 
         # Now handle the resolver's short-circuits (no_match and disambiguate)
         if resolution["status"] == "no_match":

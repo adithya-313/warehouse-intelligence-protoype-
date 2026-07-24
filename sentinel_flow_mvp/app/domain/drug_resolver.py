@@ -23,6 +23,20 @@ from app.infrastructure.models import ClinicalKnowledgeBase
 
 logger = logging.getLogger(__name__)
 
+# Words that are safe to strip from a user query before attempting drug name matching.
+# By removing grammatical filler, we prevent the fuzzy matcher from generating useless
+# candidate phrases like "can i give" or "of crocin for".
+FILLER_WORDS = {
+    "is", "am", "are", "was", "were", "do", "does", "did", "have", "has", "had", 
+    "a", "an", "the", "teh", "what", "waht", "why", "how", "when", "where", "who", "which",
+    "can", "could", "would", "should", "will", "shall", "may", "might", "must",
+    "i", "me", "my", "we", "us", "our", "you", "your", "he", "him", "his", "she", 
+    "her", "it", "its", "they", "them", "their", "to", "for", "with", "about", 
+    "of", "in", "on", "at", "by", "from", "after", "before", "and", "or", "but", 
+    "if", "then", "else", "vs", "give", "take", "tell", "show", "know", "happen", 
+    "happens", "skip", "mix", "cause", "used", "someone"
+}
+
 def translate_to_sku(db: Session, match_str: str, known_skus: set[str]) -> str:
     """
     Translate a brand/generic name to its actual SKU ID via DB lookup.
@@ -98,18 +112,37 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
         return {"status": "resolved", "sku_id": exact_alias[0], "confidence": "exact"}
 
     # Step 3: Use pg_trgm to find the best fuzzy matches
-    # We want to match the query against the trigram index.
-    # The default similarity threshold is 0.3. We order by score.
+    # We want to match realistic drug-name candidates against the trigram index.
+    # We strip out known filler words, then generate 1, 2, and 3-word sliding windows
+    # from the remaining tokens. We batch these candidates into a single UNNEST query.
+    
+    # Remove filler words
+    meaningful_tokens = [t for t in tokens if t.lower() not in FILLER_WORDS]
+    
+    if not meaningful_tokens:
+        logger.info("DrugResolver: Only filler words remained after stripping.")
+        return {"status": "no_match", "reason": "no_meaningful_tokens"}
+        
+    # Generate 1-word, 2-word, and 3-word contiguous windows
+    candidates = []
+    n = len(meaningful_tokens)
+    for window_size in range(1, min(n + 1, 4)):
+        for i in range(n - window_size + 1):
+            window = " ".join(meaningful_tokens[i:i + window_size]).upper()
+            candidates.append(window)
+            
+    # De-duplicate candidates (e.g. if the user repeated a word)
+    candidates = list(set(candidates))
+    
     sql = text("""
-        SELECT sku_id, alias_text, similarity(alias_text, :query) AS score
-        FROM drug_brand_aliases
-        WHERE alias_text % :query
+        SELECT q.candidate, a.sku_id, a.alias_text, similarity(a.alias_text, q.candidate) AS score
+        FROM unnest(CAST(:candidates AS text[])) AS q(candidate)
+        JOIN drug_brand_aliases a ON a.alias_text % q.candidate
         ORDER BY score DESC
         LIMIT 3;
     """)
-    # We pass the query with spaces intact for trigram matching
-    query_for_trgm = " ".join(tokens).upper()
-    results = db.execute(sql, {"query": query_for_trgm}).fetchall()
+    
+    results = db.execute(sql, {"candidates": candidates}).fetchall()
     
     if not results:
         logger.info("DrugResolver: No close match found via pg_trgm.")
@@ -120,8 +153,9 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
     seen = set()
     
     for row in results:
-        sku = row[0]
-        score = row[2]
+        # row structure from UNNEST: (candidate, sku_id, alias_text, score)
+        sku = row[1]
+        score = row[3]
         if sku not in seen:
             seen.add(sku)
             unique_skus.append({"sku": sku, "score": score})

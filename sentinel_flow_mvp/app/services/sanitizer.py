@@ -395,7 +395,7 @@ class QuerySanitizer:
         # We strip the space and produce a bare code (no hyphen) matching
         # the DB storage format.
         sku_match = re.search(
-            r"([A-Z]+)\s+(\d+)",
+            r"\b([A-Z]{2,})\s+(\d+)\b",
             query,
             re.IGNORECASE,
         )

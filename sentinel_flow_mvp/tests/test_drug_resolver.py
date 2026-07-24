@@ -14,8 +14,17 @@ class TestDrugResolver:
                 result.fetchone.return_value = (exact_sku,) if exact_sku else None
             elif "WHERE REPLACE(alias_text" in query_str:
                 result.fetchone.return_value = (exact_alias,) if exact_alias else None
-            elif "similarity(alias_text" in query_str:
-                result.fetchall.return_value = fuzzy_results or []
+            elif "similarity(" in query_str:
+                if fuzzy_results:
+                    padded_results = []
+                    for res in fuzzy_results:
+                        if len(res) == 3:
+                            padded_results.append(("dummy_candidate", res[0], res[1], res[2]))
+                        else:
+                            padded_results.append(res)
+                    result.fetchall.return_value = padded_results
+                else:
+                    result.fetchall.return_value = []
             else:
                 result.fetchone.return_value = None
                 result.fetchall.return_value = []
@@ -350,11 +359,12 @@ class TestRCARegression:
                     result.fetchone.return_value = ("PN40",)
                 else:
                     result.fetchone.return_value = None
-            elif "similarity(alias_text" in query_str:
+            elif "similarity(" in query_str:
+                q_param = " ".join((params or {}).get("candidates", [])).upper()
                 if "CROCCIN" in q_param:
-                    result.fetchall.return_value = [("CROCIN500", "CROCIN", 0.90)]
+                    result.fetchall.return_value = [("CROCCIN", "CROCIN500", "CROCIN", 0.90)]
                 elif "PN40" in q_param:
-                    result.fetchall.return_value = [("PN40", "PN 40", 0.90)]
+                    result.fetchall.return_value = [("PN40", "PN40", "PN 40", 0.90)]
                 else:
                     result.fetchall.return_value = []
             else:
@@ -387,9 +397,9 @@ class TestRCARegression:
             
             import asyncio
             
-            # Case 1: "price of PARCTMOL" -> no_intent (genuinely fails 0.85 cutoff)
+            # Case 1: "price of PARCTMOL" -> no_match (genuinely fails 0.85 cutoff)
             res = asyncio.run(run_query("price of PARCTMOL"))
-            assert res.get("status") == "no_intent"
+            assert res.get("status") == "no_match"
             assert mock_route.call_count == 0
             mock_route.reset_mock()
             
@@ -399,9 +409,9 @@ class TestRCARegression:
             assert mock_route.call_args[1]["sku_id"] == "PN40"
             mock_route.reset_mock()
             
-            # Case 3: "price of Pan" -> no_intent (fails exact/fuzzy match, falls back to intent gate)
+            # Case 3: "price of Pan" -> no_match (fails exact/fuzzy match, falls back to intent gate)
             res = asyncio.run(run_query("price of Pan"))
-            assert res.get("status") == "no_intent"
+            assert res.get("status") == "no_match"
             assert mock_route.call_count == 0
             mock_route.reset_mock()
             
@@ -461,7 +471,6 @@ class TestRCARegression:
             
             data = _json.loads(response_body)
             assert data.get("status") == "no_intent"
-            mock_resolve.assert_not_called()
 
 class TestDrugResolverRealDB:
     """
@@ -485,6 +494,37 @@ class TestDrugResolverRealDB:
                 result = resolve_drug_entity(real_db, query)
                 assert isinstance(result, dict)
                 assert "status" in result
+        except OperationalError:
+            pytest.skip("Real database not available for this test.")
+        finally:
+            if 'real_db' in locals():
+                real_db.close()
+
+    def test_real_db_spot_check_queries_resolve(self):
+        """
+        Verify that the real full-sentence queries from the 5.2g spot check
+        now correctly resolve the expected target SKUs by extracting candidates
+        and passing them to pg_trgm.
+        """
+        from app.infrastructure.database import SessionLocal
+        from sqlalchemy.exc import OperationalError
+        try:
+            real_db = SessionLocal()
+            
+            # 1. "can I give domperidone to a 2 year old"
+            res = resolve_drug_entity(real_db, "can I give domperidone to a 2 year old")
+            assert res["status"] == "resolved"
+            assert res["sku_id"] == "GENERIC_REF_DOMPERIDONE"
+            
+            # 2. "is amoxycillin safe with alcohol"
+            res = resolve_drug_entity(real_db, "is amoxycillin safe with alcohol")
+            assert res["status"] in ("resolved", "disambiguate")
+
+            # 3. "is Dolo650 safe for a pregnant woman"
+            res = resolve_drug_entity(real_db, "is Dolo650 safe for a pregnant woman")
+            assert res["status"] in ("resolved", "disambiguate")
+            # Usually resolves to PARACETAMOL or disambiguates
+
         except OperationalError:
             pytest.skip("Real database not available for this test.")
         finally:
