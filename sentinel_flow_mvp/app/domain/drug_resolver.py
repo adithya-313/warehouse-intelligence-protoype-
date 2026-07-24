@@ -134,42 +134,15 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
     # De-duplicate candidates (e.g. if the user repeated a word)
     candidates = list(set(candidates))
     
-    # Fix 2: Boost code-like candidates over plain-word candidates.
-    # Code-like tokens (e.g., "PAN40", "AMLOK5", "DOLO650") are structurally much more 
-    # likely to be genuine drug references than ordinary English words that coincidentally 
-    # share letters with a drug name. We add a fixed boost to any candidate containing a digit.
-    CODE_LIKE_CANDIDATE_BOOST = 0.2
-    
-    # Fix 1: Per-candidate best match, THEN rank globally.
-    # The previous SQL applied LIMIT 3 globally across all candidates combined, which allowed 
-    # one "loud" word (e.g., "safe" matching 3 unrelated drugs) to fill all 3 slots, pushing 
-    # the correct match (e.g., "dolo650") out of the top 3 entirely.
-    # The new SQL uses DISTINCT ON to find the SINGLE BEST alias match FOR EACH CANDIDATE WORD 
-    # first, applies the code-like boost, and then takes the global top 3 from those winners.
-    # Set the word similarity threshold lower so that DOLO650 (0.54) matches DOLO 650 TABLET using <%
-    db.execute(text("SET pg_trgm.word_similarity_threshold = 0.5"))
-    
     sql = text("""
-        WITH per_candidate_best AS (
-            SELECT DISTINCT ON (q.candidate) 
-                   q.candidate, 
-                   a.sku_id, 
-                   a.alias_text, 
-                   CASE 
-                       WHEN q.candidate ~ '[0-9]' THEN word_similarity(q.candidate, a.alias_text) + :boost 
-                       ELSE word_similarity(q.candidate, a.alias_text) 
-                   END AS score
-            FROM unnest(CAST(:candidates AS text[])) AS q(candidate)
-            JOIN drug_brand_aliases a ON q.candidate <% a.alias_text
-            ORDER BY q.candidate, word_similarity(q.candidate, a.alias_text) DESC
-        )
-        SELECT candidate, sku_id, alias_text, score 
-        FROM per_candidate_best 
-        ORDER BY score DESC 
+        SELECT q.candidate, a.sku_id, a.alias_text, similarity(a.alias_text, q.candidate) AS score
+        FROM unnest(CAST(:candidates AS text[])) AS q(candidate)
+        JOIN drug_brand_aliases a ON a.alias_text % q.candidate
+        ORDER BY score DESC
         LIMIT 3;
     """)
     
-    results = db.execute(sql, {"candidates": candidates, "boost": CODE_LIKE_CANDIDATE_BOOST}).fetchall()
+    results = db.execute(sql, {"candidates": candidates}).fetchall()
     
     if not results:
         logger.info("DrugResolver: No close match found via pg_trgm.")
