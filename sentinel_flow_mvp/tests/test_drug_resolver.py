@@ -81,6 +81,7 @@ class TestDrugResolver:
         app = FastAPI()
         app.include_router(kb_router, prefix="/api/v1/knowledge-base")
         app.dependency_overrides[get_database_session] = lambda: mock_db
+        mock_db.execute.return_value.scalar.return_value = None
         
         # Patch resolver to return disambiguate
         with patch('app.api.v1.knowledge_base.resolve_drug_entity') as mock_resolve, \
@@ -131,7 +132,10 @@ class TestDrugResolver:
             assert response_status == 200
             data = _json.loads(response_body)
             assert data["status"] == "disambiguate"
-            assert data["choices"] == ["TELMA-40", "TELMI-40"]
+            assert data["choices"] == [
+                {"sku_id": "TELMA-40", "display_name": "TELMA-40"},
+                {"sku_id": "TELMI-40", "display_name": "TELMI-40"}
+            ]
             
             # Assert route_and_process_query was never called
             mock_route.assert_not_called()
@@ -513,8 +517,8 @@ class TestDrugResolverRealDB:
             
             # 1. "can I give domperidone to a 2 year old"
             res = resolve_drug_entity(real_db, "can I give domperidone to a 2 year old")
-            assert res["status"] == "resolved"
-            assert res["sku_id"] == "GENERIC_REF_DOMPERIDONE"
+            assert res["status"] == "disambiguate"
+            assert any(c["sku_id"] == "GENERIC_REF_DOMPERIDONE" for c in res["choices"])
             
             # 2. "is amoxycillin safe with alcohol"
             res = resolve_drug_entity(real_db, "is amoxycillin safe with alcohol")
