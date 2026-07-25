@@ -1,0 +1,1187 @@
+[
+  {
+    "normalized_generic_name": "cefixime",
+    "query_used": "openfda.generic_name:%22cefixime%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "CEFIXIME"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA204835"
+      ],
+      "brand_name": [
+        "Cefixime"
+      ],
+      "generic_name": [
+        "CEFIXIME"
+      ],
+      "manufacturer_name": [
+        "Aurobindo Pharma Limited"
+      ],
+      "product_ndc": [
+        "65862-751",
+        "65862-752"
+      ],
+      "product_type": [
+        "HUMAN PRESCRIPTION DRUG"
+      ],
+      "route": [
+        "ORAL"
+      ],
+      "substance_name": [
+        "CEFIXIME"
+      ],
+      "rxcui": [
+        "309058",
+        "419849"
+      ],
+      "spl_id": [
+        "141b12c3-31de-4ca7-ac89-d864975846ab"
+      ],
+      "spl_set_id": [
+        "068e6edd-a5fe-40d8-8dcf-ac82b78dced4"
+      ],
+      "package_ndc": [
+        "65862-751-50",
+        "65862-751-01",
+        "65862-752-50",
+        "65862-752-75"
+      ],
+      "is_original_packager": [
+        true
+      ],
+      "unii": [
+        "97I1C92E55"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "domperidone",
+    "query_used": "openfda.substance_name:%22domperidone%22",
+    "match_found": false,
+    "matched_openfda_name": null,
+    "raw_response_snippet": null,
+    "used_fallback": true
+  },
+  {
+    "normalized_generic_name": "aceclofenac",
+    "query_used": "openfda.substance_name:%22aceclofenac%22",
+    "match_found": false,
+    "matched_openfda_name": null,
+    "raw_response_snippet": null,
+    "used_fallback": true
+  },
+  {
+    "normalized_generic_name": "amoxycillin",
+    "query_used": "openfda.substance_name:%22amoxycillin%22",
+    "match_found": false,
+    "matched_openfda_name": null,
+    "raw_response_snippet": null,
+    "used_fallback": true
+  },
+  {
+    "normalized_generic_name": "ofloxacin",
+    "query_used": "openfda.generic_name:%22ofloxacin%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "OFLOXACIN OTIC"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA216130"
+      ],
+      "brand_name": [
+        "ofloxacin"
+      ],
+      "generic_name": [
+        "OFLOXACIN OTIC"
+      ],
+      "manufacturer_name": [
+        "Lifestar Pharma LLC"
+      ],
+      "product_ndc": [
+        "70756-609",
+        "70756-610"
+      ],
+      "product_type": [
+        "HUMAN PRESCRIPTION DRUG"
+      ],
+      "route": [
+        "AURICULAR (OTIC)"
+      ],
+      "substance_name": [
+        "OFLOXACIN"
+      ],
+      "rxcui": [
+        "242446"
+      ],
+      "spl_id": [
+        "7556cd96-134e-4aaa-bf2d-7b6f9c8133c9"
+      ],
+      "spl_set_id": [
+        "0621700e-6315-47ff-a8ed-cccf7d6fc56a"
+      ],
+      "package_ndc": [
+        "70756-609-15",
+        "70756-610-30"
+      ],
+      "is_original_packager": [
+        true
+      ],
+      "upc": [
+        "0370756610304",
+        "0370756609155"
+      ],
+      "nui": [
+        "N0000175937",
+        "M0023650"
+      ],
+      "pharm_class_epc": [
+        "Quinolone Antimicrobial [EPC]"
+      ],
+      "pharm_class_cs": [
+        "Quinolones [CS]"
+      ],
+      "unii": [
+        "A4P49JAZ9H"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "ceftriaxone",
+    "query_used": "openfda.generic_name:%22ceftriaxone%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "CEFTRIAXONE SODIUM"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA065169"
+      ],
+      "brand_name": [
+        "Ceftriaxone Sodium"
+      ],
+      "generic_name": [
+        "CEFTRIAXONE SODIUM"
+      ],
+      "manufacturer_name": [
+        "Hospira, Inc"
+      ],
+      "product_ndc": [
+        "0409-7332",
+        "0409-7337",
+        "0409-7338",
+        "0409-7335"
+      ],
+      "product_type": [
+        "HUMAN PRESCRIPTION DRUG"
+      ],
+      "route": [
+        "INTRAMUSCULAR",
+        "INTRAVENOUS"
+      ],
+      "substance_name": [
+        "CEFTRIAXONE SODIUM"
+      ],
+      "rxcui": [
+        "309092",
+        "1665005",
+        "1665021",
+        "1665046"
+      ],
+      "spl_id": [
+        "cc7743b1-4e7b-446a-9ec1-cc234a8bbccf"
+      ],
+      "spl_set_id": [
+        "03283208-8616-4117-9d2b-aa8046017a4f"
+      ],
+      "package_ndc": [
+        "0409-7337-11",
+        "0409-7337-01",
+        "0409-7338-11",
+        "0409-7338-01",
+        "0409-7332-11",
+        "0409-7332-01",
+        "0409-7335-13",
+        "0409-7335-03"
+      ],
+      "is_original_packager": [
+        true
+      ],
+      "unii": [
+        "023Z5BR09K"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "cefpodoxime proxetil",
+    "query_used": "openfda.generic_name:%22cefpodoxime%20proxetil%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "CEFPODOXIME PROXETIL"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA210568"
+      ],
+      "brand_name": [
+        "Cefpodoxime Proxetil"
+      ],
+      "generic_name": [
+        "CEFPODOXIME PROXETIL"
+      ],
+      "manufacturer_name": [
+        "NuCare Pharmaceuticals,Inc."
+      ],
+      "product_ndc": [
+        "68071-3616"
+      ],
+      "product_type": [
+        "HUMAN PRESCRIPTION DRUG"
+      ],
+      "route": [
+        "ORAL"
+      ],
+      "substance_name": [
+        "CEFPODOXIME PROXETIL"
+      ],
+      "rxcui": [
+        "309076"
+      ],
+      "spl_id": [
+        "1b40454e-994c-39d8-e063-6394a90a97cb"
+      ],
+      "spl_set_id": [
+        "1b405104-650b-c8e3-e063-6294a90a9e8a"
+      ],
+      "package_ndc": [
+        "68071-3616-4"
+      ],
+      "original_packager_product_ndc": [
+        "67877-878"
+      ],
+      "upc": [
+        "0368071361643"
+      ],
+      "unii": [
+        "2TB00A1Z7N"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "levocetirizine",
+    "query_used": "openfda.generic_name:%22levocetirizine%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "LEVOCETIRIZINE DIHYDROCHLORIDE"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA210375"
+      ],
+      "brand_name": [
+        "levocetirizine dihydrochloride"
+      ],
+      "generic_name": [
+        "LEVOCETIRIZINE DIHYDROCHLORIDE"
+      ],
+      "manufacturer_name": [
+        "BJWC (Berkley & Jensen / BJ'S)"
+      ],
+      "product_ndc": [
+        "68391-955"
+      ],
+      "product_type": [
+        "HUMAN OTC DRUG"
+      ],
+      "route": [
+        "ORAL"
+      ],
+      "substance_name": [
+        "LEVOCETIRIZINE DIHYDROCHLORIDE"
+      ],
+      "rxcui": [
+        "855172"
+      ],
+      "spl_id": [
+        "6098f8c4-4502-287f-cd05-06e17d773116"
+      ],
+      "spl_set_id": [
+        "0216f644-767c-ae88-f48f-cd29ac1547ed"
+      ],
+      "package_ndc": [
+        "68391-955-55",
+        "68391-955-11"
+      ],
+      "original_packager_product_ndc": [
+        "43598-735"
+      ],
+      "unii": [
+        "SOD6A38AGA"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "glimepiride",
+    "query_used": "openfda.generic_name:%22glimepiride%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "GLIMEPIRIDE"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA077091"
+      ],
+      "brand_name": [
+        "Glimepiride"
+      ],
+      "generic_name": [
+        "GLIMEPIRIDE"
+      ],
+      "manufacturer_name": [
+        "American Health Packaging"
+      ],
+      "product_ndc": [
+        "68084-326",
+        "68084-788",
+        "68084-327"
+      ],
+      "product_type": [
+        "HUMAN PRESCRIPTION DRUG"
+      ],
+      "route": [
+        "ORAL"
+      ],
+      "substance_name": [
+        "GLIMEPIRIDE"
+      ],
+      "rxcui": [
+        "199245",
+        "199246",
+        "199247"
+      ],
+      "spl_id": [
+        "26cca05b-82f8-e191-e063-6394a90a56bd"
+      ],
+      "spl_set_id": [
+        "0003458f-352a-46fa-9d99-230daa76ae29"
+      ],
+      "package_ndc": [
+        "68084-788-95",
+        "68084-788-25",
+        "68084-326-11",
+        "68084-326-01",
+        "68084-327-11",
+        "68084-327-01"
+      ],
+      "original_packager_product_ndc": [
+        "55111-320",
+        "55111-321",
+        "55111-322"
+      ],
+      "nui": [
+        "N0000175608",
+        "M0020795"
+      ],
+      "pharm_class_epc": [
+        "Sulfonylurea [EPC]"
+      ],
+      "pharm_class_cs": [
+        "Sulfonylurea Compounds [CS]"
+      ],
+      "unii": [
+        "6KY687524K"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "azithromycin",
+    "query_used": "openfda.generic_name:%22azithromycin%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "AZITHROMYCIN"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA207398"
+      ],
+      "brand_name": [
+        "Azithromycin"
+      ],
+      "generic_name": [
+        "AZITHROMYCIN"
+      ],
+      "manufacturer_name": [
+        "Preferred Pharmaceuticals Inc."
+      ],
+      "product_ndc": [
+        "68788-7598"
+      ],
+      "product_type": [
+        "HUMAN PRESCRIPTION DRUG"
+      ],
+      "route": [
+        "ORAL"
+      ],
+      "substance_name": [
+        "AZITHROMYCIN DIHYDRATE"
+      ],
+      "rxcui": [
+        "248656"
+      ],
+      "spl_id": [
+        "6efa1622-de6a-4eee-b5bb-6a8149bbe1c1"
+      ],
+      "spl_set_id": [
+        "003307c5-3f73-4a5d-a704-bfdea3c656e8"
+      ],
+      "package_ndc": [
+        "68788-7598-3"
+      ],
+      "original_packager_product_ndc": [
+        "65862-642"
+      ],
+      "unii": [
+        "5FD1131I7S"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "diclofenac",
+    "query_used": "openfda.generic_name:%22diclofenac%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "DICLOFENAC SODIUM"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA211253"
+      ],
+      "brand_name": [
+        "Diclofenac Sodium"
+      ],
+      "generic_name": [
+        "DICLOFENAC SODIUM"
+      ],
+      "manufacturer_name": [
+        "NuCare Pharmaceuticals,Inc."
+      ],
+      "product_ndc": [
+        "68071-3456"
+      ],
+      "product_type": [
+        "HUMAN OTC DRUG"
+      ],
+      "route": [
+        "TOPICAL"
+      ],
+      "substance_name": [
+        "DICLOFENAC SODIUM"
+      ],
+      "rxcui": [
+        "855633"
+      ],
+      "spl_id": [
+        "1e6ba7b2-299c-67cc-e063-6294a90a589d"
+      ],
+      "spl_set_id": [
+        "005299ac-b6de-511f-e063-6294a90a29e0"
+      ],
+      "package_ndc": [
+        "68071-3456-1"
+      ],
+      "original_packager_product_ndc": [
+        "45802-953"
+      ],
+      "upc": [
+        "0368071345612"
+      ],
+      "unii": [
+        "QTG126297Q"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "telmisartan",
+    "query_used": "openfda.generic_name:%22telmisartan%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "TELMISARTAN"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA205150"
+      ],
+      "brand_name": [
+        "telmisartan"
+      ],
+      "generic_name": [
+        "TELMISARTAN"
+      ],
+      "manufacturer_name": [
+        "REMEDYREPACK INC."
+      ],
+      "product_ndc": [
+        "70518-3798"
+      ],
+      "product_type": [
+        "HUMAN PRESCRIPTION DRUG"
+      ],
+      "route": [
+        "ORAL"
+      ],
+      "substance_name": [
+        "TELMISARTAN"
+      ],
+      "rxcui": [
+        "205305"
+      ],
+      "spl_id": [
+        "53869808-0c5e-754f-e063-6294a90ab5f6"
+      ],
+      "spl_set_id": [
+        "09d31eee-cd22-4918-a889-3eb4d2969525"
+      ],
+      "package_ndc": [
+        "70518-3798-0"
+      ],
+      "original_packager_product_ndc": [
+        "67877-484"
+      ],
+      "nui": [
+        "N0000000070",
+        "N0000175561"
+      ],
+      "pharm_class_moa": [
+        "Angiotensin 2 Receptor Antagonists [MoA]"
+      ],
+      "pharm_class_epc": [
+        "Angiotensin 2 Receptor Blocker [EPC]"
+      ],
+      "unii": [
+        "U5SYW473RQ"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "nimesulide",
+    "query_used": "openfda.substance_name:%22nimesulide%22",
+    "match_found": false,
+    "matched_openfda_name": null,
+    "raw_response_snippet": null,
+    "used_fallback": true
+  },
+  {
+    "normalized_generic_name": "cefuroxime",
+    "query_used": "openfda.generic_name:%22cefuroxime%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "CEFUROXIME AND DEXTROSE"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "NDA050780"
+      ],
+      "brand_name": [
+        "Cefuroxime and Dextrose"
+      ],
+      "generic_name": [
+        "CEFUROXIME AND DEXTROSE"
+      ],
+      "manufacturer_name": [
+        "B. Braun Medical Inc."
+      ],
+      "product_ndc": [
+        "0264-3112",
+        "0264-3114"
+      ],
+      "product_type": [
+        "HUMAN PRESCRIPTION DRUG"
+      ],
+      "route": [
+        "INTRAVENOUS"
+      ],
+      "substance_name": [
+        "CEFUROXIME SODIUM"
+      ],
+      "rxcui": [
+        "1665444",
+        "1665449"
+      ],
+      "spl_id": [
+        "6874a295-7ec7-4822-9d04-4dd9932b4546"
+      ],
+      "spl_set_id": [
+        "07170ee3-1a24-424f-a2a2-00bc92e98f85"
+      ],
+      "package_ndc": [
+        "0264-3112-11",
+        "0264-3114-11"
+      ],
+      "is_original_packager": [
+        true
+      ],
+      "unii": [
+        "R8A7M9MY61"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "methylcobalamin",
+    "query_used": "openfda.generic_name:%22methylcobalamin%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "ASCLEPIAS VINCETOXICUM, ECHINACEA (ANGUSTIFOLIA), HYPOTHALAMUS SUIS, HEPAR SUIS, KIDNEY (SUIS), METHYLCOBALAMIN, GAMBOGIA, GRAPHITES, NUX VOMICA, PHYTOLACCA DECANDRA, 7-OXO-DEHYDROEPIANDROSTERONE 3-ACETATE, ADENOSINUM TRIPHOSPHORICUM DINATRUM, INSULINUM (SUIS), PANCREAS SUIS, SARCOLACTICUM ACIDUM, PROTEUS (VULGARIS)"
+    ],
+    "raw_response_snippet": {
+      "brand_name": [
+        "Professional Weight Support"
+      ],
+      "generic_name": [
+        "ASCLEPIAS VINCETOXICUM, ECHINACEA (ANGUSTIFOLIA), HYPOTHALAMUS SUIS, HEPAR SUIS, KIDNEY (SUIS), METHYLCOBALAMIN, GAMBOGIA, GRAPHITES, NUX VOMICA, PHYTOLACCA DECANDRA, 7-OXO-DEHYDROEPIANDROSTERONE 3-ACETATE, ADENOSINUM TRIPHOSPHORICUM DINATRUM, INSULINUM (SUIS), PANCREAS SUIS, SARCOLACTICUM ACIDUM, PROTEUS (VULGARIS)"
+      ],
+      "manufacturer_name": [
+        "Deseret Biologicals, Inc."
+      ],
+      "product_ndc": [
+        "43742-1531"
+      ],
+      "product_type": [
+        "HUMAN OTC DRUG"
+      ],
+      "route": [
+        "ORAL"
+      ],
+      "substance_name": [
+        "7-OXODEHYDROEPIANDROSTERONE 3-ACETATE",
+        "ADENOSINE TRIPHOSPHATE DISODIUM",
+        "CYNANCHUM VINCETOXICUM ROOT",
+        "ECHINACEA ANGUSTIFOLIA WHOLE",
+        "GAMBOGE",
+        "GRAPHITE",
+        "INSULIN PORK",
+        "LACTIC ACID, L-",
+        "METHYLCOBALAMIN",
+        "PHYTOLACCA AMERICANA ROOT",
+        "PORK KIDNEY",
+        "PORK LIVER",
+        "PROTEUS VULGARIS",
+        "STRYCHNOS NUX-VOMICA SEED",
+        "SUS SCROFA HYPOTHALAMUS",
+        "SUS SCROFA PANCREAS"
+      ],
+      "spl_id": [
+        "b84830aa-3dcd-44fc-bbeb-e01125d202ae"
+      ],
+      "spl_set_id": [
+        "130596b1-8d6d-46c5-a839-6c8ba3c5e87e"
+      ],
+      "package_ndc": [
+        "43742-1531-1"
+      ],
+      "is_original_packager": [
+        true
+      ],
+      "upc": [
+        "0810151880037"
+      ],
+      "nui": [
+        "N0000185375",
+        "N0000175629",
+        "N0000184306",
+        "N0000185001",
+        "M0000728",
+        "M0016962",
+        "M0516536"
+      ],
+      "pharm_class_epc": [
+        "Non-Standardized Plant Allergenic Extract [EPC]"
+      ],
+      "pharm_class_pe": [
+        "Increased Histamine Release [PE]",
+        "Cell-mediated Immunity [PE]",
+        "Increased IgG Production [PE]"
+      ],
+      "pharm_class_cs": [
+        "Allergens [CS]",
+        "Plant Proteins [CS]",
+        "Seed Storage Proteins [CS]"
+      ],
+      "unii": [
+        "84RQ0XOM11",
+        "5L51B4DR1G",
+        "9R858U917W",
+        "VB06AV5US8",
+        "7556HJ7587",
+        "4QQN74LH4O",
+        "AVT680JB39",
+        "F9S9FFU82N",
+        "BR1SN1JS2W",
+        "11E6VI8VEG",
+        "X7BCI5P86H",
+        "6EC706HI7F",
+        "11T9HCO30O",
+        "269XH13919",
+        "N6R0856Z79",
+        "9Y3J3362RY"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "pantoprazole",
+    "query_used": "openfda.generic_name:%22pantoprazole%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "PANTOPRAZOLE SODIUM"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA215860"
+      ],
+      "brand_name": [
+        "Pantoprazole Sodium"
+      ],
+      "generic_name": [
+        "PANTOPRAZOLE SODIUM"
+      ],
+      "manufacturer_name": [
+        "Meitheal Pharmaceuticals Inc."
+      ],
+      "product_ndc": [
+        "71288-600"
+      ],
+      "product_type": [
+        "HUMAN PRESCRIPTION DRUG"
+      ],
+      "route": [
+        "INTRAVENOUS"
+      ],
+      "substance_name": [
+        "PANTOPRAZOLE SODIUM"
+      ],
+      "rxcui": [
+        "283669"
+      ],
+      "spl_id": [
+        "48bbc577-3242-4da3-bca3-7a5f89105415"
+      ],
+      "spl_set_id": [
+        "014f9762-6948-46b7-8659-5c89f35ad8bf"
+      ],
+      "package_ndc": [
+        "71288-600-91",
+        "71288-600-92"
+      ],
+      "is_original_packager": [
+        true
+      ],
+      "unii": [
+        "6871619Q5X"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "itraconazole",
+    "query_used": "openfda.generic_name:%22itraconazole%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "ITRACONAZOLE"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA206741"
+      ],
+      "brand_name": [
+        "ITRACONAZOLE"
+      ],
+      "generic_name": [
+        "ITRACONAZOLE"
+      ],
+      "manufacturer_name": [
+        "Alembic Pharmaceuticals Inc."
+      ],
+      "product_ndc": [
+        "62332-204"
+      ],
+      "product_type": [
+        "HUMAN PRESCRIPTION DRUG"
+      ],
+      "route": [
+        "ORAL"
+      ],
+      "substance_name": [
+        "ITRACONAZOLE"
+      ],
+      "rxcui": [
+        "311204"
+      ],
+      "spl_id": [
+        "585449d8-bba8-44fb-9544-e83636d972e0"
+      ],
+      "spl_set_id": [
+        "23126370-8d6a-4027-bd8f-860e2776ba3a"
+      ],
+      "package_ndc": [
+        "62332-204-30",
+        "62332-204-90",
+        "62332-204-71",
+        "62332-204-10",
+        "62332-204-04"
+      ],
+      "is_original_packager": [
+        true
+      ],
+      "upc": [
+        "0362332204304"
+      ],
+      "nui": [
+        "N0000175487",
+        "M0002083",
+        "N0000182141",
+        "N0000185503",
+        "N0000190113"
+      ],
+      "pharm_class_epc": [
+        "Azole Antifungal [EPC]"
+      ],
+      "pharm_class_cs": [
+        "Azoles [CS]"
+      ],
+      "pharm_class_moa": [
+        "Cytochrome P450 3A4 Inhibitors [MoA]",
+        "P-Glycoprotein Inhibitors [MoA]",
+        "Breast Cancer Resistance Protein Inhibitors [MoA]"
+      ],
+      "unii": [
+        "304NUG5GF4"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "rabeprazole",
+    "query_used": "openfda.generic_name:%22rabeprazole%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "RABEPRAZOLE SODIUM"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA202376"
+      ],
+      "brand_name": [
+        "Rabeprazole sodium"
+      ],
+      "generic_name": [
+        "RABEPRAZOLE SODIUM"
+      ],
+      "manufacturer_name": [
+        "Torrent Pharmaceuticals Limited"
+      ],
+      "product_ndc": [
+        "13668-107"
+      ],
+      "product_type": [
+        "HUMAN PRESCRIPTION DRUG"
+      ],
+      "route": [
+        "ORAL"
+      ],
+      "substance_name": [
+        "RABEPRAZOLE SODIUM"
+      ],
+      "rxcui": [
+        "854868"
+      ],
+      "spl_id": [
+        "4bf4f1c6-0ee4-479e-892c-8956b711374f"
+      ],
+      "spl_set_id": [
+        "04e88b86-e1dd-4c56-8359-45fbcc161f7d"
+      ],
+      "package_ndc": [
+        "13668-107-30",
+        "13668-107-90"
+      ],
+      "is_original_packager": [
+        true
+      ],
+      "upc": [
+        "0313668107302"
+      ],
+      "unii": [
+        "3L36P16U4R"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "ondansetron",
+    "query_used": "openfda.generic_name:%22ondansetron%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "ONDANSETRON HYDROCHLORIDE"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA076183"
+      ],
+      "brand_name": [
+        "ondansetron hydrochloride"
+      ],
+      "generic_name": [
+        "ONDANSETRON HYDROCHLORIDE"
+      ],
+      "manufacturer_name": [
+        "NCS HealthCare of KY, LLC dba Vangard Labs"
+      ],
+      "product_ndc": [
+        "0615-8185"
+      ],
+      "product_type": [
+        "HUMAN PRESCRIPTION DRUG"
+      ],
+      "route": [
+        "ORAL"
+      ],
+      "substance_name": [
+        "ONDANSETRON HYDROCHLORIDE"
+      ],
+      "rxcui": [
+        "198052"
+      ],
+      "spl_id": [
+        "cb0b89ea-904e-424e-9213-80fc4d073fe3"
+      ],
+      "spl_set_id": [
+        "00327696-c496-4c83-a63e-9e29fd6246d4"
+      ],
+      "package_ndc": [
+        "0615-8185-39",
+        "0615-8185-10",
+        "0615-8185-05",
+        "0615-8185-12",
+        "0615-8185-50",
+        "0615-8185-00"
+      ],
+      "original_packager_product_ndc": [
+        "55111-153"
+      ],
+      "unii": [
+        "NMH84OZK2B"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "ambroxol",
+    "query_used": "openfda.substance_name:%22ambroxol%22",
+    "match_found": false,
+    "matched_openfda_name": null,
+    "raw_response_snippet": null,
+    "used_fallback": true
+  },
+  {
+    "normalized_generic_name": "paracetamol",
+    "query_used": "openfda.substance_name:%22paracetamol%22",
+    "match_found": false,
+    "matched_openfda_name": null,
+    "raw_response_snippet": null,
+    "used_fallback": true
+  },
+  {
+    "normalized_generic_name": "ranitidine",
+    "query_used": "openfda.generic_name:%22ranitidine%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "RANITIDINE"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA078192"
+      ],
+      "brand_name": [
+        "Ranitidine"
+      ],
+      "generic_name": [
+        "RANITIDINE"
+      ],
+      "manufacturer_name": [
+        "Dr. Reddy's Laboratories Limited"
+      ],
+      "product_ndc": [
+        "55111-404"
+      ],
+      "product_type": [
+        "HUMAN OTC DRUG"
+      ],
+      "route": [
+        "ORAL"
+      ],
+      "substance_name": [
+        "RANITIDINE HYDROCHLORIDE"
+      ],
+      "rxcui": [
+        "198191"
+      ],
+      "spl_id": [
+        "c47f1d10-c4d9-5df4-84e8-55956b47568b"
+      ],
+      "spl_set_id": [
+        "00df8a42-296f-80dd-98af-ee8b30eb38cc"
+      ],
+      "package_ndc": [
+        "55111-404-34",
+        "55111-404-32",
+        "55111-404-36",
+        "55111-404-50",
+        "55111-404-61",
+        "55111-404-55",
+        "55111-404-62",
+        "55111-404-90",
+        "55111-404-02",
+        "55111-404-65",
+        "55111-404-17",
+        "55111-404-24",
+        "55111-404-38",
+        "55111-404-40"
+      ],
+      "is_original_packager": [
+        true
+      ],
+      "unii": [
+        "BK76465IHM"
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "salbutamol",
+    "query_used": "openfda.substance_name:%22salbutamol%22",
+    "match_found": false,
+    "matched_openfda_name": null,
+    "raw_response_snippet": null,
+    "used_fallback": true
+  },
+  {
+    "normalized_generic_name": "ethinyl estradiol",
+    "query_used": "openfda.generic_name:%22ethinyl%20estradiol%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "LEVONORGESTREL AND ETHINYL ESTRADIOL"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "ANDA206850"
+      ],
+      "brand_name": [
+        "Iclevia"
+      ],
+      "generic_name": [
+        "LEVONORGESTREL AND ETHINYL ESTRADIOL"
+      ],
+      "manufacturer_name": [
+        "Aurobindo Pharma Limited"
+      ],
+      "product_ndc": [
+        "65862-865"
+      ],
+      "product_type": [
+        "HUMAN PRESCRIPTION DRUG"
+      ],
+      "rxcui": [
+        "238019",
+        "748797",
+        "751901",
+        "2049264"
+      ],
+      "spl_id": [
+        "e44389c6-fdd2-408e-8bfe-324842c36d76"
+      ],
+      "spl_set_id": [
+        "00657f4e-9df8-4f58-91a0-eff5a467f988"
+      ],
+      "package_ndc": [
+        "65862-865-94",
+        "65862-865-83"
+      ],
+      "is_original_packager": [
+        true
+      ]
+    },
+    "used_fallback": false
+  },
+  {
+    "normalized_generic_name": "dextromethorphan",
+    "query_used": "openfda.generic_name:%22dextromethorphan%22",
+    "match_found": true,
+    "matched_openfda_name": [
+      "ACETAMINOPHEN, DEXTROMETHORPHAN HBR, PHENYLEPHRINE HCL"
+    ],
+    "raw_response_snippet": {
+      "application_number": [
+        "M012"
+      ],
+      "brand_name": [
+        "Daytime Cold and Flu"
+      ],
+      "generic_name": [
+        "ACETAMINOPHEN, DEXTROMETHORPHAN HBR, PHENYLEPHRINE HCL"
+      ],
+      "manufacturer_name": [
+        "Family Dollar (FAMILY WELLNESS)"
+      ],
+      "product_ndc": [
+        "55319-960"
+      ],
+      "product_type": [
+        "HUMAN OTC DRUG"
+      ],
+      "route": [
+        "ORAL"
+      ],
+      "substance_name": [
+        "ACETAMINOPHEN",
+        "DEXTROMETHORPHAN HYDROBROMIDE",
+        "PHENYLEPHRINE HYDROCHLORIDE"
+      ],
+      "rxcui": [
+        "1113705"
+      ],
+      "spl_id": [
+        "3aa48604-afd3-49a2-b0a8-ab15171c7913"
+      ],
+      "spl_set_id": [
+        "0044c53c-11dd-41a9-a5d9-622dd8b1c144"
+      ],
+      "package_ndc": [
+        "55319-960-08"
+      ],
+      "is_original_packager": [
+        true
+      ],
+      "upc": [
+        "0032251921049"
+      ],
+      "unii": [
+        "362O9ITL9D",
+        "9D2RTI9KYH",
+        "04JA59TNSJ"
+      ]
+    },
+    "used_fallback": false
+  }
+]

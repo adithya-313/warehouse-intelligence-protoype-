@@ -1,0 +1,72 @@
+[
+  {
+    "id": 1,
+    "query": "is Dolo650 safe for a pregnant woman",
+    "raw_response": "I could not find a match for that medication in our catalog. Please check the spelling and try again.",
+    "time": "52.39s",
+    "error": "none"
+  },
+  {
+    "id": 2,
+    "query": "waht is teh dose of crocin for kids",
+    "raw_response": "I could not identify a specific medication in your query. Please include the medication name (e.g., 'PAN-40', 'TELMA-40', 'calpol 650'). If you need clinical advice, ask with a drug name included.",
+    "time": "0.19s",
+    "error": "none"
+  },
+  {
+    "id": 3,
+    "query": "can I give domperidone to a 2 year old",
+    "raw_response": "CLINICAL SAFETY BREAKER: No high-confidence matches found. Please consult a Senior Pharmacist or official CDSCO guidelines.",
+    "time": "21.37s",
+    "error": "none"
+  },
+  {
+    "id": 4,
+    "query": "AMLOK5 side effects",
+    "raw_response": "I could not find a match for that medication in our catalog. Please check the spelling and try again.",
+    "time": "0.22s",
+    "error": "none"
+  },
+  {
+    "id": 5,
+    "query": "is amoxycillin safe with alcohol",
+    "raw_response": "I could not identify a specific medication in your query. Please include the medication name (e.g., 'PAN-40', 'TELMA-40', 'calpol 650'). If you need clinical advice, ask with a drug name included.",
+    "time": "0.05s",
+    "error": "none"
+  },
+  {
+    "id": 6,
+    "query": "what is abemaciclib used for",
+    "raw_response": "I could not identify a specific medication in your query. Please include the medication name (e.g., 'PAN-40', 'TELMA-40', 'calpol 650'). If you need clinical advice, ask with a drug name included.",
+    "time": "0.05s",
+    "error": "none"
+  },
+  {
+    "id": 7,
+    "query": "tell me about nimesulide dosage",
+    "raw_response": "I could not identify a specific medication in your query. Please include the medication name (e.g., 'PAN-40', 'TELMA-40', 'calpol 650'). If you need clinical advice, ask with a drug name included.",
+    "time": "0.05s",
+    "error": "none"
+  },
+  {
+    "id": 8,
+    "query": "Augmentin vs Amoxyclav difference",
+    "raw_response": "I could not identify a specific medication in your query. Please include the medication name (e.g., 'PAN-40', 'TELMA-40', 'calpol 650'). If you need clinical advice, ask with a drug name included.",
+    "time": "0.05s",
+    "error": "none"
+  },
+  {
+    "id": 9,
+    "query": "paracetamol overdose symptoms",
+    "raw_response": "I could not identify a specific medication in your query. Please include the medication name (e.g., 'PAN-40', 'TELMA-40', 'calpol 650'). If you need clinical advice, ask with a drug name included.",
+    "time": "0.05s",
+    "error": "none"
+  },
+  {
+    "id": 10,
+    "query": "is metformin safe for someone with kidney problems",
+    "raw_response": "I could not identify a specific medication in your query. Please include the medication name (e.g., 'PAN-40', 'TELMA-40', 'calpol 650'). If you need clinical advice, ask with a drug name included.",
+    "time": "0.28s",
+    "error": "none"
+  }
+]

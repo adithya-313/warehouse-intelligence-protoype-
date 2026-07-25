@@ -1,0 +1,3 @@
+fix(knowledge_base): resolve brand_name crash by referencing correct array column
+
+The medications table schema uses 'apis' (ARRAY of Text) instead of a dedicated 'brand_name' column. This commit updates the SQL query in the knowledge base routing to extract the brand name from the 'apis' array (index 1 for Amlodipine/Paracetamol) and adds a schema contract test to prevent future drift.

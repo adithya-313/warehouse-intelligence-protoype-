@@ -3,6 +3,7 @@ import time
 import logging
 from fastapi import APIRouter, status, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from app.infrastructure.database import get_database_session
 from app.domain.schemas import KnowledgeIngestionRequest, KnowledgeIngestionResponse, SemanticSearchRequest, SemanticSearchResponse, RAGQueryRequest, RAGQueryResponse, SubstituteRequestSchema, SubstituteResponseSchema, SubstituteItemSchema
 from app.domain.drug_resolver import resolve_drug_entity
@@ -235,6 +236,47 @@ async def ask_clinical_assistant(
                 status="no_match"
             )
         elif resolution["status"] == "disambiguate":
+            # Fix 3: Display name lookup for disambiguation choices
+            # We look up a clean, human-readable display name for each sku_id.
+            # We check clinical_knowledge_base for generics, and medications for brands.
+            display_choices = []
+            for sku in resolution["choices"]:
+                display_name = None
+                
+                # Check generics first
+                if sku.startswith("GENERIC_REF_"):
+                    # Fast SQL to grab the generic_name from JSONB metadata_payload
+                    name_query = text("""
+                        SELECT metadata_payload->>'generic_name' 
+                        FROM clinical_knowledge_base 
+                        WHERE sku_id = :sku
+                    """)
+                    result = db.execute(name_query, {"sku": sku}).scalar()
+                    if result:
+                        display_name = result
+                else:
+                    # Check medications table for brands
+                    name_query = text("""
+                        SELECT apis[1] 
+                        FROM medications 
+                        WHERE sku_id = :sku
+                    """)
+                    result = db.execute(name_query, {"sku": sku}).scalar()
+                    if result:
+                        display_name = result
+                
+                # Fallback if no name found
+                if not display_name:
+                    if sku.startswith("GENERIC_REF_"):
+                        display_name = sku.replace("GENERIC_REF_", "").replace("_", " ").title()
+                    else:
+                        display_name = sku
+                
+                display_choices.append({
+                    "sku_id": sku,
+                    "display_name": display_name
+                })
+                
             request_metrics["intent"] = bucket.value if hasattr(bucket, "value") else str(bucket)
             request_metrics["drug_resolved"] = False
             request_metrics["disambiguation_triggered"] = True
@@ -247,7 +289,7 @@ async def ask_clinical_assistant(
                 system_lock_reason=None,
                 citations=[],
                 status="disambiguate",
-                choices=resolution["choices"]
+                choices=display_choices
             )
         elif resolution["status"] == "resolved":
             extracted_sku = resolution["sku_id"]

@@ -910,7 +910,7 @@ class RAGQueryResponse(BaseModel):
         default=None,
         description="Resolution status, e.g., 'resolved', 'disambiguate', 'no_match'.",
     )
-    choices: list[str] | None = Field(
+    choices: list[Any] | None = Field(
         default=None,
         description="List of drug name choices if status is 'disambiguate'.",
     )
