@@ -134,10 +134,25 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
     # De-duplicate candidates (e.g. if the user repeated a word)
     candidates = list(set(candidates))
     
+    # Beginner Note:
+    # We use a GiST index instead of GIN here because GiST natively supports 
+    # fast K-Nearest-Neighbor (KNN) sorting. If we used GIN, the database would 
+    # have to load thousands of matches into memory and sort them manually!
+    # By using GiST and the special distance operator (<<->), PostgreSQL can walk 
+    # the index tree and return the closest matches instantly without sorting. 
+    # We use word_similarity filter (<%) and distance (<<->) because they allow 
+    # matching "dolo650" inside "DOLO 650 TABLET".
+    db.execute(text("SET pg_trgm.word_similarity_threshold = 0.5;"))
     sql = text("""
-        SELECT q.candidate, a.sku_id, a.alias_text, similarity(a.alias_text, q.candidate) AS score
+        SELECT q.candidate, a.sku_id, a.alias_text, similarity(q.candidate, a.alias_text) AS score
         FROM unnest(CAST(:candidates AS text[])) AS q(candidate)
-        JOIN drug_brand_aliases a ON a.alias_text % q.candidate
+        CROSS JOIN LATERAL (
+            SELECT sku_id, alias_text
+            FROM drug_brand_aliases
+            WHERE q.candidate <% alias_text
+            ORDER BY q.candidate <<-> alias_text
+            LIMIT 50
+        ) a
         ORDER BY score DESC
         LIMIT 3;
     """)
