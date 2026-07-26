@@ -21,7 +21,10 @@ export interface ChatMessage {
   system_lock_reason?: string;
   // Phase 2: Disambiguation fields
   status?: string;
-  choices?: string[];
+  // Beginner Note: Disambiguation choices used to be an array of plain strings.
+  // The backend now returns a list of objects (e.g. { sku_id: "...", display_name: "..." }) 
+  // so we can display readable names while using sku_ids under the hood.
+  choices?: any[];
 }
 
 interface POSState {

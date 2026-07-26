@@ -93,7 +93,7 @@ export default function CopilotPanel() {
       const isSafe: boolean | undefined = data.is_safe_to_dispense;
       const lockReason: string | undefined = data.system_lock_reason;
       const status: string | undefined = data.status;
-      const choices: string[] | undefined = data.choices;
+      const choices: any[] | undefined = data.choices;
 
       // Step 3: Broadcast the safety verdict to the Zustand store.
       // When is_safe_to_dispense is false, the global activeSafetyLock
@@ -227,15 +227,20 @@ export default function CopilotPanel() {
                         {/* Phase 2: Disambiguation choices */}
                         {msg.status === "disambiguate" && msg.choices && msg.choices.length > 0 && (
                           <div className="mt-4 flex flex-wrap gap-2">
-                            {msg.choices.map((choice: string, idx: number) => (
+                            {msg.choices.map((choice: any, idx: number) => (
                               <motion.button
-                                key={idx}
+                                // Beginner Note: The backend previously sent an array of plain strings for disambiguation.
+                                // It now sends objects containing { sku_id, display_name } so we can show a readable name 
+                                // to the user while sending the exact sku_id back to the system when they click.
+                                // If we try to render the raw object directly as {choice}, React crashes! 
+                                // So we render {choice.display_name} as the visible text, and pass {choice.sku_id} to handleSend.
+                                key={choice.sku_id || idx}
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
-                                onClick={() => handleSend(choice)}
+                                onClick={() => handleSend(choice.sku_id || choice)}
                                 className="px-3 py-1.5 bg-white border border-cyan-200 text-cyan-700 hover:bg-cyan-50 text-sm rounded-xl transition-colors shadow-sm"
                               >
-                                {choice}
+                                {choice.display_name || choice}
                               </motion.button>
                             ))}
                           </div>
