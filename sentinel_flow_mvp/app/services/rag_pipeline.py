@@ -563,6 +563,19 @@ async def generate_clinical_response(
     search_results = execute_clinical_search(db=db, query=query, sku_id=sku_id, top_k=3)
     context_items = search_results["results"]
 
+    # DIAG-5.3: log the raw list of records returned by retrieval
+    _diag_records = []
+    for r in context_items:
+        meta = r.get("metadata_payload") or {}
+        _diag_records.append({
+            "sku_id": r.get("sku_id"),
+            "generic_name": meta.get("generic_name"),
+            "is_approved_by_curator": meta.get("is_approved_by_curator"),
+            "clinical_fields_is_null": not bool(r.get("content")),
+            "confidence_score": r.get("confidence_score")
+        })
+    logger.info(f"[DIAG-5.3] RAW RETRIEVAL RESULTS: {_diag_records}")
+
     # Merge direct lookup records with vector search results.
     # Direct lookup records have confidence_score=1.0, so they always
     # pass the threshold gate. We deduplicate by sku_id to avoid
@@ -822,6 +835,9 @@ USER QUERY:
 {query}
 """
 
+    # DIAG-5.3: capturing exactly what the LLM was told to do
+    logger.info(f"[DIAG-5.3] FULL PROMPT SENT TO LLM:\n{prompt}")
+
     # =====================================================================
     # STEP 7: CIRCUIT BREAKER + ASYNC GEMINI GENERATION (Phase 4)
     # =====================================================================
@@ -913,6 +929,9 @@ USER QUERY:
         # Step 5c: Parse & Validate Gemini's JSON Response
         # ------------------------------------------------------------------
         raw_json = response.text.strip()
+        
+        # DIAG-5.3: capturing raw LLM response text before any post-processing
+        logger.info(f"[DIAG-5.3] RAW LLM RESPONSE:\n{raw_json}")
 
         # Remove any markdown code block fences that Gemini might add
         if raw_json.startswith("```"):

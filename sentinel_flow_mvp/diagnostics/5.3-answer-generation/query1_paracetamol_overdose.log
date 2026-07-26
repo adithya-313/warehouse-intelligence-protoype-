@@ -1,0 +1,34 @@
+sentinel_api  | {"timestamp": "2026-07-26T22:35:20.836935+00:00", "level": "INFO", "logger": "app.services.sanitizer", "message": "QuerySanitizer: No misspellings detected. Query passed through unchanged."}
+sentinel_api  | {"timestamp": "2026-07-26T22:35:20.837186+00:00", "level": "INFO", "logger": "app.services.sanitizer", "message": "QuerySanitizer: No SKU pattern found in query."}
+sentinel_api  | {"timestamp": "2026-07-26T22:35:20.837342+00:00", "level": "INFO", "logger": "app.api.v1.knowledge_base", "message": "IntentGate decision: bucket=no_intent sku_id=None query_len=31"}
+sentinel_api  | {"timestamp": "2026-07-26T22:35:21.149554+00:00", "level": "INFO", "logger": "app.domain.drug_resolver", "message": "DrugResolver: Confident fuzzy match found -> GENERIC_REF_NIMESULIDE"}
+sentinel_api  | {"timestamp": "2026-07-26T22:35:21.149861+00:00", "level": "INFO", "logger": "app.api.v1.knowledge_base", "message": "IntentGate rescued by DrugResolver: Found catalog match despite no regex SKU."}
+sentinel_api  | {"timestamp": "2026-07-26T22:35:21.149949+00:00", "level": "INFO", "logger": "app.services.rag_pipeline", "message": "Adaptive Router: No objective database match found. Routing to Gemini RAG pipeline."}
+sentinel_api  | {"timestamp": "2026-07-26T22:35:21.188153+00:00", "level": "INFO", "logger": "app.services.rag_pipeline", "message": "Entity Extraction: Found 1 identifiers in query: ['NIMESULIDE']"}
+sentinel_api  | 
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]
+Batches: 100%|ΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûê| 1/1 [00:00<00:00,  7.67it/s]
+Batches: 100%|ΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûêΓûê| 1/1 [00:00<00:00,  7.65it/s]
+sentinel_api  | {"timestamp": "2026-07-26T22:35:21.588844+00:00", "level": "INFO", "logger": "app.services.semantic_search", "message": "[DIAG-5.3] FILTER START: threshold=0.6, total_candidates=1"}
+sentinel_api  | {"timestamp": "2026-07-26T22:35:21.589027+00:00", "level": "INFO", "logger": "app.services.semantic_search", "message": "[DIAG-5.3] PRE-FILTER: sku_id=GENERIC_REF_NIMESULIDE, confidence=0.5706"}
+sentinel_api  | {"timestamp": "2026-07-26T22:35:21.589092+00:00", "level": "INFO", "logger": "app.services.semantic_search", "message": "[DIAG-5.3] POST-FILTER: sku_id=GENERIC_REF_NIMESULIDE DROPPED (reason: confidence 0.5706 < 0.6)."}
+sentinel_api  | {"timestamp": "2026-07-26T22:35:21.589152+00:00", "level": "WARNING", "logger": "app.services.semantic_search", "message": "Hybrid search result for SKU GENERIC_REF_NIMESULIDE rejected. Confidence 0.5706 is below 0.6."}
+sentinel_api  | {"timestamp": "2026-07-26T22:35:21.589330+00:00", "level": "INFO", "logger": "app.services.rag_pipeline", "message": "[DIAG-5.3] RAW RETRIEVAL RESULTS: []"}
+sentinel_api  | {"timestamp": "2026-07-26T22:35:21.591247+00:00", "level": "INFO", "logger": "app.services.rag_pipeline", "message": "SKU Fallback: Direct medication lookup for GENERIC_REF_NIMESULIDE/GENERIC_REF_NIMESULIDE enriched the Judge with safety data (preg_category=None)."}
+sentinel_api  | {"timestamp": "2026-07-26T22:35:21.591413+00:00", "level": "INFO", "logger": "app.services.rule_engine", "message": "ClinicalSafetyJudge: All safety checks passed. Transaction ALLOWED."}
+sentinel_api  | {"timestamp": "2026-07-26T22:35:21.591597+00:00", "level": "INFO", "logger": "app.api.v1.knowledge_base", "message": "request_completed", "correlation_id": "035cbb05-d7ee-43e3-aefb-0cc9a4484ca6", "intent": "ambiguous", "path_taken": "clinical", "fallback_triggered": false, "drug_resolved": true, "disambiguation_triggered": false, "latency_ms": 754.73}
+sentinel_api  | INFO:     172.18.0.9:36526 - "POST /api/v1/knowledge-base/ask HTTP/1.1" 200 OK
+sentinel_api  | INFO:     172.18.0.1:42946 - "GET /metrics HTTP/1.1" 404 Not Found
+sentinel_api  | INFO:     172.18.0.1:55962 - "GET /metrics HTTP/1.1" 404 Not Found
+sentinel_api  | INFO:     172.18.0.1:40048 - "GET /metrics HTTP/1.1" 404 Not Found
+sentinel_api  | INFO:     172.18.0.1:34060 - "GET /metrics HTTP/1.1" 404 Not Found
+sentinel_api  | INFO:     172.18.0.1:50256 - "GET /metrics HTTP/1.1" 404 Not Found
+sentinel_api  | {"timestamp": "2026-07-26T22:36:42.765019+00:00", "level": "INFO", "logger": "app.services.sanitizer", "message": "QuerySanitizer: Corrected misspelling 'paracetamol' -> 'GENERIC_REF_PARACETAMOL'"}
+sentinel_api  | {"timestamp": "2026-07-26T22:36:42.765233+00:00", "level": "INFO", "logger": "app.services.sanitizer", "message": "QuerySanitizer: Final cleaned query: 'GENERIC_REF_PARACETAMOL overdose symptoms'"}
+sentinel_api  | {"timestamp": "2026-07-26T22:36:42.765411+00:00", "level": "INFO", "logger": "app.services.sanitizer", "message": "QuerySanitizer: No SKU pattern found in query."}
+sentinel_api  | {"timestamp": "2026-07-26T22:36:42.765640+00:00", "level": "INFO", "logger": "app.api.v1.knowledge_base", "message": "IntentGate decision: bucket=no_intent sku_id=None query_len=41"}
+sentinel_api  | {"timestamp": "2026-07-26T22:36:43.506932+00:00", "level": "INFO", "logger": "app.domain.drug_resolver", "message": "DrugResolver: Ambiguous fuzzy match, disambiguating -> ['CALPOL650', 'GENERIC_REF_PARACETAMOL']"}
+sentinel_api  | {"timestamp": "2026-07-26T22:36:43.507152+00:00", "level": "INFO", "logger": "app.api.v1.knowledge_base", "message": "IntentGate rescued by DrugResolver: Found catalog match despite no regex SKU."}
+sentinel_api  | {"timestamp": "2026-07-26T22:36:43.509205+00:00", "level": "INFO", "logger": "app.api.v1.knowledge_base", "message": "request_completed", "correlation_id": "b6861850-92f2-45a2-be2f-f8c4a73a3910", "intent": "ambiguous", "path_taken": "none", "fallback_triggered": false, "drug_resolved": false, "disambiguation_triggered": true, "latency_ms": 744.41}
+sentinel_api  | INFO:     172.18.0.9:52342 - "POST /api/v1/knowledge-base/ask HTTP/1.1" 200 OK
+sentinel_api  | INFO:     172.18.0.1:40754 - "GET /metrics HTTP/1.1" 404 Not Found

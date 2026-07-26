@@ -307,7 +307,12 @@ def execute_clinical_search(
     formatted_results = []
     safety_warning = None
 
+    # DIAG-5.3: logging what's about to be filtered and the threshold being applied
+    logger.info(f"[DIAG-5.3] FILTER START: threshold={MINIMUM_CONFIDENCE_THRESHOLD}, total_candidates={len(sorted_by_rrf[:top_k])}")
+
     for item in sorted_by_rrf[:top_k]:
+        # DIAG-5.3: logging the record entering the filter step
+        logger.info(f"[DIAG-5.3] PRE-FILTER: sku_id={item['sku_id']}, confidence={item['confidence_score']}")
         if item["confidence_score"] >= MINIMUM_CONFIDENCE_THRESHOLD:
             formatted_results.append({
                 "sku_id": item["sku_id"],
@@ -315,7 +320,11 @@ def execute_clinical_search(
                 "confidence_score": item["confidence_score"],
                 "metadata_payload": item["metadata_payload"]
             })
+            # DIAG-5.3: logging what survived
+            logger.info(f"[DIAG-5.3] POST-FILTER: sku_id={item['sku_id']} SURVIVED.")
         else:
+            # DIAG-5.3: logging what was dropped and why
+            logger.info(f"[DIAG-5.3] POST-FILTER: sku_id={item['sku_id']} DROPPED (reason: confidence {item['confidence_score']} < {MINIMUM_CONFIDENCE_THRESHOLD}).")
             logger.warning(
                 f"Hybrid search result for SKU {item['sku_id']} rejected. "
                 f"Confidence {item['confidence_score']} is below {MINIMUM_CONFIDENCE_THRESHOLD}."
