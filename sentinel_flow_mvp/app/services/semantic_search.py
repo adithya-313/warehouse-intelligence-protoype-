@@ -309,24 +309,44 @@ def execute_clinical_search(
     formatted_results = []
     safety_warning = None
 
-    for item in sorted_by_rrf[:top_k]:
-        is_confident_match = (sku_id is not None and item["sku_id"] == sku_id)
-        
-        # Determine approval and data completeness by checking the anchor table
-        med = db.query(MedicationModel).filter(MedicationModel.sku_id == item["sku_id"]).first()
-        is_approved = med.is_approved_by_curator if med else True
-        
-        # Clinical fields are populated if we have indications, etc. in metadata
-        clinical_fields_null = "indications" not in item["metadata_payload"]
-        
-        if not is_approved and clinical_fields_null:
-            data_completeness = "identity_only"
-        elif is_approved and clinical_fields_null:
-            logger.warning(f"Edge case detected: SKU {item['sku_id']} is approved by curator but has NULL clinical fields.")
-            data_completeness = "identity_only"
-        else:
-            data_completeness = "full"
+    # Why: We fetch all medication rows in one query instead of one query per result,
+    # so we don't slow down every search with lots of small database calls.
+    all_sku_ids = [item["sku_id"] for item in sorted_by_rrf[:top_k]]
+    medications = db.query(MedicationModel).filter(MedicationModel.sku_id.in_(all_sku_ids)).all()
+    medication_lookup_by_sku = {med.sku_id: med for med in medications}
 
+    for item in sorted_by_rrf[:top_k]:
+        sku = item["sku_id"]
+        is_confident_match = (sku_id is not None and sku == sku_id)
+        
+        # Why: The ingest pipeline reliably sets "data_quality" to "identity_only" for
+        # non-FDA approved generics with no clinical data. If this field exists, we use it directly.
+        ingest_data_quality = item["metadata_payload"].get("data_quality")
+        
+        if ingest_data_quality is not None:
+            if ingest_data_quality == "identity_only":
+                data_completeness = "identity_only"
+            else:
+                data_completeness = "full"
+        else:
+            # Why: If the ingest field is somehow missing, we fall back to a database lookup
+            # to see if it's approved by the curator. We log a warning because this shouldn't happen.
+            logger.warning(f"Fallback triggered: Missing data_quality in metadata_payload for SKU {sku}")
+            med = medication_lookup_by_sku.get(sku)
+            is_approved = med.is_approved_by_curator if med else True
+            clinical_fields_null = "indications" not in item["metadata_payload"]
+            
+            if not is_approved and clinical_fields_null:
+                data_completeness = "identity_only"
+            elif is_approved and clinical_fields_null:
+                logger.warning(f"Edge case detected: SKU {sku} is approved by curator but has NULL clinical fields.")
+                data_completeness = "identity_only"
+            else:
+                data_completeness = "full"
+
+        # Why: A search result survives the filter if it naturally has a high confidence score.
+        # Alternatively, it also survives if it is an identity-only record AND the resolver confidently
+        # matched it, meaning we should honestly disclose the limited data rather than drop it silently.
         if item["confidence_score"] >= MINIMUM_CONFIDENCE_THRESHOLD:
             formatted_results.append({
                 "sku_id": item["sku_id"],
@@ -335,12 +355,9 @@ def execute_clinical_search(
                 "metadata_payload": item["metadata_payload"],
                 "data_completeness": data_completeness
             })
-            logger.info(f"[FILTER] SURVIVED: sku_id={item['sku_id']}, relevance={item['confidence_score']}, exempted=False, data_completeness={data_completeness}")
+            logger.info(f"[FILTER] SURVIVED: sku_id={sku}, relevance={item['confidence_score']}, exempted=False, data_completeness={data_completeness}")
             
-        elif is_confident_match and not is_approved and clinical_fields_null:
-            # EXEMPTION: The resolver confidently matched this drug, but it's an identity-only 
-            # unapproved generic with no clinical data to produce a high vector relevance score.
-            # We keep it so we can honestly disclose the limited data instead of silently dropping it.
+        elif is_confident_match and data_completeness == "identity_only":
             formatted_results.append({
                 "sku_id": item["sku_id"],
                 "content": item["content"],
@@ -348,12 +365,12 @@ def execute_clinical_search(
                 "metadata_payload": item["metadata_payload"],
                 "data_completeness": data_completeness
             })
-            logger.info(f"[FILTER] EXEMPTED: sku_id={item['sku_id']}, relevance={item['confidence_score']}, exempted=True, data_completeness={data_completeness}")
+            logger.info(f"[FILTER] EXEMPTED: sku_id={sku}, relevance={item['confidence_score']}, exempted=True, data_completeness={data_completeness}")
             
         else:
-            logger.info(f"[FILTER] DROPPED: sku_id={item['sku_id']}, relevance={item['confidence_score']}, exempted=False, data_completeness={data_completeness}")
+            logger.info(f"[FILTER] DROPPED: sku_id={sku}, relevance={item['confidence_score']}, exempted=False, data_completeness={data_completeness}")
             logger.warning(
-                f"Hybrid search result for SKU {item['sku_id']} rejected. "
+                f"Hybrid search result for SKU {sku} rejected. "
                 f"Confidence {item['confidence_score']} is below {MINIMUM_CONFIDENCE_THRESHOLD}."
             )
 
