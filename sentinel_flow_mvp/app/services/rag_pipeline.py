@@ -463,6 +463,21 @@ def extract_known_entities(
                 f"Entity Extraction: Lookup failed for '{entity}': {e}"
             )
 
+    if len(seen_sku_ids) > 1:
+        logger.info(f"Entity Extraction: Found {len(seen_sku_ids)} distinct SKUs. Triggering disambiguation.")
+        choices = []
+        for r in results:
+            payload = r.get("metadata_payload") or {}
+            display_name = payload.get("generic_name") or payload.get("brand_name") or r["sku_id"]
+            choices.append({
+                "sku_id": r["sku_id"],
+                "display_name": display_name
+            })
+        return {
+            "status": "disambiguate",
+            "choices": choices
+        }
+
     return results
 
 
@@ -538,10 +553,12 @@ async def generate_clinical_response(
     # search returns empty or low-confidence results, the direct
     # lookup records are already captured and injected into
     # enriched_records for the Judge to evaluate.
-    direct_lookup_records: list[dict] = extract_known_entities(
+    direct_lookup_records = extract_known_entities(
         db=db,
         query=query,
     )
+    if isinstance(direct_lookup_records, dict) and direct_lookup_records.get("status") == "disambiguate":
+        return direct_lookup_records
 
     # If we found a direct match, also update the sku_id for better
     # vector search filtering (this helps the vector search narrow down
