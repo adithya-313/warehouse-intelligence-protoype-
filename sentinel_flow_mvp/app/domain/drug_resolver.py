@@ -228,6 +228,24 @@ def resolve_drug_entity(db: Session, query: str, sku_id: str | None = None) -> d
             logger.info(f"DrugResolver: Confident fuzzy match (best score) -> {match}")
             return {"status": "resolved", "sku_id": match, "confidence": "fuzzy"}
             
+        # Check for clean 2-way tie between one generic and one brand
+        # Why: If the fuzzy search returns exactly two tied candidates, and exactly one 
+        # is a generic reference while the other is a brand, we default to the generic. 
+        # This prevents forcing the user to arbitrarily pick a brand for clinical questions.
+        if len(unique_skus) == 2:
+            sku1 = unique_skus[0]["sku"]
+            sku2 = unique_skus[1]["sku"]
+            
+            is_generic1 = sku1.startswith("GENERIC_REF_")
+            is_generic2 = sku2.startswith("GENERIC_REF_")
+            
+            if is_generic1 and not is_generic2:
+                logger.info(f"DrugResolver: Clean 2-way tie between {sku1} and {sku2}, defaulting to generic -> {sku1}")
+                return {"status": "resolved", "sku_id": sku1, "confidence": "tie_break_generic_default"}
+            elif is_generic2 and not is_generic1:
+                logger.info(f"DrugResolver: Clean 2-way tie between {sku1} and {sku2}, defaulting to generic -> {sku2}")
+                return {"status": "resolved", "sku_id": sku2, "confidence": "tie_break_generic_default"}
+                
         choices = [u["sku"] for u in unique_skus]
         # [DIAG-H3] Log final decision and ambiguous list
         logger.info(f"[DIAG-H3] Final decision: AMBIGUOUS. Candidates: {choices[:3]}")

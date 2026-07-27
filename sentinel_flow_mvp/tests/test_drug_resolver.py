@@ -81,12 +81,13 @@ class TestDrugResolver:
 
     def test_unforced_sku_retains_behavior(self):
         """f. Not providing sku_id retains the fuzzy match behavior."""
-        mock_db = self._make_mock_db(fuzzy_results=[("CALPOL650", "PARACETAMOL", 1.0000), ("GENERIC_REF_PARACETAMOL", "PARACETAMOL", 1.0000)])
+        # Use two brands here to ensure it falls through to ambiguous/disambiguate
+        mock_db = self._make_mock_db(fuzzy_results=[("CALPOL650", "PARACETAMOL", 1.0000), ("DOLO650", "PARACETAMOL", 1.0000)])
         
         result = resolve_drug_entity(mock_db, "paracetamol overdose symptoms")
         assert result["status"] == "disambiguate"
         assert "CALPOL650" in result["choices"]
-        assert "GENERIC_REF_PARACETAMOL" in result["choices"]
+        assert "DOLO650" in result["choices"]
 
     def test_exact_match_per_token_single(self):
         """g. query 'GENERIC_REF_PARACETAMOL overdose symptoms' resolves exactly."""
@@ -116,7 +117,8 @@ class TestDrugResolver:
 
     def test_exact_match_per_token_none(self):
         """h. query 'paracetamol overdose symptoms' falls through to fuzzy matching."""
-        mock_db = self._make_mock_db(fuzzy_results=[("CALPOL650", "PARACETAMOL", 1.0000), ("GENERIC_REF_PARACETAMOL", "PARACETAMOL", 1.0000)])
+        # Use two brands here to ensure it falls through to ambiguous/disambiguate
+        mock_db = self._make_mock_db(fuzzy_results=[("CALPOL650", "PARACETAMOL", 1.0000), ("DOLO650", "PARACETAMOL", 1.0000)])
         
         result = resolve_drug_entity(mock_db, "paracetamol overdose symptoms")
         assert result["status"] == "disambiguate"
@@ -152,6 +154,40 @@ class TestDrugResolver:
         # Because we mocked fuzzy search to return PAN40, it should resolve fuzzily or disambiguate
         # We just care it didn't resolve 'exact' on the first step
         assert result.get("confidence") != "exact"
+
+    def test_fuzzy_tie_break_generic_wins(self):
+        """j. tie between generic and brand resolves to generic."""
+        mock_db = self._make_mock_db(fuzzy_results=[
+            ("CALPOL650", "PARACETAMOL", 1.0000),
+            ("GENERIC_REF_PARACETAMOL", "PARACETAMOL", 0.9500)
+        ])
+        
+        result = resolve_drug_entity(mock_db, "paracetamol overdose symptoms")
+        assert result["status"] == "resolved"
+        assert result["sku_id"] in ("CALPOL650", "GENERIC_REF_PARACETAMOL")
+        assert result["sku_id"] == "GENERIC_REF_PARACETAMOL"
+        assert result["confidence"] == "tie_break_generic_default"
+
+    def test_fuzzy_tie_break_two_brands_ambiguous(self):
+        """k. tie between two brands still returns ambiguous."""
+        mock_db = self._make_mock_db(fuzzy_results=[
+            ("CALPOL650", "PARACETAMOL", 1.0000),
+            ("DOLO650", "PARACETAMOL", 0.9500)
+        ])
+        
+        result = resolve_drug_entity(mock_db, "paracetamol overdose symptoms")
+        assert result["status"] == "disambiguate"
+
+    def test_fuzzy_tie_break_three_way_ambiguous(self):
+        """l. 3-way tie including a generic still returns ambiguous."""
+        mock_db = self._make_mock_db(fuzzy_results=[
+            ("CALPOL650", "PARACETAMOL", 1.0000),
+            ("DOLO650", "PARACETAMOL", 0.9500),
+            ("GENERIC_REF_PARACETAMOL", "PARACETAMOL", 0.9000)
+        ])
+        
+        result = resolve_drug_entity(mock_db, "paracetamol overdose symptoms")
+        assert result["status"] == "disambiguate"
 
     def test_pipeline_disambiguate_short_circuit(self):
         """Test that disambiguate status bypasses route_and_process_query."""
