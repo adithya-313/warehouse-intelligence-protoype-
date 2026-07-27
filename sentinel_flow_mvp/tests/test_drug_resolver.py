@@ -68,6 +68,26 @@ class TestDrugResolver:
         assert result["status"] == "no_match"
         assert result["reason"] == "no_close_match_found"
 
+    def test_forced_sku_short_circuits(self):
+        """e. Providing a known sku_id skips DB fuzzy match entirely."""
+        mock_db = self._make_mock_db()
+        
+        result = resolve_drug_entity(mock_db, "anything", sku_id="GENERIC_REF_PARACETAMOL")
+        assert result["status"] == "resolved"
+        assert result["sku_id"] == "GENERIC_REF_PARACETAMOL"
+        assert result["confidence"] == "exact"
+        # The database should not have been queried
+        mock_db.execute.assert_not_called()
+
+    def test_unforced_sku_retains_behavior(self):
+        """f. Not providing sku_id retains the fuzzy match behavior."""
+        mock_db = self._make_mock_db(fuzzy_results=[("CALPOL650", "PARACETAMOL", 1.0000), ("GENERIC_REF_PARACETAMOL", "PARACETAMOL", 1.0000)])
+        
+        result = resolve_drug_entity(mock_db, "paracetamol overdose symptoms")
+        assert result["status"] == "disambiguate"
+        assert "CALPOL650" in result["choices"]
+        assert "GENERIC_REF_PARACETAMOL" in result["choices"]
+
     def test_pipeline_disambiguate_short_circuit(self):
         """Test that disambiguate status bypasses route_and_process_query."""
         import json as _json

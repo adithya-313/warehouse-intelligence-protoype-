@@ -57,7 +57,13 @@ def translate_to_sku(db: Session, match_str: str, known_skus: set[str]) -> str:
         
     return match_str
 
-def resolve_drug_entity(db: Session, query: str) -> dict:
+def resolve_drug_entity(db: Session, query: str, sku_id: str | None = None) -> dict:
+    # Why: if the caller already knows the exact drug (e.g. the sanitizer already
+    # found it, or the user picked it from a disambiguation menu), we trust that
+    # and skip fuzzy matching entirely. No need to guess what we already know.
+    if sku_id:
+        return {"status": "resolved", "sku_id": sku_id, "confidence": "exact"}
+
     # [DIAG-H3] Logging the exact input the resolver receives
     logger.info(f"[DIAG-H3] resolve_drug_entity input query: '{query}'")
     """
