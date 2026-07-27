@@ -88,6 +88,71 @@ class TestDrugResolver:
         assert "CALPOL650" in result["choices"]
         assert "GENERIC_REF_PARACETAMOL" in result["choices"]
 
+    def test_exact_match_per_token_single(self):
+        """g. query 'GENERIC_REF_PARACETAMOL overdose symptoms' resolves exactly."""
+        mock_db = MagicMock()
+        def mock_execute(query, params=None):
+            result = MagicMock()
+            if "FROM medications" in str(query):
+                token = params.get("token")
+                if token == "GENERIC_REF_PARACETAMOL":
+                    result.fetchone.return_value = ("GENERIC_REF_PARACETAMOL",)
+                else:
+                    result.fetchone.return_value = None
+            elif "similarity(" in str(query):
+                result.fetchall.return_value = []
+            else:
+                result.fetchone.return_value = None
+            return result
+        mock_db.execute.side_effect = mock_execute
+        
+        result = resolve_drug_entity(mock_db, "GENERIC_REF_PARACETAMOL overdose symptoms")
+        assert result["status"] == "resolved"
+        assert result["sku_id"] == "GENERIC_REF_PARACETAMOL"
+        assert result["confidence"] == "exact"
+        # Verify fuzzy search was not called
+        for call in mock_db.execute.call_args_list:
+            assert "similarity(" not in str(call[0][0])
+
+    def test_exact_match_per_token_none(self):
+        """h. query 'paracetamol overdose symptoms' falls through to fuzzy matching."""
+        mock_db = self._make_mock_db(fuzzy_results=[("CALPOL650", "PARACETAMOL", 1.0000), ("GENERIC_REF_PARACETAMOL", "PARACETAMOL", 1.0000)])
+        
+        result = resolve_drug_entity(mock_db, "paracetamol overdose symptoms")
+        assert result["status"] == "disambiguate"
+        # We assert it did NOT resolve exactly
+        assert "choices" in result
+
+    def test_exact_match_per_token_multiple(self, caplog):
+        """i. query mentioning two real SKUs falls through and logs."""
+        mock_db = MagicMock()
+        def mock_execute(query, params=None):
+            result = MagicMock()
+            if "FROM medications" in str(query):
+                token = params.get("token")
+                if token in ("PAN40", "DOLO650"):
+                    result.fetchone.return_value = (token,)
+                else:
+                    result.fetchone.return_value = None
+            elif "WHERE REPLACE(alias_text" in str(query):
+                result.fetchone.return_value = None
+            elif "similarity(" in str(query):
+                # Return fuzzy results so we can check it fell through properly
+                result.fetchall.return_value = [("PAN40", "PAN40", "PAN40", 1.0)]
+            else:
+                result.fetchone.return_value = None
+                result.fetchall.return_value = []
+            return result
+        mock_db.execute.side_effect = mock_execute
+        
+        with caplog.at_level("WARNING"):
+            result = resolve_drug_entity(mock_db, "can I take PAN40 and DOLO650 together")
+            
+        assert "Multiple exact SKU tokens found" in caplog.text
+        # Because we mocked fuzzy search to return PAN40, it should resolve fuzzily or disambiguate
+        # We just care it didn't resolve 'exact' on the first step
+        assert result.get("confidence") != "exact"
+
     def test_pipeline_disambiguate_short_circuit(self):
         """Test that disambiguate status bypasses route_and_process_query."""
         import json as _json

@@ -96,18 +96,40 @@ def resolve_drug_entity(db: Session, query: str, sku_id: str | None = None) -> d
         logger.warning("DrugResolver: Empty query after stripping punctuation.")
         return {"status": "no_match", "reason": "empty_query"}
         
-    # We strip hyphens because "PAN-40" should match "PAN 40" or "PAN40"
     query_clean = " ".join(tokens).upper().replace("-", "")
     
-    # Check if they typed the exact raw SKU first (like "PAN40")
-    # since bare SKUs aren't in the alias table.
-    sku_check = text("SELECT sku_id FROM medications WHERE sku_id ILIKE :query LIMIT 1")
-    exact_sku = db.execute(sku_check, {"query": query_clean}).fetchone()
-    # [DIAG-H3] Log whether it detects an exact bare SKU token in the input
-    logger.info(f"[DIAG-H3] exact bare SKU check for query_clean '{query_clean}': {exact_sku}")
-    if exact_sku:
-        logger.info(f"DrugResolver: Exact bare SKU match found -> {exact_sku[0]}")
-        return {"status": "resolved", "sku_id": exact_sku[0], "confidence": "exact"}
+    # Step 1: Exact bare SKU match (per token)
+    # Why: We check each individual word (token) in the query to see if it perfectly 
+    # matches a known bare SKU (e.g. "GENERIC_REF_PARACETAMOL"). If the query is a 
+    # full sentence, the exact SKU might just be one word inside it. We cannot expect 
+    # the entire sentence to equal the SKU.
+    matched_skus = []
+    
+    # We use exact equality (=) because we uppercase the token, and SKUs are uppercase.
+    sku_check = text("SELECT sku_id FROM medications WHERE sku_id = :token LIMIT 1")
+    
+    for token in tokens:
+        # Strip hyphens just in case they typed "PAN-40" but the DB stores "PAN40"
+        token_clean = token.upper().replace("-", "")
+        
+        row = db.execute(sku_check, {"token": token_clean}).fetchone()
+        if row:
+            found_sku = row[0]
+            # Avoid counting the exact same SKU twice if they typed it twice
+            if found_sku not in matched_skus:
+                matched_skus.append(found_sku)
+                
+    # [DIAG-H3] Log the exact bare SKUs found
+    logger.info(f"[DIAG-H3] exact bare SKU tokens found for query '{query_clean}': {matched_skus}")
+    
+    if len(matched_skus) == 1:
+        logger.info(f"DrugResolver: Exact bare SKU match found -> {matched_skus[0]}")
+        return {"status": "resolved", "sku_id": matched_skus[0], "confidence": "exact"}
+    elif len(matched_skus) > 1:
+        # Why: If the query mentions two different real SKUs (e.g. two drug names), 
+        # we do NOT blindly pick one. We log the occurrence and fall through to the 
+        # ambiguous/fuzzy path so the system can handle it safely.
+        logger.warning(f"DrugResolver: Multiple exact SKU tokens found {matched_skus}, falling through.")
         
     # Step 2: Exact alias match
     # Sometimes users type the exact brand name without hyphens (e.g. "PAN 40").
