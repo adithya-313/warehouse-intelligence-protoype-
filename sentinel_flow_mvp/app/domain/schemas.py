@@ -953,6 +953,16 @@ class ClinicalNarrativeSchema(BaseModel):
     system_lock_reason: str | None
     citations: list[str]
 
+    @model_validator(mode="after")
+    def validate_system_lock_reason(self) -> "ClinicalNarrativeSchema":
+        """
+        Enforce that system_lock_reason is exactly null whenever
+        is_safe_to_dispense is true.
+        """
+        if self.is_safe_to_dispense is True and self.system_lock_reason is not None:
+            self.system_lock_reason = None
+        return self
+
 
 # --- Phase 9: Cross-Model Hybrid Substitute Schemas ---
 # Beginner Note: These schemas define the contract for our "Substitute Finder"

@@ -836,6 +836,13 @@ If the clinical context does not contain enough information to answer
 the specific question asked, say so honestly and specifically — name what
 information is missing, rather than giving a generic refusal.
 
+OUTPUT RULES:
+1. system_lock_reason: If the transaction is SAFE, this field MUST be exactly null (not a string, not an empty string). If the transaction is BLOCKED, this field must contain the exact reason code (e.g. "CRITICAL_PREGNANCY_CONTRAINDICATION").
+2. citations: This must only contain actual named clinical sources from the context.
+   - CORRECT: ["OpenFDA monograph", "FDA label", "CDSCO Guidelines"]
+   - INCORRECT: ["Indications: GERD", "SAFE — ALLOWED", "Contraindications: Severe liver disease"]
+   Never include paraphrased text or the safety verdict in citations.
+
 CLINICAL CONTEXT:
 {context_blocks}
 

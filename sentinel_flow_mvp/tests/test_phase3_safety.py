@@ -360,6 +360,7 @@ class TestClinicalNarrativeSchema:
         THEN ClinicalNarrativeSchema must parse it without error
         """
         data = {
+            "question_type": "safety_check",
             "is_safe_to_dispense": True,
             "narrative": "This medication is safe for the patient.",
             "system_lock_reason": None,
@@ -379,6 +380,7 @@ class TestClinicalNarrativeSchema:
         THEN ClinicalNarrativeSchema must parse it correctly
         """
         data = {
+            "question_type": "safety_check",
             "is_safe_to_dispense": False,
             "narrative": "This medication is contraindicated in pregnancy.",
             "system_lock_reason": "CRITICAL_PREGNANCY_CONTRAINDICATION",
@@ -396,6 +398,7 @@ class TestClinicalNarrativeSchema:
         THEN ClinicalNarrativeSchema MUST raise ValidationError
         """
         data = {
+            "question_type": "safety_check",
             "is_safe_to_dispense": True,
             # "narrative" is missing
             "system_lock_reason": None,
@@ -410,6 +413,7 @@ class TestClinicalNarrativeSchema:
         THEN ClinicalNarrativeSchema MUST raise ValidationError
         """
         data = {
+            "question_type": "safety_check",
             "is_safe_to_dispense": "yes",  # wrong type — should be bool
             "narrative": "Some narrative.",
             "system_lock_reason": None,
