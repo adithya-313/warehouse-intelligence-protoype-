@@ -58,6 +58,8 @@ def translate_to_sku(db: Session, match_str: str, known_skus: set[str]) -> str:
     return match_str
 
 def resolve_drug_entity(db: Session, query: str) -> dict:
+    # [DIAG-H3] Logging the exact input the resolver receives
+    logger.info(f"[DIAG-H3] resolve_drug_entity input query: '{query}'")
     """
     Resolve a drug name from the user's query against the catalog.
 
@@ -95,6 +97,8 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
     # since bare SKUs aren't in the alias table.
     sku_check = text("SELECT sku_id FROM medications WHERE sku_id ILIKE :query LIMIT 1")
     exact_sku = db.execute(sku_check, {"query": query_clean}).fetchone()
+    # [DIAG-H3] Log whether it detects an exact bare SKU token in the input
+    logger.info(f"[DIAG-H3] exact bare SKU check for query_clean '{query_clean}': {exact_sku}")
     if exact_sku:
         logger.info(f"DrugResolver: Exact bare SKU match found -> {exact_sku[0]}")
         return {"status": "resolved", "sku_id": exact_sku[0], "confidence": "exact"}
@@ -107,6 +111,8 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
         LIMIT 1
     """)
     exact_alias = db.execute(exact_alias_check, {"query": query_clean.replace(" ", "")}).fetchone()
+    # [DIAG-H3] Log whether it detects an exact alias in the input
+    logger.info(f"[DIAG-H3] exact alias check for query '{query_clean.replace(' ', '')}': {exact_alias}")
     if exact_alias:
         logger.info(f"DrugResolver: Exact alias match found -> {exact_alias[0]}")
         return {"status": "resolved", "sku_id": exact_alias[0], "confidence": "exact"}
@@ -171,6 +177,8 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
         # row structure from UNNEST: (candidate, sku_id, alias_text, score)
         sku = row[1]
         score = row[3]
+        # [DIAG-H3] Log every candidate considered with its score before thresholds
+        logger.info(f"[DIAG-H3] pg_trgm candidate: sku={sku}, score={score:.4f}, alias_text={row[2]}")
         if sku not in seen:
             seen.add(sku)
             unique_skus.append({"sku": sku, "score": score})
@@ -182,11 +190,18 @@ def resolve_drug_entity(db: Session, query: str) -> dict:
         return {"status": "resolved", "sku_id": match, "confidence": "fuzzy"}
     else:
         # If the top match is very strong and clearly beats the runner-up
-        if unique_skus[0]["score"] > 0.5 and (unique_skus[0]["score"] - unique_skus[1]["score"] > 0.15):
+        # [DIAG-H3] Log the exact threshold logic used to decide confident single match vs ambiguous
+        top_score = unique_skus[0]['score']
+        runner_up = unique_skus[1]['score']
+        diff = top_score - runner_up
+        logger.info(f"[DIAG-H3] Threshold check: top_score={top_score:.4f} (>0.5?), runner_up={runner_up:.4f}, diff={diff:.4f} (>0.15?)")
+        if top_score > 0.5 and diff > 0.15:
             match = unique_skus[0]["sku"]
             logger.info(f"DrugResolver: Confident fuzzy match (best score) -> {match}")
             return {"status": "resolved", "sku_id": match, "confidence": "fuzzy"}
             
         choices = [u["sku"] for u in unique_skus]
+        # [DIAG-H3] Log final decision and ambiguous list
+        logger.info(f"[DIAG-H3] Final decision: AMBIGUOUS. Candidates: {choices[:3]}")
         logger.info(f"DrugResolver: Ambiguous fuzzy match, disambiguating -> {choices}")
         return {"status": "disambiguate", "choices": choices[:3]}
