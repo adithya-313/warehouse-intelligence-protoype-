@@ -303,28 +303,55 @@ def execute_clinical_search(
         reverse=True
     )
 
+    from app.infrastructure.models import MedicationModel
+
     # Apply the Safety Circuit Breaker
     formatted_results = []
     safety_warning = None
 
-    # DIAG-5.3: logging what's about to be filtered and the threshold being applied
-    logger.info(f"[DIAG-5.3] FILTER START: threshold={MINIMUM_CONFIDENCE_THRESHOLD}, total_candidates={len(sorted_by_rrf[:top_k])}")
-
     for item in sorted_by_rrf[:top_k]:
-        # DIAG-5.3: logging the record entering the filter step
-        logger.info(f"[DIAG-5.3] PRE-FILTER: sku_id={item['sku_id']}, confidence={item['confidence_score']}")
+        is_confident_match = (sku_id is not None and item["sku_id"] == sku_id)
+        
+        # Determine approval and data completeness by checking the anchor table
+        med = db.query(MedicationModel).filter(MedicationModel.sku_id == item["sku_id"]).first()
+        is_approved = med.is_approved_by_curator if med else True
+        
+        # Clinical fields are populated if we have indications, etc. in metadata
+        clinical_fields_null = "indications" not in item["metadata_payload"]
+        
+        if not is_approved and clinical_fields_null:
+            data_completeness = "identity_only"
+        elif is_approved and clinical_fields_null:
+            logger.warning(f"Edge case detected: SKU {item['sku_id']} is approved by curator but has NULL clinical fields.")
+            data_completeness = "identity_only"
+        else:
+            data_completeness = "full"
+
         if item["confidence_score"] >= MINIMUM_CONFIDENCE_THRESHOLD:
             formatted_results.append({
                 "sku_id": item["sku_id"],
                 "content": item["content"],
                 "confidence_score": item["confidence_score"],
-                "metadata_payload": item["metadata_payload"]
+                "metadata_payload": item["metadata_payload"],
+                "data_completeness": data_completeness
             })
-            # DIAG-5.3: logging what survived
-            logger.info(f"[DIAG-5.3] POST-FILTER: sku_id={item['sku_id']} SURVIVED.")
+            logger.info(f"[FILTER] SURVIVED: sku_id={item['sku_id']}, relevance={item['confidence_score']}, exempted=False, data_completeness={data_completeness}")
+            
+        elif is_confident_match and not is_approved and clinical_fields_null:
+            # EXEMPTION: The resolver confidently matched this drug, but it's an identity-only 
+            # unapproved generic with no clinical data to produce a high vector relevance score.
+            # We keep it so we can honestly disclose the limited data instead of silently dropping it.
+            formatted_results.append({
+                "sku_id": item["sku_id"],
+                "content": item["content"],
+                "confidence_score": item["confidence_score"],
+                "metadata_payload": item["metadata_payload"],
+                "data_completeness": data_completeness
+            })
+            logger.info(f"[FILTER] EXEMPTED: sku_id={item['sku_id']}, relevance={item['confidence_score']}, exempted=True, data_completeness={data_completeness}")
+            
         else:
-            # DIAG-5.3: logging what was dropped and why
-            logger.info(f"[DIAG-5.3] POST-FILTER: sku_id={item['sku_id']} DROPPED (reason: confidence {item['confidence_score']} < {MINIMUM_CONFIDENCE_THRESHOLD}).")
+            logger.info(f"[FILTER] DROPPED: sku_id={item['sku_id']}, relevance={item['confidence_score']}, exempted=False, data_completeness={data_completeness}")
             logger.warning(
                 f"Hybrid search result for SKU {item['sku_id']} rejected. "
                 f"Confidence {item['confidence_score']} is below {MINIMUM_CONFIDENCE_THRESHOLD}."
