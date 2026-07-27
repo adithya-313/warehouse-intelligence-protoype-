@@ -376,8 +376,10 @@ async def ask_clinical_assistant(
         request_metrics["drug_resolved"] = True
         request_metrics["disambiguation_triggered"] = False
         request_metrics["path_taken"] = rag_data.get("path_taken")
+
         return RAGQueryResponse(
             query=payload.query,
+            question_type=rag_data.get("question_type"),
             answer=rag_data["answer"],
             context_used=rag_data["context_used"],
             is_safe_to_dispense=rag_data.get("is_safe_to_dispense", True),

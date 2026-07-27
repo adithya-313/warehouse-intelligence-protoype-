@@ -707,6 +707,7 @@ async def generate_clinical_response(
         )
 
         return {
+            "question_type": "safety_check",
             "answer": (
                 f"SYSTEM LOCK: {lock_reason}. "
                 "This medication cannot be dispensed based on the "
@@ -731,6 +732,7 @@ async def generate_clinical_response(
     # search failed. We only exit early when NEITHER method found data.
     if search_results.get("safety_warning") and not direct_lookup_records:
         return {
+            "question_type": "safety_check",
             "answer": search_results["safety_warning"],
             "context_used": [],
             "is_safe_to_dispense": True,
@@ -810,28 +812,34 @@ async def generate_clinical_response(
     context_blocks = "\n\n".join(rendered_blocks)
 
     # Beginner Note: By this point the Judge has already run and determined
-    # the transaction is safe. We pass its verdict into the prompt so the
-    # LLM narrator can explain the decision without re-evaluating safety.
-    judge_triggered_rule = verdict.get("triggered_rule", "None")
-    prompt = f"""You are a strict clinical safety narrator for a pharmacy.
+    # the safety of the transaction. We pass its verdict into the prompt so the
+    # LLM can include it if the user is asking about safety.
+    judge_verdict_str = "SAFE — ALLOWED" if verdict.get("is_safe", True) else f"UNSAFE — BLOCKED (Rule: {verdict.get('triggered_rule')})"
+    
+    prompt = f"""You are a clinical assistant helping a pharmacist. Answer the pharmacist's
+actual question using ONLY the clinical context provided below. Do not use
+outside medical knowledge.
 
-The system has determined this transaction is: SAFE — ALLOWED (Judge rule: {judge_triggered_rule}).
-You must explain why this medication is safe based on the provided clinical context.
+First, identify what kind of question this is: one of
+"symptom", "dosage", "comparison", "general_info", or "safety_check".
 
-RULES:
-1. Do NOT hallucinate or use outside medical knowledge.
-2. If the provided context does not contain the answer, set narrative to "INSUFFICIENT CLINICAL DATA. CONSULT PHARMACIST."
-3. Keep the narrative concise, professional, and direct.
-4. You MUST return a valid JSON object with the following fields:
-   - is_safe_to_dispense (boolean): Always true in this context.
-   - narrative (string): Your explanation.
-   - system_lock_reason (null): Always null in this context.
-   - citations (array of strings): Any clinical sources referenced.
+Then answer that question directly and clearly, using the clinical context.
+
+Separately, the system has already checked this specific transaction for
+dispensing safety: {judge_verdict_str}. If the pharmacist's
+question is about safety or dispensing, include this in your answer. If
+their question is about something else (like symptoms or a comparison),
+you do not need to mention dispensing safety at all — just answer their
+real question.
+
+If the clinical context does not contain enough information to answer
+the specific question asked, say so honestly and specifically — name what
+information is missing, rather than giving a generic refusal.
 
 CLINICAL CONTEXT:
 {context_blocks}
 
-USER QUERY:
+USER QUESTION:
 {query}
 """
 
@@ -891,6 +899,7 @@ USER QUERY:
             response_schema={
                 "type": "object",
                 "properties": {
+                    "question_type": {"type": "string"},
                     "is_safe_to_dispense": {"type": "boolean"},
                     "narrative": {"type": "string"},
                     "system_lock_reason": {"type": "string"},
@@ -900,6 +909,7 @@ USER QUERY:
                     },
                 },
                 "required": [
+                    "question_type",
                     "is_safe_to_dispense",
                     "narrative",
                     "system_lock_reason",
@@ -949,6 +959,7 @@ USER QUERY:
 
         # Build the response dict
         response_data = {
+            "question_type": narrative.question_type,
             "answer": narrative.narrative,
             "context_used": context_items,
             "is_safe_to_dispense": narrative.is_safe_to_dispense,
@@ -1018,6 +1029,7 @@ USER QUERY:
         # deterministic verdict. This is the key insight of Phase 4:
         # we NEVER lose the safety decision, even when the LLM is down.
         fallback_narrative = ClinicalNarrativeSchema(
+            question_type="safety_check",
             is_safe_to_dispense=verdict["is_safe"],
             narrative=(
                 "NETWORK TIMEOUT: AI Narrative offline. "
@@ -1028,6 +1040,7 @@ USER QUERY:
         )
 
         return {
+            "question_type": fallback_narrative.question_type,
             "answer": fallback_narrative.narrative,
             "context_used": context_items,
             "is_safe_to_dispense": fallback_narrative.is_safe_to_dispense,

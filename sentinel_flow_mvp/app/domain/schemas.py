@@ -891,6 +891,10 @@ class RAGQueryRequest(BaseModel):
 class RAGQueryResponse(BaseModel):
     """Response contract for the AI assistant."""
     query: str
+    question_type: str | None = Field(
+        default=None,
+        description="The type of clinical question asked.",
+    )
     answer: str = Field(..., description="The AI-generated answer based strictly on context.")
     context_used: list[SearchResultItem] = Field(..., description="The exact database records used to generate the answer.")
     is_safe_to_dispense: StrictBool = Field(
@@ -930,6 +934,7 @@ class ClinicalNarrativeSchema(BaseModel):
     Structured output contract for the Gemini LLM narrator.
 
     Attributes:
+        question_type: The categorized type of question asked.
         is_safe_to_dispense: Boolean flag — true means the pharmacist can
             safely dispense this medication based on the patient context.
             Uses StrictBool to reject non-boolean values (e.g. "yes", "true")
@@ -942,6 +947,7 @@ class ClinicalNarrativeSchema(BaseModel):
         citations: A list of exact source citations (e.g. CDSCO guideline
             IDs or PubMed references) that support the narrative.
     """
+    question_type: str = Field(..., description="one of 'symptom', 'dosage', 'comparison', 'general_info', 'safety_check'")
     is_safe_to_dispense: StrictBool
     narrative: str
     system_lock_reason: str | None
