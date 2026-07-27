@@ -54,6 +54,7 @@ def _mock_heavy_modules():
     # Wire: genai_mock.Client(api_key=...).models.generate_content(...).text → JSON
     response_mock = MagicMock()
     response_mock.text = json.dumps({
+        "question_type": "safety_check",
         "is_safe_to_dispense": True,
         "narrative": "Mocked Gemini response.",
         "system_lock_reason": None,
