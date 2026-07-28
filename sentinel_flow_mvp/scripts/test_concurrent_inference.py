@@ -91,12 +91,6 @@ def generate_payload(module_id: str, supplier_id: str = None, force_fallback: bo
             "vibration_index": 0.8,
         }
 
-    elif module_id == "fuel_cost":
-        payload["features"] = {
-            "route_distance_km": 250.0,
-            "vehicle_efficiency": 12.5,
-        }
-
     return payload
 
 

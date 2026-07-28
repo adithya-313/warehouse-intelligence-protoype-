@@ -204,7 +204,7 @@ class BaseInferenceRequest(BaseModel):
 
     Attributes:
         correlation_id: Unique UUID for distributed tracing across services.
-        module_id: Target model identifier (e.g., 'demand_forecast', 'fuel_cost').
+        module_id: Target model identifier (e.g., 'demand_forecast', 'stockout_prediction').
         features: Dictionary containing the input feature vector for the model.
         timeout_ms: Maximum allowed execution time in milliseconds.
         client_id: Identifies the calling client for per-client budget tracking.
@@ -239,12 +239,12 @@ class BaseInferenceRequest(BaseModel):
 
     route_id: Optional[str] = Field(
         default=None,
-        description="Route identifier (used for fuel cost / logistics).",
+        description="Route identifier (used for logistics tracking).",
     )
 
     module_id: str = Field(
         ...,
-        description="Target model identifier (e.g., 'demand_forecast', 'fuel_cost').",
+        description="Target model identifier (e.g., 'demand_forecast', 'stockout_prediction').",
     )
 
     covariates: Dict[str, float] | None = Field(
