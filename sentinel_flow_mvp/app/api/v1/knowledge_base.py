@@ -379,6 +379,25 @@ async def ask_clinical_assistant(
         )
 
         request_metrics["intent"] = bucket.value if hasattr(bucket, "value") else str(bucket)
+        
+        if rag_data.get("status") == "disambiguate":
+            # If the system is still unsure which drug the user means, we send back the list of 
+            # choices right away — we should NOT try to read an 'answer' field here, because there 
+            # isn't one yet until the user picks.
+            request_metrics["drug_resolved"] = False
+            request_metrics["disambiguation_triggered"] = True
+            request_metrics["path_taken"] = "none"
+            return RAGQueryResponse(
+                query=payload.query,
+                answer="I found multiple matches. Did you mean one of these?",
+                context_used=[],
+                is_safe_to_dispense=True,
+                system_lock_reason=None,
+                citations=[],
+                status="disambiguate",
+                choices=rag_data.get("choices", [])
+            )
+
         request_metrics["drug_resolved"] = True
         request_metrics["disambiguation_triggered"] = False
         request_metrics["path_taken"] = rag_data.get("path_taken")

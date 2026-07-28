@@ -45,4 +45,5 @@ COMPARISON_KEYWORDS: list[str] = [
     "compared to",
     "interaction",
     "interact",
+    "with",
 ]
