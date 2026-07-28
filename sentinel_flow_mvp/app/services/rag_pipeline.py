@@ -897,6 +897,21 @@ async def generate_clinical_response(
     # LLM can include it if the user is asking about safety.
     judge_verdict_str = "SAFE — ALLOWED" if verdict.get("is_safe", True) else f"UNSAFE — BLOCKED (Rule: {verdict.get('triggered_rule')})"
     
+    # Beginner Note: Check if this is a symptom/side-effect question for a drug
+    # that doesn't have a distinct 'Adverse Reactions' section. If so, tell the LLM
+    # to check the 'Warnings' section instead before giving up.
+    query_lower = query.lower()
+    is_symptom_query = "symptom" in query_lower or "side effect" in query_lower
+    has_adverse_reactions = "adverse reactions" in context_blocks.lower()
+    
+    symptom_instruction = ""
+    if is_symptom_query and not has_adverse_reactions:
+        symptom_instruction = (
+            "\n\nIMPORTANT: For this drug, side-effect and symptom information may "
+            "be included within the Warnings section rather than a separate Adverse "
+            "Reactions section — check there before saying the information isn't available."
+        )
+
     prompt = f"""You are a clinical assistant helping a pharmacist. Answer the pharmacist's
 actual question using ONLY the clinical context provided below. Do not use
 outside medical knowledge.
@@ -904,7 +919,7 @@ outside medical knowledge.
 First, identify what kind of question this is: one of
 "symptom", "dosage", "comparison", "general_info", or "safety_check".
 
-Then answer that question directly and clearly, using the clinical context.
+Then answer that question directly and clearly, using the clinical context.{symptom_instruction}
 
 Separately, the system has already checked this specific transaction for
 dispensing safety: {judge_verdict_str}. If the pharmacist's
