@@ -110,17 +110,6 @@ CREATE TRIGGER trg_prevent_audit_tampering
     FOR EACH ROW
     EXECUTE FUNCTION prevent_audit_tampering();
 
--- Table 8: Audit Anomaly Scores
--- Stores fraud detection results for events in the immutable audit ledger.
--- This is a separate table to maintain ledger immutability.
-CREATE TABLE IF NOT EXISTS audit_anomaly_scores (
-    event_id VARCHAR(255) PRIMARY KEY,
-    risk_score DOUBLE PRECISION NOT NULL,
-    is_flagged BOOLEAN NOT NULL DEFAULT FALSE,
-    reason VARCHAR(500),
-    timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
 -- Unique index on transaction_id inside metadata JSONB for idempotency
 -- Prevents duplicate financial events from being inserted
 -- Only applies when transaction_id is present (financial events)
