@@ -512,6 +512,14 @@ def extract_known_entities(
             )
 
     if len(seen_sku_ids) > 1:
+        # A user asking to compare two drugs on purpose is NOT the same as the system being 
+        # unsure which one drug they meant. We check for comparison words first so we don't 
+        # wrongly ask them to pick just one.
+        from app.domain.drug_resolver import does_query_mention_comparing_drugs
+        if does_query_mention_comparing_drugs(query):
+            logger.info("Genuine multi-drug intent detected in entity extraction -> proceeding with N drug records, no disambiguation.")
+            return results
+
         logger.info(f"Entity Extraction: Found {len(seen_sku_ids)} distinct SKUs. Triggering disambiguation.")
         choices = []
         for r in results:

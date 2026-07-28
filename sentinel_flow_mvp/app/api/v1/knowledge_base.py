@@ -189,7 +189,7 @@ async def ask_clinical_assistant(
         if bucket == IntentBucket.NO_INTENT:
             # If the regex found no drug, but the DB catalog resolver DID find one
             # (either exact brand match or fuzzy), we rescue the query!
-            if resolution["status"] in ("resolved", "disambiguate"):
+            if resolution["status"] in ("resolved", "disambiguate", "multi_drug_resolved"):
                 logger.info("IntentGate rescued by DrugResolver: Found catalog match despite no regex SKU.")
                 if intents["objective"]:
                     bucket = IntentBucket.INVENTORY
