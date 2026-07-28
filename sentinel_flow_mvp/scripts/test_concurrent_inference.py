@@ -85,12 +85,6 @@ def generate_payload(module_id: str, supplier_id: str = None, force_fallback: bo
             }
             payload["timeout_ms"] = 5000
 
-    elif module_id == "predictive_maintenance":
-        payload["features"] = {
-            "equipment_age_days": 1500,
-            "vibration_index": 0.8,
-        }
-
     return payload
 
 

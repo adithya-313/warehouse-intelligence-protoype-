@@ -234,7 +234,7 @@ class BaseInferenceRequest(BaseModel):
 
     asset_id: Optional[str] = Field(
         default=None,
-        description="Asset identifier (used for predictive maintenance).",
+        description="Asset identifier (used for equipment tracking).",
     )
 
     route_id: Optional[str] = Field(
