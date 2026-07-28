@@ -9,3 +9,12 @@
 - **Issue:** The regex-based `extracted_sku` produces mismatched formatting compared to the real database SKU canonicalization (e.g. `extract_sku` produces `PN-40` while the actual database SKU is `PN40`).
 - **Current Behavior:** We cannot currently trust `extracted_sku` as a safe short-circuit source for the `drug_resolver` because passing pseudo-SKUs like `PN-40` downstream breaks routing logic and exposes latent bugs when database records aren't found. We are currently using only `payload.sku_id` (the trusted frontend input) to bypass the fuzzy matching.
 - **Proposed Fix:** Centralize SKU normalization so the sanitizer and the DB resolver use the exact same canonicalization logic. This is part of the same root-cause family as the `translate_to_sku` N+1 backlog item — there are multiple disconnected sources of truth for what a SKU string looks like.
+
+## Augmentin vs Amoxyclav (Closed - Not a Bug)
+- **Issue:** "Augmentin vs Amoxyclav" was investigated as part of Phase G multi-drug support.
+- **Root Cause:** Both brand names map to the exact same generic reference SKU (GENERIC_REF_AMOXYCILLIN) because they are the same real-world drug (Amoxicillin + Clavulanate Potassium) sold under two trade names. This is correct database behavior, not a bug. No code fix needed for this specific example.
+
+## Unstripped Modifiers in Drug Normalization
+- **Issue:** `normalize_drug_name()` does not strip numeric strengths (e.g. "625") or modifier words (e.g. "DUO", "DDS") from drug names before comparison.
+- **Current Behavior:** A bare brand name typed without its strength/modifier (e.g. just "Augmentin" instead of "Augmentin 625") can fail to match anything in the catalog at all.
+- **Proposed Fix:** This is a separate, pre-existing normalization gap, out of scope for Phase G (multi-drug detection) — flagged here for a future phase.
