@@ -31,3 +31,18 @@ OBJECTIVE_KEYWORDS: list[str] = [
     "manufacture",
     "batch",
 ]
+
+# Keywords that indicate the user is naming multiple drugs intentionally
+# to ask about comparisons or interactions.
+COMPARISON_KEYWORDS: list[str] = [
+    "vs",
+    "versus",
+    "difference",
+    "and",
+    "together",
+    "or",
+    "compare",
+    "compared to",
+    "interaction",
+    "interact",
+]

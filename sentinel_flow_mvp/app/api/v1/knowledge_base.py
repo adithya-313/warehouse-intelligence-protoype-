@@ -298,6 +298,12 @@ async def ask_clinical_assistant(
             )
         elif resolution["status"] == "resolved":
             extracted_sku = resolution["sku_id"]
+        elif resolution["status"] == "multi_drug_resolved":
+            logger.info(f"Multi-drug intent confirmed, passing {len(resolution['sku_ids'])} drugs to RAG pipeline without disambiguation.")
+            # For now, just pass the first sku for the downstream pipeline backward compatibility
+            # The exact downstream handling of multiple SKUs will be done in G.1b.
+            # But we don't short-circuit!
+            extracted_sku = resolution["sku_ids"][0]
 
 
         # =====================================================================

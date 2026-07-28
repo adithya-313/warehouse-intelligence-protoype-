@@ -57,6 +57,25 @@ FILLER_WORDS = {
     "happens", "skip", "mix", "cause", "used", "someone"
 }
 
+def does_query_mention_comparing_drugs(query: str) -> bool:
+    """
+    Check if the query contains language indicating the user is comparing or combining multiple drugs.
+    """
+    from app.domain.intent_keywords import COMPARISON_KEYWORDS
+    query_lower = query.lower()
+    
+    # We pad the query with spaces so we can do whole-word matching easily
+    query_padded = f" {query_lower} "
+    
+    for kw in COMPARISON_KEYWORDS:
+        # Check for whole-word matches to avoid matching "and" inside "band"
+        if f" {kw} " in query_padded:
+            logger.info(f"Comparison-language check for query '{query}': True (matched '{kw}')")
+            return True
+            
+    logger.info(f"Comparison-language check for query '{query}': False")
+    return False
+
 def translate_to_sku(db: Session, match_str: str, known_skus: set[str]) -> str:
     """
     Translate a brand/generic name to its actual SKU ID via DB lookup.
@@ -173,6 +192,13 @@ def resolve_drug_entity(db: Session, query: str, sku_id: str | None = None) -> d
         logger.info(f"DrugResolver: Exact bare SKU match found -> {matched_skus[0]}")
         return {"status": "resolved", "sku_id": matched_skus[0], "confidence": "exact"}
     elif len(matched_skus) > 1:
+        # A user asking to compare two drugs on purpose is NOT the same as the system being 
+        # unsure which one drug they meant. We check for comparison words first so we don't 
+        # wrongly ask them to pick just one.
+        if does_query_mention_comparing_drugs(query):
+            logger.info("Genuine multi-drug intent detected -> returning N exact matches without disambiguation.")
+            return {"status": "multi_drug_resolved", "sku_ids": matched_skus, "confidence": "exact"}
+            
         # Why: If the query mentions two different real SKUs (e.g. two drug names), 
         # we do NOT blindly pick one. We log the occurrence and fall through to the 
         # ambiguous/fuzzy path so the system can handle it safely.
