@@ -409,6 +409,32 @@ def extract_known_entities(
         if brand in query_upper:
             matched_entities.append(brand)
 
+    # Scan for tokens matching the alias table
+    import re
+    from sqlalchemy import text
+    from app.domain.drug_resolver import normalize_drug_name
+    
+    tokens = re.findall(r"(?i)\b([a-z0-9-]{3,})\b", query)
+    stop_words = {"TELL", "ME", "ABOUT", "WHAT", "IS", "THE", "OF", "FOR", "AND", "WITH"}
+    for token in tokens:
+        if token.upper() in stop_words:
+            continue
+            
+        token_clean = token.upper().replace("-", "")
+        alias_candidates_sql = text("""
+            SELECT sku_id, alias_text 
+            FROM drug_brand_aliases 
+            WHERE REPLACE(alias_text, ' ', '') ILIKE :prefix 
+            LIMIT 50
+        """)
+        candidates = db.execute(alias_candidates_sql, {"prefix": f"{token_clean}%"}).fetchall()
+        normalized_token = normalize_drug_name(token)
+        for cand_sku, cand_alias in candidates:
+            if normalize_drug_name(cand_alias) == normalized_token:
+                logger.info(f"Entity Extraction: Token '{token}' matched alias '{cand_alias}' -> '{cand_sku}'")
+                matched_entities.append(cand_sku)
+                break
+
     # Remove duplicates and sort by length descending (longest match
     # first — the most specific identifier wins).
     matched_entities = sorted(

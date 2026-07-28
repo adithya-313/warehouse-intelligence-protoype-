@@ -17,9 +17,29 @@ Beginner Note:
 
 import logging
 import difflib
+import re
 from sqlalchemy.orm import Session
-from app.services.rag_pipeline import get_known_drug_catalog
 from app.infrastructure.models import ClinicalKnowledgeBase
+
+# Common form words identified from drug_brand_aliases
+FORM_WORDS = {
+    "TABLET", "TABLETS", "INJECTION", "CAPSULE", "SYRUP", "SUSPENSION", "SUSP",
+    "ORAL", "DRY", "CREAM", "OINTMENT", "DT", "DROP", "DROPS", "EYE", "FORTE",
+    "ER", "MR", "GEL", "MD", "SR", "PLUS", "CV", "MG"
+}
+
+def normalize_drug_name(name: str) -> str:
+    """
+    Normalizes a drug string for exact-match comparisons.
+    Removes common pharmaceutical form words and all spacing.
+    Example: 'DOLO 650 TABLET' -> 'DOLO650'
+    """
+    if not name:
+        return ""
+    name = name.upper()
+    words = name.split()
+    filtered = [w for w in words if w not in FORM_WORDS]
+    return "".join(filtered)
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +127,16 @@ def resolve_drug_entity(db: Session, query: str, sku_id: str | None = None) -> d
     
     # We use exact equality (=) because we uppercase the token, and SKUs are uppercase.
     sku_check = text("SELECT sku_id FROM medications WHERE sku_id = :token LIMIT 1")
-    alias_check = text("SELECT sku_id FROM drug_brand_aliases WHERE alias_text ILIKE :token LIMIT 1")
+    
+    # Candidate query for Python normalization. We remove spaces in SQL just to 
+    # fetch a broad enough candidate set (e.g. 'DOLO650' matching 'DOLO 650 TABLET')
+    # without doing a full table scan or complex SQL string manipulation.
+    alias_candidates_sql = text("""
+        SELECT sku_id, alias_text 
+        FROM drug_brand_aliases 
+        WHERE REPLACE(alias_text, ' ', '') ILIKE :token_prefix 
+        LIMIT 50
+    """)
     
     for token in tokens:
         # Strip hyphens just in case they typed "PAN-40" but the DB stores "PAN40"
@@ -117,9 +146,19 @@ def resolve_drug_entity(db: Session, query: str, sku_id: str | None = None) -> d
         
         if not row:
             # Fallback: try matching token as exact generic/brand name via aliases
-            row = db.execute(alias_check, {"token": token}).fetchone()
-            if row:
-                logger.info(f"DrugResolver: Token '{token}' matched exact name alias.")
+            # Fetch candidates using a fast prefix search, then normalize in Python.
+            if len(token_clean) >= 3:
+                candidates = db.execute(
+                    alias_candidates_sql, 
+                    {"token_prefix": f"{token_clean}%"}
+                ).fetchall()
+                
+                normalized_token = normalize_drug_name(token)
+                for cand_sku, cand_alias in candidates:
+                    if normalize_drug_name(cand_alias) == normalized_token:
+                        row = (cand_sku,)
+                        logger.info(f"DrugResolver: Token '{token}' matched normalized exact alias '{cand_alias}'.")
+                        break
                 
         if row:
             found_sku = row[0]
