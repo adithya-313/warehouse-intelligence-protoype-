@@ -446,6 +446,28 @@ def extract_known_entities(
                 .first()
             )
 
+            # Fallback: if no direct SKU match, try matching the entity against
+            # the JSON metadata payload (generic_name or brand_name). This handles
+            # cases where the matched entity was a plain name (e.g. "NIMESULIDE")
+            # but the real SKU is something like "GENERIC_REF_NIMESULIDE".
+            if not kb_record:
+                from sqlalchemy import text
+                fallback_sql = text("""
+                    SELECT sku_id 
+                    FROM clinical_knowledge_base 
+                    WHERE metadata_payload->>'generic_name' ILIKE :entity 
+                       OR metadata_payload->>'brand_name' ILIKE :entity 
+                    LIMIT 1
+                """)
+                fallback_result = db.execute(fallback_sql, {"entity": entity}).fetchone()
+                if fallback_result:
+                    fallback_sku = fallback_result[0]
+                    kb_record = db.query(ClinicalKnowledgeBase).filter(ClinicalKnowledgeBase.sku_id == fallback_sku).first()
+                    logger.info(
+                        f"Entity Extraction: Fallback matched name '{entity}' "
+                        f"to SKU '{fallback_sku}'."
+                    )
+
             if kb_record and kb_record.sku_id not in seen_sku_ids:
                 seen_sku_ids.add(kb_record.sku_id)
                 results.append({

@@ -107,12 +107,20 @@ def resolve_drug_entity(db: Session, query: str, sku_id: str | None = None) -> d
     
     # We use exact equality (=) because we uppercase the token, and SKUs are uppercase.
     sku_check = text("SELECT sku_id FROM medications WHERE sku_id = :token LIMIT 1")
+    alias_check = text("SELECT sku_id FROM drug_brand_aliases WHERE alias_text ILIKE :token LIMIT 1")
     
     for token in tokens:
         # Strip hyphens just in case they typed "PAN-40" but the DB stores "PAN40"
         token_clean = token.upper().replace("-", "")
         
         row = db.execute(sku_check, {"token": token_clean}).fetchone()
+        
+        if not row:
+            # Fallback: try matching token as exact generic/brand name via aliases
+            row = db.execute(alias_check, {"token": token}).fetchone()
+            if row:
+                logger.info(f"DrugResolver: Token '{token}' matched exact name alias.")
+                
         if row:
             found_sku = row[0]
             # Avoid counting the exact same SKU twice if they typed it twice
