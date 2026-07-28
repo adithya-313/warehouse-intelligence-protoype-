@@ -517,6 +517,13 @@ def extract_known_entities(
         # wrongly ask them to pick just one.
         from app.domain.drug_resolver import does_query_mention_comparing_drugs
         if does_query_mention_comparing_drugs(query):
+            # We limit how many drugs we look up at once so responses stay fast and the AI isn't given an overwhelming amount of information in one go.
+            MAX_DRUGS_PER_QUERY = 4
+            
+            if len(results) > MAX_DRUGS_PER_QUERY:
+                logger.warning(f"Query mentioned {len(results)} drugs, which is more than our limit of {MAX_DRUGS_PER_QUERY}. Only using the first {MAX_DRUGS_PER_QUERY} to keep the response fast and focused.")
+                results = results[:MAX_DRUGS_PER_QUERY]
+                
             logger.info("Genuine multi-drug intent detected in entity extraction -> proceeding with N drug records, no disambiguation.")
             return results
 
