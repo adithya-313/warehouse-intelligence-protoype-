@@ -110,17 +110,20 @@ async def application_lifespan(application: FastAPI):
     logger.info("Expanded anyio thread pool to 200 tokens.")
 
     # Step 1: Initialize Base Chronos Pipeline
-    logger.info("Loading base Chronos-T5 model into memory...")
+    logger.info("Loading Chronos time-series model into memory...")
     try:
-        # Wrap the HuggingFace download in a 120-second timeout.
-        # On fresh containers without a HuggingFace cache, the model download
-        # can hang indefinitely due to silent network timeouts. This timeout
-        # ensures the API can start — the model is only needed for forecasting,
-        # not for the substitute finder or other knowledge-base endpoints.
+        # Load the model name from centralized settings so the API server always
+        # matches the worker and the LoRA-trained adapters. Previously this was
+        # hardcoded to a different, incompatible model — see prior commits for
+        # the model-unification fix.
+        settings = get_application_settings()
+        chronos_model_name = settings.CHRONOS_MODEL_NAME
+        logger.info("Chronos model: %s", chronos_model_name)
+
         application.state.chronos_pipeline = await asyncio.wait_for(
             asyncio.to_thread(
                 ChronosPipeline.from_pretrained,
-                "amazon/chronos-t5-base",
+                chronos_model_name,
                 device_map="auto",
                 torch_dtype=torch.bfloat16,
             ),

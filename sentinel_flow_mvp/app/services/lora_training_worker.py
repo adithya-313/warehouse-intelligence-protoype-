@@ -59,8 +59,8 @@ GRADIENT_ACCUMULATION_STEPS: int = settings.ML_GRADIENT_ACCUMULATION_STEPS
 LORA_RANK: int = 8
 LORA_ALPHA: int = 16
 
-# Base model identifier
-BASE_MODEL_NAME: str = "amazon/chronos-t5-mini"
+# Base model identifier — read from centralized config so all processes agree
+BASE_MODEL_NAME: str = settings.CHRONOS_MODEL_NAME
 
 # Directory under which per-adapter weight folders are saved.
 ADAPTER_ROOT: str = settings.ADAPTER_STORAGE_PATH

@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.celery_app import celery_application
+from app.core.config import get_application_settings
 from app.infrastructure.database import SessionLocal
 from app.infrastructure.models import MLPredictionLog, SupplierModel, TelemetryModel
 from app.services.aegis_service import validate_and_enforce_prediction_schema
@@ -22,6 +23,8 @@ from app.core.logging import configure_logging
 configure_logging(level=logging.INFO, json_output=True)
 logger = logging.getLogger(__name__)
 
+# Read the single shared model identifier from centralized settings
+worker_settings = get_application_settings()
 
 @celery_application.task(name="process_telemetry_batch")
 def process_batch_payload_task(
@@ -172,7 +175,7 @@ def predict_forecast_task(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
     if getattr(fast_app.state, "chronos_pipeline", None) is None:
         logger.info("Initializing Chronos base model for Celery Worker...")
         fast_app.state.chronos_pipeline = ChronosPipeline.from_pretrained(
-            "amazon/chronos-t5-mini",
+            worker_settings.CHRONOS_MODEL_NAME,
             device_map="cuda" if torch.cuda.is_available() else "cpu",
             torch_dtype=torch.float32
         )

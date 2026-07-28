@@ -103,6 +103,15 @@ class ApplicationSettings(BaseSettings):
         description="Directory to store adapter weight files.",
     )
 
+    # This is the ONE place that decides which Chronos time-series model we load.
+    # Every part of the app (API server, background worker, LoRA training) reads
+    # from this single value — so we never again end up with two different models
+    # loaded in two different places by accident.
+    CHRONOS_MODEL_NAME: str = Field(
+        default="amazon/chronos-t5-mini",
+        description="HuggingFace model identifier for the Chronos time-series foundation model.",
+    )
+
     # Geographic Fallbacks (Defaulting to Kochi, Kerala for initial launch)
     FALLBACK_LAT: float = Field(default=9.9312, description="Fallback latitude")
     FALLBACK_LON: float = Field(default=76.2673, description="Fallback longitude")
