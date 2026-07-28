@@ -594,19 +594,35 @@ async def generate_clinical_response(
     logger.info(f"[DIAG-5.3] RAW RETRIEVAL RESULTS: {_diag_records}")
 
     # Merge direct lookup records with vector search results.
-    # Direct lookup records have confidence_score=1.0, so they always
-    # pass the threshold gate. We deduplicate by sku_id to avoid
-    # showing the same drug twice.
-    seen_skus: set[str] = {item["sku_id"] for item in context_items if item.get("sku_id")}
-    for record in direct_lookup_records:
+    # We combine them first, then deduplicate by sku_id to ensure we only
+    # keep one copy of each unique medication record.
+    all_combined_records = context_items + direct_lookup_records
+    deduped_context_items = {}
+    duplicates_removed = 0
+
+    for record in all_combined_records:
         sku = record.get("sku_id")
-        if sku and sku not in seen_skus:
-            context_items.append(record)
-            seen_skus.add(sku)
-            logger.info(
-                f"Entity Extraction: Injected direct lookup record "
-                f"for SKU '{sku}' into search results."
-            )
+        if not sku:
+            continue
+            
+        if sku not in deduped_context_items:
+            deduped_context_items[sku] = record
+        else:
+            duplicates_removed += 1
+            # If the same SKU was returned by both paths, we need to choose the best one.
+            # We prefer the record that is more complete (has more content) over an incomplete one.
+            existing_record = deduped_context_items[sku]
+            existing_content_len = len(existing_record.get("content") or "")
+            new_content_len = len(record.get("content") or "")
+            
+            if new_content_len > existing_content_len:
+                deduped_context_items[sku] = record
+                
+    if duplicates_removed > 0:
+        logger.info(f"Context Assembly: Removed {duplicates_removed} duplicate records during deduplication.")
+        
+    # Replace the context_items list with our fully deduplicated set
+    context_items = list(deduped_context_items.values())
 
     # =====================================================================
     # STEP 3: ENRICH RETRIEVED RECORDS WITH MEDICATION SAFETY DATA
