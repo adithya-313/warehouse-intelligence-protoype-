@@ -147,13 +147,15 @@ class TestDrugResolver:
             return result
         mock_db.execute.side_effect = mock_execute
         
-        with caplog.at_level("WARNING"):
+        with caplog.at_level("INFO"):
             result = resolve_drug_entity(mock_db, "can I take PAN40 and DOLO650 together")
             
-        assert "Multiple exact SKU tokens found" in caplog.text
-        # Because we mocked fuzzy search to return PAN40, it should resolve fuzzily or disambiguate
-        # We just care it didn't resolve 'exact' on the first step
-        assert result.get("confidence") != "exact"
+        # Updated in Phase G.1a: this is genuine multi-drug intent, not ambiguity — see commit 40957c9.
+        assert "Genuine multi-drug intent detected" in caplog.text
+        assert result.get("status") == "multi_drug_resolved"
+        assert result.get("confidence") == "exact"
+        assert "PAN40" in result.get("sku_ids", [])
+        assert "DOLO650" in result.get("sku_ids", [])
 
     def test_fuzzy_tie_break_generic_wins(self):
         """j. tie between generic and brand resolves to generic."""
