@@ -2,10 +2,24 @@ import pytest
 from unittest.mock import patch, MagicMock
 from app.services.rag_pipeline import generate_clinical_response, extract_known_entities
 
+@pytest.fixture(autouse=True)
+def _mock_genai_modules():
+    genai_mock = MagicMock()
+    # Provide a default mock response for any generation calls
+    genai_mock.Client.return_value.models.generate_content.return_value = MagicMock(
+        text='{"question_type": "general_info", "is_safe_to_dispense": true, "narrative": "test", "system_lock_reason": null, "citations": []}'
+    )
+    with patch.dict("sys.modules", {
+        "google.genai": genai_mock,
+        "google.genai.types": MagicMock(),
+        "app.services.semantic_search": MagicMock()
+    }):
+        yield genai_mock
+
 @pytest.mark.asyncio
 async def test_rag_guard_multiple_distinct_skus():
     """
-    Unit test: extract_known_entities() returns records for 2 distinct SKUs → 
+    Unit test: extract_known_entities() returns records for 2 distinct SKUs -> 
     confirm the function/caller returns disambiguate with both SKUs listed, 
     and confirm generation is never called.
     """
@@ -34,7 +48,7 @@ async def test_rag_guard_multiple_distinct_skus():
 @pytest.mark.asyncio
 async def test_rag_guard_single_distinct_sku():
     """
-    Unit test: records for 1 distinct SKU (even with duplicate rows) → 
+    Unit test: records for 1 distinct SKU (even with duplicate rows) -> 
     confirm generation still proceeds normally, unchanged from today.
     """
     mock_db = MagicMock()
@@ -55,19 +69,12 @@ async def test_rag_guard_single_distinct_sku():
             mock_judge_instance = mock_judge.return_value
             mock_judge_instance.evaluate_safety.return_value = {"is_safe": True, "reason": None}
             
-            # Mock Gemini client by patching google.genai.Client
-            with patch("google.genai.Client") as mock_gemini:
-                mock_gemini.return_value.models.generate_content.return_value = MagicMock(
-                    text='{"question_type": "general_info", "is_safe_to_dispense": true, "narrative": "test", "system_lock_reason": null, "citations": []}'
-                )
-                
-                result = await generate_clinical_response(
-                    db=mock_db,
-                    query="what is amoxicillin used for"
-                )
-                
-                # Generation SHOULD be called
-                mock_search.assert_called_once()
-                assert "answer" in result
-                assert result.get("status") != "disambiguate"
-
+            result = await generate_clinical_response(
+                db=mock_db,
+                query="what is amoxicillin used for"
+            )
+            
+            # Generation SHOULD be called
+            mock_search.assert_called_once()
+            assert "answer" in result
+            assert result.get("status") != "disambiguate"
