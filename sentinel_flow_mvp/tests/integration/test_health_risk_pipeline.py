@@ -104,6 +104,7 @@ def count_health_risk_rows(db, pincode: str) -> int:
 # =========================================================================
 
 
+@pytest.mark.integration
 class TestHealthRiskRealPipeline:
     """
     Integration tests exercising the full ingestion pipeline against
@@ -232,6 +233,7 @@ class TestHealthRiskRealPipeline:
     def test_real_open_meteo_weather_used_in_scoring(
         self, mock_fetch, real_db, real_settings
     ):
+        # Makes a real network call - requires internet access
         """
         Calls the REAL Open-Meteo weather API for Kochi, stores the result
         in exogenous_covariates, then runs ingestion. The computed score
