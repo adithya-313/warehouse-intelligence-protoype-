@@ -105,3 +105,6 @@ google-genai>=1.0.0
 
 httpx==0.27.2
 geopy
+
+# Google Trends data for health-risk trend scoring
+pytrends==4.9.2
