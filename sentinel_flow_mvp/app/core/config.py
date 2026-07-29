@@ -117,6 +117,19 @@ class ApplicationSettings(BaseSettings):
     FALLBACK_LON: float = Field(default=76.2673, description="Fallback longitude")
     FALLBACK_CITY: str = Field(default="Kochi", description="Fallback city")
 
+    # ------------------------------------------------------------------
+    # Feature flag for the health_risk module (Phase 2 — phased rollout).
+    # Must be True AND the pharmacy-level flag (Tenant.health_risk_enabled)
+    # must be True for scoring to run. This two-gate system allows safe
+    # pilot rollouts: the global flag kills it instantly for everyone
+    # (emergency stop), the tenant flag enables one pharmacy at a time.
+    # Default OFF because the module is not yet wired to any live path.
+    # ------------------------------------------------------------------
+    HEALTH_RISK_ENABLED: bool = Field(
+        default=False,
+        description="Global kill switch for the health_risk module.",
+    )
+
     # REDIS_URL defined above as a proper Pydantic Field
 
     def model_post_init(self, __context) -> None:

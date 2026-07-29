@@ -35,6 +35,14 @@ class Tenant(Base):
     # Pincode is required to fetch localized weather and search trends
     pincode = Column(String, index=True, nullable=True)
 
+    # Feature flag: per-pharmacy opt-in for the health_risk scoring module.
+    # Default is False (opt-in). Must be True alongside the global
+    # HEALTH_RISK_ENABLED setting for scoring to actually run. This allows
+    # a phased rollout: enable one pharmacy at a time, monitor, then open
+    # up to more. Both flags must be True — the global flag acts as an
+    # emergency stop for all pharmacies simultaneously.
+    health_risk_enabled = Column(Boolean, default=False, nullable=False)
+
 
 class SupplierModel(Base):
     """Represents the 'suppliers' table containing static and polymorphic metadata.
