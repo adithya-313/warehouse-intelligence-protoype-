@@ -311,7 +311,10 @@ class TestClinicalNarrationStockInjection:
             call_kwargs = mock_generate_content.call_args[1]
             prompt_text = call_kwargs["contents"]
             
-            assert "(In stock: 100 units, ₹50.0, expires 2027-12-01)" in prompt_text
+            assert "In stock:" not in prompt_text
+            assert len(result["context_used"]) == 1
+            assert result["context_used"][0]["stock_qty"] == 100
+            assert result["context_used"][0]["unit_price"] == 50.0
 
     @pytest.mark.anyio
     async def test_clinical_response_handles_missing_stock_gracefully(self):
@@ -356,3 +359,6 @@ class TestClinicalNarrationStockInjection:
             
             assert "In stock:" not in prompt_text
             assert "clinical data" in prompt_text
+            
+            assert len(result["context_used"]) == 1
+            assert "stock_qty" not in result["context_used"][0]

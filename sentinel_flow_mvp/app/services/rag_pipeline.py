@@ -913,8 +913,10 @@ async def generate_clinical_response(
     rendered_blocks = []
     for item in context_items:
         base_text = f"- {item['content']}"
-        if "stock_qty" in item and "unit_price" in item and "expiry_date" in item:
-            base_text += f" (In stock: {item['stock_qty']} units, ₹{item['unit_price']}, expires {item['expiry_date']})"
+        # We don't want the AI writing specific stock numbers into its answer, because that text 
+        # could still be on someone's screen minutes later after the actual stock count has changed. 
+        # Stock/price should always come from a live, separate lookup (the context_used JSON field) 
+        # — never baked into AI-generated sentences.
         rendered_blocks.append(base_text)
     
     context_blocks = "\n\n".join(rendered_blocks)
