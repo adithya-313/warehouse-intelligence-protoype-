@@ -17,6 +17,8 @@ No real network or database connections are made.
 
 from unittest.mock import MagicMock, patch
 
+from sqlalchemy.exc import IntegrityError
+
 from app.core.config import ApplicationSettings
 from app.health_risk.domain.disease_category import DiseaseCategory
 from app.health_risk.domain.risk_score import RiskScore
@@ -238,6 +240,94 @@ class TestIngestionFailureIsolation:
         # Only 2 rows were committed (leptospirosis was never added)
         assert mock_db.add.call_count == 2
         assert mock_db.commit.call_count == 2
+
+
+# =========================================================================
+# DB commit failure isolation — IntegrityError on commit
+# =========================================================================
+
+
+class TestIngestionDBFailureIsolation:
+    """A DB commit failure for one disease must not block the other diseases."""
+
+    @patch("app.health_risk.service.ingestion_service.fetch_trend_score")
+    def test_db_commit_failure_does_not_block_remaining_diseases(
+        self,
+        mock_fetch_trend_score: MagicMock,
+    ) -> None:
+        """
+        When db.commit() raises IntegrityError for the FIRST disease
+        (e.g. duplicate key from a double-run), the session must be
+        rolled back and the remaining 2 diseases must still commit
+        successfully.
+
+        Expected sequence:
+          1. DENGUE — db.commit() raises IntegrityError → rolled back, skipped
+          2. LEPTOSPIROSIS — db.commit() succeeds → scored
+          3. VIRAL_FEVER — db.commit() succeeds → scored
+
+        Result: 2 RiskScores returned, 2 rollback() calls
+        (one explicit in the IntegrityError handler, one in the outer
+         except block... no, the IntegrityError is caught locally, so
+         only 1 rollback in this case).
+        """
+        # Arrange: trend fetcher always returns 50.0
+        mock_fetch_trend_score.return_value = 50.0
+        mock_db = _make_mock_db(weather_row_exists=True)
+
+        # Make the FIRST commit raise IntegrityError, subsequent calls succeed
+        commit_call_count = [0]
+
+        def commit_side_effect() -> None:
+            commit_call_count[0] += 1
+            if commit_call_count[0] == 1:
+                raise IntegrityError(
+                    "INSERT INTO health_risk_scores ...",
+                    {},
+                    Exception('duplicate key value violates unique constraint '
+                              '"uix_health_risk_score_pincode_disease_time"'),
+                )
+
+        mock_db.commit.side_effect = commit_side_effect
+
+        settings = _make_settings()
+
+        # Act
+        results = run_ingestion_for_pincode(
+            pincode=_TEST_PINCODE,
+            db=mock_db,
+            settings=settings,
+        )
+
+        # Assert: 2 RiskScores (leptospirosis + viral_fever), dengue was skipped
+        assert len(results) == 2, (
+            f"Expected 2 results (dengue should have been skipped as duplicate), "
+            f"got {len(results)}"
+        )
+
+        # Dengue should NOT be in results
+        failed_disease = DiseaseCategory.DENGUE
+        recovered_categories = [r.disease_category for r in results]
+        assert failed_disease not in recovered_categories, (
+            f"Dengue should NOT be in results, but got: {recovered_categories}"
+        )
+
+        # Both successful diseases should have valid scores
+        for risk_score in results:
+            assert isinstance(risk_score.score, float)
+            assert 0.0 <= risk_score.score <= 100.0
+
+        # db.rollback() must have been called to clean up the failed session
+        # (at least once — by the IntegrityError handler in _process_single_disease)
+        assert mock_db.rollback.called, (
+            "db.rollback() must be called when IntegrityError occurs, "
+            "otherwise the session is poisoned for subsequent diseases."
+        )
+
+        # Only 2 rows were committed (dengue was skipped)
+        assert mock_db.commit.call_count == 3  # one failed + two succeeded
+        assert mock_db.add.call_count == 3  # all three rows were added to session
+                                             # (the first was rolled back)
 
 
 # =========================================================================

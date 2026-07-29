@@ -15,6 +15,7 @@ import logging
 from typing import List
 
 from sqlalchemy import desc
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import ApplicationSettings
@@ -99,6 +100,12 @@ def run_ingestion_for_pincode(
                 results=results,
             )
         except Exception as error:
+            # Without db.rollback(), a failed commit poisons the SQLAlchemy
+            # session. The next disease's db.commit() would raise "session
+            # is in 'prepared' state" and silently break every disease
+            # processed after this one. We roll back to restore the session
+            # to a clean state before continuing the loop.
+            db.rollback()
             # Log the error and continue to the next disease.
             # An error here means the disease did NOT get scored this cycle,
             # but all other diseases still produce their scores.
@@ -196,7 +203,32 @@ def _process_single_disease(
         contributing_factors=risk_score.contributing_factors,
     )
     db.add(db_score_row)
-    db.commit()
+
+    # ------------------------------------------------------------------
+    # Step 4a: Commit, handling duplicate-key errors gracefully.
+    #
+    # The unique constraint on (pincode, disease_category, computed_at)
+    # prevents accidental double-insertions. If the same pincode+disease
+    # was already scored within the same microsecond (e.g. the Celery
+    # scheduler fired twice), db.commit() raises IntegrityError.
+    #
+    # This is a HARMLESS DUPLICATE — not a real failure. We rollback the
+    # session (to clear the failed INSERT), log a warning, and return
+    # early without appending to results. The outer loop's except block
+    # does NOT catch this because we handle it right here.
+    # ------------------------------------------------------------------
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        logger.warning(
+            "Duplicate score for pincode=%s, disease=%s: "
+            "already scored at %s. Skipping.",
+            pincode,
+            disease_category.value,
+            risk_score.computed_at,
+        )
+        return
 
     # ------------------------------------------------------------------
     # Step 5: Add to the result list for the caller.
