@@ -927,6 +927,21 @@ async def generate_clinical_response(
             "Reactions section — check there before saying the information isn't available."
         )
 
+    # When there's more than one drug in the context, the model needs to be told explicitly
+    # to compare them — otherwise it just lists facts about each one separately without
+    # connecting them. This mirrors the same pattern used for symptom_instruction above.
+    multi_drug_instruction = ""
+    if len(context_items) > 1:
+        multi_drug_instruction = (
+            "\n\nIMPORTANT: The clinical context above includes information for MORE THAN ONE drug. "
+            "Do not just describe each drug separately, one after another. Instead, directly compare "
+            "and relate them to answer the pharmacist's actual question — for example, explain their "
+            "similarities, their differences, or whether they are safe to use together, depending on "
+            "what was asked. If the context does not contain information about how they interact or "
+            "compare, say so honestly, but still summarize what IS known about each so the pharmacist "
+            "has useful information either way."
+        )
+
     prompt = f"""You are a clinical assistant helping a pharmacist. Answer the pharmacist's
 actual question using ONLY the clinical context provided below. Do not use
 outside medical knowledge.
@@ -934,7 +949,7 @@ outside medical knowledge.
 First, identify what kind of question this is: one of
 "symptom", "dosage", "comparison", "general_info", or "safety_check".
 
-Then answer that question directly and clearly, using the clinical context.{symptom_instruction}
+Then answer that question directly and clearly, using the clinical context.{symptom_instruction}{multi_drug_instruction}
 
 Separately, the system has already checked this specific transaction for
 dispensing safety: {judge_verdict_str}. If the pharmacist's
@@ -960,6 +975,12 @@ CLINICAL CONTEXT:
 USER QUESTION:
 {query}
 """
+
+    # DIAG-G.3: log how many drugs were in context and whether the comparison instruction fired
+    logger.info(
+        f"Prompt built with {len(context_items)} drug(s) in context. "
+        f"Multi-drug comparison instruction added: {len(context_items) > 1}"
+    )
 
     # DIAG-5.3: capturing exactly what the LLM was told to do
     logger.info(f"[DIAG-5.3] FULL PROMPT SENT TO LLM:\n{prompt}")
