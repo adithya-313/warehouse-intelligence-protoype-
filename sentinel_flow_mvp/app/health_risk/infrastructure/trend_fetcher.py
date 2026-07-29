@@ -30,6 +30,17 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from app.core.circuit_breaker import AegisLiteCircuitBreaker, CircuitStateEnum
 from app.core.config import get_application_settings
 
+# NOTE: We do NOT reuse app/core/redis_client.py here, even though the project
+# has a centralized Redis client. That module uses redis.asyncio (async-only),
+# but fetch_trend_score() must stay synchronous because:
+#   1) _call_pytrends() uses tenacity's @retry decorator (sync).
+#   2) AegisLiteCircuitBreaker is a sync class.
+#   3) covariate_tasks.py (the same kind of background ingestion) also uses
+#      raw redis.Redis.from_url() for the same reason — the async client is
+#      designed for web-request paths (locking, idempotency, rate limiting).
+# Using redis.Redis.from_url() directly is the established sync-Redis pattern
+# in this codebase.
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
