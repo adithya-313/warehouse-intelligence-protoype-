@@ -66,6 +66,23 @@ prediction_orchestrator: PredictionOrchestrator = PredictionOrchestrator()
 procurement_engine: ProcurementOptimizationEngine = ProcurementOptimizationEngine()
 
 
+async def warm_up_embedding_model():
+    """
+    We load the AI model here, when the server starts, instead of waiting for the 
+    first real pharmacist question. This means nobody has to wait an extra 13 
+    seconds just because they happened to ask the first question of the day.
+    """
+    import time
+    from app.workers.embedding_tasks import get_embedding_model
+    logger.info("Warming up PubMedBERT embedding model...")
+    t0 = time.perf_counter()
+    # Run in a separate thread to avoid blocking the event loop
+    await asyncio.to_thread(get_embedding_model)
+    t1 = time.perf_counter()
+    logger.info(f"PubMedBERT embedding model ready (took {(t1 - t0) * 1000:.2f}ms).")
+
+
+
 @asynccontextmanager
 async def application_lifespan(application: FastAPI):
     """Application lifespan context manager for startup and shutdown events.
@@ -165,6 +182,11 @@ async def application_lifespan(application: FastAPI):
     await get_redis_client()
 
     await start_kafka_producer()
+
+    # Start the embedding model warm-up in the background so the server can 
+    # accept requests immediately. If a request needs it before warm-up finishes, 
+    # the existing lazy-load in get_embedding_model() handles it safely.
+    asyncio.create_task(warm_up_embedding_model())
 
     # Yield control to the application - this is where the app runs
     yield
