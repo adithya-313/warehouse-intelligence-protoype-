@@ -30,6 +30,7 @@ from app.core.config import get_application_settings
 from app.infrastructure.models import Base
 # Ensure all db models are imported so Base metadata is populated
 import app.infrastructure.db.models
+import app.health_risk.infrastructure.db_models
 
 config = context.config
 

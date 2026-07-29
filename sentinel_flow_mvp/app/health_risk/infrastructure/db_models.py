@@ -12,9 +12,13 @@ risk value. Different concerns, different tables.
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, Float, Integer, JSON, String, UniqueConstraint
-from sqlalchemy.orm import declarative_base
 
-Base = declarative_base()
+# Use the main application's Base so Alembic can see this model's metadata
+# during migrations. Every other model in the repo imports Base from
+# app/infrastructure/models.py — health_risk used to have its own
+# declarative_base(), which meant Alembic never tracked the table and
+# health_risk_scores was never created by any migration.
+from app.infrastructure.models import Base
 
 
 class HealthRiskScoreModel(Base):
