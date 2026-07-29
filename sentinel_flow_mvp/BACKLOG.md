@@ -18,3 +18,7 @@
 - **Issue:** `normalize_drug_name()` does not strip numeric strengths (e.g. "625") or modifier words (e.g. "DUO", "DDS") from drug names before comparison.
 - **Current Behavior:** A bare brand name typed without its strength/modifier (e.g. just "Augmentin" instead of "Augmentin 625") can fail to match anything in the catalog at all.
 - **Proposed Fix:** This is a separate, pre-existing normalization gap, out of scope for Phase G (multi-drug detection) — flagged here for a future phase.
+
+## ILIKE Alias Lookup Inefficiency
+- **Issue:** ILIKE alias lookup query (drug_brand_aliases table) uses REPLACE()+ILIKE, which likely prevents efficient index use, adding ~100ms even on a warm DB cache.
+- **Proposed Fix:** Not urgent today, but a good candidate for a proper index or query restructure later.

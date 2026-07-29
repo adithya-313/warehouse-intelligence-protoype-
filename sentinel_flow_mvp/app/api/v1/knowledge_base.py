@@ -185,6 +185,12 @@ async def ask_clinical_assistant(
         # contain a generic/brand name but no explicit regex SKU or intents
         # (e.g. "is amoxycillin safe with alcohol").
         resolution = resolve_drug_entity(db, cleaned_query, sku_id=known_sku)
+        
+        known_sku_ids = None
+        if resolution["status"] == "resolved":
+            known_sku_ids = [resolution["sku_id"]]
+        elif resolution["status"] == "multi_drug_resolved":
+            known_sku_ids = resolution["sku_ids"]
 
         if bucket == IntentBucket.NO_INTENT:
             # If the regex found no drug, but the DB catalog resolver DID find one
@@ -376,6 +382,7 @@ async def ask_clinical_assistant(
             query=cleaned_query,
             sku_id=final_sku,
             intents=intents,
+            known_sku_ids=known_sku_ids,
         )
 
         request_metrics["intent"] = bucket.value if hasattr(bucket, "value") else str(bucket)

@@ -102,8 +102,9 @@ from app.domain.intent_keywords import OBJECTIVE_KEYWORDS as OBJECTIVE_KEYWORDS_
 async def route_and_process_query(
     db: Session,
     query: str,
-    sku_id: str = None,
+    sku_id: str | None = None,
     intents: dict = None,
+    known_sku_ids: list[str] | None = None,
 ) -> dict:
     """
     Route a query to either the database (for objective questions) or
@@ -285,6 +286,7 @@ async def route_and_process_query(
         query=query,
         sku_id=sku_id,
         intents=intents or {},
+        known_sku_ids=known_sku_ids,
     )
     
     # We tag the result here so the endpoint knows which path was taken, 
@@ -374,6 +376,7 @@ def get_known_drug_catalog(db: Session) -> tuple[set[str], set[str]]:
 def extract_known_entities(
     db: Session,
     query: str,
+    known_sku_ids: list[str] | None = None,
 ) -> list[dict]:
     """
     Scan the query for known drug identifiers and return matching
@@ -388,60 +391,67 @@ def extract_known_entities(
         (matching the format of vector search results so they can be
         merged seamlessly). Returns an empty list if no entities found.
     """
-    # Step 1: Fetch all known identifiers from the database.
-    known_skus, known_brands = get_known_drug_catalog(db)
-    
-    if not known_skus and not known_brands:
-        return []
+    # If we already know exactly which drugs the resolver found earlier in this same request, 
+    # we don't need to search the query text all over again — we can just look up their 
+    # clinical records directly. This saves time and avoids doing the same database work twice for no reason.
+    if known_sku_ids is not None:
+        matched_entities = list(known_sku_ids)
+        logger.info("Using pre-resolved SKUs from drug_resolver, skipping redundant catalog scan.")
+    else:
+        # Step 1: Fetch all known identifiers from the database.
+        known_skus, known_brands = get_known_drug_catalog(db)
+        
+        if not known_skus and not known_brands:
+            return []
 
-    # Step 2: Scan the query for each known identifier.
-    # We check every identifier as a case-insensitive substring of
-    # the query. We prefer LONGER matches over shorter ones to avoid
-    # false positives (e.g., "PAN" matching inside "PANTROPRAZOLE").
-    query_upper = query.upper()
-    matched_entities: list[str] = []
+        # Step 2: Scan the query for each known identifier.
+        # We check every identifier as a case-insensitive substring of
+        # the query. We prefer LONGER matches over shorter ones to avoid
+        # false positives (e.g., "PAN" matching inside "PANTROPRAZOLE").
+        query_upper = query.upper()
+        matched_entities: list[str] = []
 
-    for sku in known_skus:
-        if sku.upper() in query_upper:
-            matched_entities.append(sku)
+        for sku in known_skus:
+            if sku.upper() in query_upper:
+                matched_entities.append(sku)
 
-    for brand in known_brands:
-        if brand in query_upper:
-            matched_entities.append(brand)
+        for brand in known_brands:
+            if brand in query_upper:
+                matched_entities.append(brand)
 
-    # Scan for tokens matching the alias table
-    import re
-    from sqlalchemy import text
-    from app.domain.drug_resolver import normalize_drug_name
-    
-    tokens = re.findall(r"(?i)\b([a-z0-9-]{3,})\b", query)
-    stop_words = {"TELL", "ME", "ABOUT", "WHAT", "IS", "THE", "OF", "FOR", "AND", "WITH"}
-    for token in tokens:
-        if token.upper() in stop_words:
-            continue
-            
-        token_clean = token.upper().replace("-", "")
-        alias_candidates_sql = text("""
-            SELECT sku_id, alias_text 
-            FROM drug_brand_aliases 
-            WHERE REPLACE(alias_text, ' ', '') ILIKE :prefix 
-            LIMIT 50
-        """)
-        candidates = db.execute(alias_candidates_sql, {"prefix": f"{token_clean}%"}).fetchall()
-        normalized_token = normalize_drug_name(token)
-        for cand_sku, cand_alias in candidates:
-            if normalize_drug_name(cand_alias) == normalized_token:
-                logger.info(f"Entity Extraction: Token '{token}' matched alias '{cand_alias}' -> '{cand_sku}'")
-                matched_entities.append(cand_sku)
-                break
+        # Scan for tokens matching the alias table
+        import re
+        from sqlalchemy import text
+        from app.domain.drug_resolver import normalize_drug_name
+        
+        tokens = re.findall(r"(?i)\b([a-z0-9-]{3,})\b", query)
+        stop_words = {"TELL", "ME", "ABOUT", "WHAT", "IS", "THE", "OF", "FOR", "AND", "WITH"}
+        for token in tokens:
+            if token.upper() in stop_words:
+                continue
+                
+            token_clean = token.upper().replace("-", "")
+            alias_candidates_sql = text("""
+                SELECT sku_id, alias_text 
+                FROM drug_brand_aliases 
+                WHERE REPLACE(alias_text, ' ', '') ILIKE :prefix 
+                LIMIT 50
+            """)
+            candidates = db.execute(alias_candidates_sql, {"prefix": f"{token_clean}%"}).fetchall()
+            normalized_token = normalize_drug_name(token)
+            for cand_sku, cand_alias in candidates:
+                if normalize_drug_name(cand_alias) == normalized_token:
+                    logger.info(f"Entity Extraction: Token '{token}' matched alias '{cand_alias}' -> '{cand_sku}'")
+                    matched_entities.append(cand_sku)
+                    break
 
-    # Remove duplicates and sort by length descending (longest match
-    # first — the most specific identifier wins).
-    matched_entities = sorted(
-        set(matched_entities),
-        key=len,
-        reverse=True,
-    )
+        # Remove duplicates and sort by length descending (longest match
+        # first — the most specific identifier wins).
+        matched_entities = sorted(
+            set(matched_entities),
+            key=len,
+            reverse=True,
+        )
 
     if not matched_entities:
         logger.info(
@@ -547,8 +557,9 @@ def extract_known_entities(
 async def generate_clinical_response(
     db: Session,
     query: str,
-    sku_id: str = None,
+    sku_id: str | None = None,
     intents: dict = None,
+    known_sku_ids: list[str] | None = None,
 ) -> dict:
     """
     Retrieval-Augmented Generation (RAG) Pipeline.
@@ -619,6 +630,7 @@ async def generate_clinical_response(
     direct_lookup_records = extract_known_entities(
         db=db,
         query=query,
+        known_sku_ids=known_sku_ids,
     )
     if isinstance(direct_lookup_records, dict) and direct_lookup_records.get("status") == "disambiguate":
         return direct_lookup_records
