@@ -646,7 +646,8 @@ class TestDrugResolverRealDB:
             
             # 2. "is amoxycillin safe with alcohol"
             res = resolve_drug_entity(real_db, "is amoxycillin safe with alcohol")
-            assert res["status"] in ("resolved", "disambiguate")
+            # Updated in Phase G.1c: 'with' now correctly triggers multi-drug detection — see commit 53582de.
+            assert res["status"] == "multi_drug_resolved"
 
             # 3. "is Dolo650 safe for a pregnant woman"
             res = resolve_drug_entity(real_db, "is Dolo650 safe for a pregnant woman")
