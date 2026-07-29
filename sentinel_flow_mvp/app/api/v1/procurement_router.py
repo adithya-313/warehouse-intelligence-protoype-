@@ -7,9 +7,12 @@ from sqlalchemy import func, desc
 
 from app.infrastructure.database import get_database_session
 from app.infrastructure.models import (
-    PurchaseOrderModel, SupplierModel, ExogenousCovariateModel, MedicationModel, NotificationModel
+    PurchaseOrderModel, SupplierModel, ExogenousCovariateModel, MedicationModel, NotificationModel, Tenant
 )
 from app.api.dependencies import get_current_tenant
+from app.core.config import get_application_settings
+from app.health_risk.infrastructure.feature_flag import is_health_risk_enabled
+from app.health_risk.service.ingestion_service import run_ingestion_for_pincode
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/procurement", tags=["Procurement"])
@@ -33,6 +36,11 @@ class AutoPOResponse(BaseModel):
     status: str
     message: str
 
+# Threshold at which a risk score triggers a disease-wave alert.
+# Matches the old trend_score > 70.0 heuristic so behavior is consistent
+# whether health_risk is enabled or not.
+HIGH_RISK_THRESHOLD = 70.0
+
 # --- ENDPOINTS ---
 @router.get("/disease-wave-alerts", response_model=list[DiseaseWaveAlert])
 def get_disease_wave_alerts(
@@ -43,59 +51,167 @@ def get_disease_wave_alerts(
     Detects incoming disease waves based on exogenous covariates (weather/trends)
     and recommends preemptive stock procurement.
     """
-    # 1. Fetch latest covariates to simulate Chronos-2 wave detection
-    latest_covariate = db.query(ExogenousCovariateModel).order_by(
-        desc(ExogenousCovariateModel.timestamp)
-    ).first()
-
+    settings = get_application_settings()
     alerts = []
-    # Heuristic: If search trends for fever are high, flag Paracetamol
-    if latest_covariate and (latest_covariate.trend_score or 0) > 70.0:
-        # Find a relevant SKU (fallback to first available if specific one missing)
-        med = db.query(MedicationModel).filter(MedicationModel.sku_id.ilike("%para%")).first()
-        if not med:
-            med = db.query(MedicationModel).first()
-            
-        if med:
-            # 2. Find the highest-performing supplier (most completed POs)
-            best_supplier = db.query(
-                PurchaseOrderModel.supplier_id,
-                func.count(PurchaseOrderModel.po_id).label('completed_count')
-            ).filter(
-                PurchaseOrderModel.status == 'COMPLETED'
-            ).group_by(PurchaseOrderModel.supplier_id).order_by(
-                desc('completed_count')
-            ).first()
 
-            # Fallback to any supplier if no history exists
-            supplier_id = best_supplier.supplier_id if best_supplier else "SUPP-001"
+    # ------------------------------------------------------------------
+    # Look up the Tenant model to check the per-pharmacy feature flag.
+    # If the tenant row doesn't exist, health_risk defaults to disabled.
+    # ------------------------------------------------------------------
+    tenant = db.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
 
-            # Check if we already notified them today to prevent spam
-            today = datetime.now(timezone.utc).date()
-            existing_notif = db.query(NotificationModel).filter(
-                NotificationModel.tenant_id == tenant_id,
-                NotificationModel.alert_type == "DISEASE_WAVE",
-                func.date(NotificationModel.created_at) == today
-            ).first()
+    # ------------------------------------------------------------------
+    # NEW PATH: health_risk-powered scoring (behind two-gate flag).
+    # Fires the real ingestion pipeline for per-disease RiskScores.
+    # ------------------------------------------------------------------
+    if tenant is not None and is_health_risk_enabled(tenant, settings):
+        logger.info("health_risk path: tenant=%s, pincode=%s", tenant_id, tenant.pincode)
 
-            if not existing_notif:
-                new_notif = NotificationModel(
-                    tenant_id=tenant_id,
-                    title=f"Disease Wave: {med.sku_id}",
-                    message=f"High localized search trends detected. Preemptive stock recommended.",
-                    alert_type="DISEASE_WAVE"
-                )
-                db.add(new_notif)
-                db.commit()
+        if not tenant.pincode:
+            # No pincode means we cannot run location-based scoring.
+            # Log a warning and return empty — the tenant admin needs
+            # to configure a pincode in the database before scoring works.
+            logger.warning(
+                "health_risk enabled but tenant %s has no pincode. "
+                "Set tenant.pincode in the tenants table.",
+                tenant_id,
+            )
+            return alerts
 
-            alerts.append(DiseaseWaveAlert(
-                sku_id=med.sku_id,
-                sku_name=med.sku_id,
-                probability_score=0.89,
-                expected_volume=500,
-                recommended_supplier_id=supplier_id,
-                warning_message=f"High localized search trends detected for viral fever. Preemptive stock recommended."
-            ))
+        # Run the full ingestion pipeline (trend → weather → score → save).
+        # If ingestion fails (network error, DB timeout, etc.), log and
+        # return empty alerts rather than crashing the entire endpoint.
+        try:
+            risk_scores = run_ingestion_for_pincode(
+                pincode=tenant.pincode,
+                db=db,
+                settings=settings,
+            )
+        except Exception as error:
+            logger.exception(
+                "health_risk ingestion failed for pincode %s: %s",
+                tenant.pincode,
+                error,
+            )
+            risk_scores = []
+
+        # Fire an alert for every disease whose score crosses the threshold
+        for risk_score in risk_scores:
+            if risk_score.score >= HIGH_RISK_THRESHOLD:
+                # Find a relevant SKU (fallback to first available if specific one missing)
+                med = db.query(MedicationModel).filter(MedicationModel.sku_id.ilike("%para%")).first()
+                if not med:
+                    med = db.query(MedicationModel).first()
+
+                if med:
+                    # Find the highest-performing supplier (most completed POs)
+                    best_supplier = db.query(
+                        PurchaseOrderModel.supplier_id,
+                        func.count(PurchaseOrderModel.po_id).label('completed_count')
+                    ).filter(
+                        PurchaseOrderModel.status == 'COMPLETED'
+                    ).group_by(PurchaseOrderModel.supplier_id).order_by(
+                        desc('completed_count')
+                    ).first()
+
+                    # Fallback to any supplier if no history exists
+                    supplier_id = best_supplier.supplier_id if best_supplier else "SUPP-001"
+
+                    # Check if we already notified them today to prevent spam
+                    today = datetime.now(timezone.utc).date()
+                    existing_notif = db.query(NotificationModel).filter(
+                        NotificationModel.tenant_id == tenant_id,
+                        NotificationModel.alert_type == "DISEASE_WAVE",
+                        func.date(NotificationModel.created_at) == today
+                    ).first()
+
+                    if not existing_notif:
+                        new_notif = NotificationModel(
+                            tenant_id=tenant_id,
+                            title=f"Disease Wave: {med.sku_id}",
+                            message=f"High health risk score ({risk_score.score:.1f}) for {risk_score.disease_category.value}. Preemptive stock recommended.",
+                            alert_type="DISEASE_WAVE"
+                        )
+                        db.add(new_notif)
+                        db.commit()
+
+                    alerts.append(DiseaseWaveAlert(
+                        sku_id=med.sku_id,
+                        sku_name=med.sku_id,
+                        # TODO(Phase 2): still hardcoded, out of scope for health_risk
+                        probability_score=0.89,
+                        # TODO(Phase 2): still hardcoded, out of scope for health_risk
+                        expected_volume=500,
+                        recommended_supplier_id=supplier_id,
+                        warning_message=f"High health risk score ({risk_score.score:.1f}) for {risk_score.disease_category.value}. Preemptive stock recommended.",
+                    ))
+
+    # ------------------------------------------------------------------
+    # LEGACY PATH: trend_score > 70.0 heuristic (unchanged, byte-for-byte).
+    # Runs when the feature flag is disabled OR the tenant is not found.
+    # ------------------------------------------------------------------
+    else:
+        logger.info(
+            "legacy path: tenant=%s (reason=%s)",
+            tenant_id,
+            "tenant not found" if tenant is None else "feature flag disabled",
+        )
+
+        # 1. Fetch latest covariates to simulate Chronos-2 wave detection
+        latest_covariate = db.query(ExogenousCovariateModel).order_by(
+            desc(ExogenousCovariateModel.timestamp)
+        ).first()
+
+        alerts = []
+        # Heuristic: If search trends for fever are high, flag Paracetamol
+        if latest_covariate and (latest_covariate.trend_score or 0) > 70.0:
+            # Find a relevant SKU (fallback to first available if specific one missing)
+            med = db.query(MedicationModel).filter(MedicationModel.sku_id.ilike("%para%")).first()
+            if not med:
+                med = db.query(MedicationModel).first()
+                
+            if med:
+                # 2. Find the highest-performing supplier (most completed POs)
+                best_supplier = db.query(
+                    PurchaseOrderModel.supplier_id,
+                    func.count(PurchaseOrderModel.po_id).label('completed_count')
+                ).filter(
+                    PurchaseOrderModel.status == 'COMPLETED'
+                ).group_by(PurchaseOrderModel.supplier_id).order_by(
+                    desc('completed_count')
+                ).first()
+
+                # Fallback to any supplier if no history exists
+                supplier_id = best_supplier.supplier_id if best_supplier else "SUPP-001"
+
+                # Check if we already notified them today to prevent spam
+                today = datetime.now(timezone.utc).date()
+                existing_notif = db.query(NotificationModel).filter(
+                    NotificationModel.tenant_id == tenant_id,
+                    NotificationModel.alert_type == "DISEASE_WAVE",
+                    func.date(NotificationModel.created_at) == today
+                ).first()
+
+                if not existing_notif:
+                    new_notif = NotificationModel(
+                        tenant_id=tenant_id,
+                        title=f"Disease Wave: {med.sku_id}",
+                        message=f"High localized search trends detected. Preemptive stock recommended.",
+                        alert_type="DISEASE_WAVE"
+                    )
+                    db.add(new_notif)
+                    db.commit()
+
+                alerts.append(DiseaseWaveAlert(
+                    sku_id=med.sku_id,
+                    sku_name=med.sku_id,
+                    # TODO(Phase 2): still hardcoded, out of scope for health_risk
+                    probability_score=0.89,
+                    # TODO(Phase 2): still hardcoded, out of scope for health_risk
+                    expected_volume=500,
+                    recommended_supplier_id=supplier_id,
+                    warning_message=f"High localized search trends detected for viral fever. Preemptive stock recommended."
+                ))
     
     return alerts
 
