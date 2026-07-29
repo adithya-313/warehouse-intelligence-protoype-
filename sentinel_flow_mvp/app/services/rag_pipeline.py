@@ -882,9 +882,28 @@ async def generate_clinical_response(
 
         cached_response = await redis_client.get(cache_key)
         if cached_response is not None:
-            logger.info(f"Cache HIT for query hash {query_hash[:12]}... (version {version})")
             # The cached value is a JSON string. We parse it back into a dict.
-            return json.loads(cached_response)
+            parsed_response = json.loads(cached_response)
+            
+            # Even though this answer came from the cache, the stock numbers 
+            # must always be looked up fresh, right now, so the pharmacist never sees stale inventory 
+            # or pricing.
+            drug_count = 0
+            for item in parsed_response.get("context_used", []):
+                sku = item.get("sku_id")
+                if sku:
+                    try:
+                        batch = get_optimal_fefo_batch(db, sku, required_qty=1)
+                        if batch:
+                            item["stock_qty"] = batch["available_quantity"]
+                            item["unit_price"] = batch["max_retail_price"]
+                            item["expiry_date"] = batch["expiry_date"].isoformat()
+                            drug_count += 1
+                    except Exception as e:
+                        logger.warning(f"Stock re-attachment failed for cached SKU '{sku}': {e}")
+
+            logger.info(f"Cache HIT for query hash {query_hash[:12]}... re-attached fresh stock data for {drug_count} drug(s).")
+            return parsed_response
 
         logger.info(
             f"Cache MISS for query hash {query_hash[:12]}... (version {version}). "
@@ -1125,9 +1144,21 @@ USER QUESTION:
         # ------------------------------------------------------------------
         if redis_client is not None and cache_key is not None:
             try:
+                import copy
+                cache_payload = copy.deepcopy(response_data)
+                
+                # We never save live stock and price numbers into 
+                # the cache, because they change constantly and a cached answer might be read days later. 
+                # Instead, we save just the stable clinical facts, and always fetch fresh stock numbers 
+                # separately, every single time, whether the answer came from cache or not.
+                for item in cache_payload.get("context_used", []):
+                    item.pop("stock_qty", None)
+                    item.pop("unit_price", None)
+                    item.pop("expiry_date", None)
+                    
                 await redis_client.set(
                     cache_key,
-                    json.dumps(response_data),
+                    json.dumps(cache_payload),
                     ex=CACHE_TTL_SECONDS,
                 )
                 logger.info(f"Cached response for key {cache_key} ({CACHE_TTL_SECONDS}s TTL).")

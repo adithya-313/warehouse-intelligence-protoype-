@@ -22,3 +22,5 @@
 ## ILIKE Alias Lookup Inefficiency
 - **Issue:** ILIKE alias lookup query (drug_brand_aliases table) uses REPLACE()+ILIKE, which likely prevents efficient index use, adding ~100ms even on a warm DB cache.
 - **Proposed Fix:** Not urgent today, but a good candidate for a proper index or query restructure later.
+
+- Note: Reconcile catalog vs. live batch pricing discrepancy. Currently, RAG cache re-attaches live batch pricing correctly, but we need to ensure the catalog price and batch prices are aligned.
