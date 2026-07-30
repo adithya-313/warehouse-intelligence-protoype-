@@ -12,7 +12,7 @@ from app.infrastructure.models import (
 from app.api.dependencies import get_current_tenant
 from app.core.config import get_application_settings
 from app.health_risk.infrastructure.feature_flag import is_health_risk_enabled
-from app.health_risk.service.ingestion_service import run_ingestion_for_pincode
+from app.health_risk.infrastructure.db_models import HealthRiskScoreModel
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/procurement", tags=["Procurement"])
@@ -62,7 +62,10 @@ def get_disease_wave_alerts(
 
     # ------------------------------------------------------------------
     # NEW PATH: health_risk-powered scoring (behind two-gate flag).
-    # Fires the real ingestion pipeline for per-disease RiskScores.
+    # Ingestion now runs in the BACKGROUND via the Celery job
+    # run_health_risk_ingestion_task (every 6 hours). This endpoint
+    # is READ-ONLY — it queries the most recent HealthRiskScoreModel
+    # rows from the database instead of triggering a new ingestion.
     # ------------------------------------------------------------------
     if tenant is not None and is_health_risk_enabled(tenant, settings):
         logger.info("health_risk path: tenant=%s, pincode=%s", tenant_id, tenant.pincode)
@@ -78,22 +81,35 @@ def get_disease_wave_alerts(
             )
             return alerts
 
-        # Run the full ingestion pipeline (trend → weather → score → save).
-        # If ingestion fails (network error, DB timeout, etc.), log and
-        # return empty alerts rather than crashing the entire endpoint.
-        try:
-            risk_scores = run_ingestion_for_pincode(
-                pincode=tenant.pincode,
-                db=db,
-                settings=settings,
-            )
-        except Exception as error:
-            logger.exception(
-                "health_risk ingestion failed for pincode %s: %s",
+        # Fetch all health risk scores for this pincode, newest first.
+        # The background Celery job writes these rows every 6 hours.
+        all_score_rows = (
+            db.query(HealthRiskScoreModel)
+            .filter(HealthRiskScoreModel.pincode == tenant.pincode)
+            .order_by(HealthRiskScoreModel.computed_at.desc())
+            .all()
+        )
+
+        # Keep only the most recent row per disease category.
+        # Since the DB query is ordered by computed_at descending, the
+        # first time we see a disease category, that is its latest score.
+        seen_diseases = set()
+        risk_scores = []
+        for score_row in all_score_rows:
+            if score_row.disease_category not in seen_diseases:
+                seen_diseases.add(score_row.disease_category)
+                risk_scores.append(score_row)
+
+        # If no rows exist yet (brand new pharmacy, the Celery job has
+        # not run its first cycle), risk_scores stays empty. We return
+        # an empty alerts list below — this is a temporary "cold start"
+        # case that resolves once the background job completes its first run.
+        if not risk_scores:
+            logger.info(
+                "No health risk scores found yet for pincode %s. "
+                "The Celery background job has likely not run yet.",
                 tenant.pincode,
-                error,
             )
-            risk_scores = []
 
         # Fire an alert for every disease whose score crosses the threshold
         for risk_score in risk_scores:
@@ -129,7 +145,7 @@ def get_disease_wave_alerts(
                         new_notif = NotificationModel(
                             tenant_id=tenant_id,
                             title=f"Disease Wave: {med.sku_id}",
-                            message=f"High health risk score ({risk_score.score:.1f}) for {risk_score.disease_category.value}. Preemptive stock recommended.",
+                            message=f"High health risk score ({risk_score.score:.1f}) for {risk_score.disease_category}. Preemptive stock recommended.",
                             alert_type="DISEASE_WAVE"
                         )
                         db.add(new_notif)
@@ -143,7 +159,7 @@ def get_disease_wave_alerts(
                         # TODO(Phase 2): still hardcoded, out of scope for health_risk
                         expected_volume=500,
                         recommended_supplier_id=supplier_id,
-                        warning_message=f"High health risk score ({risk_score.score:.1f}) for {risk_score.disease_category.value}. Preemptive stock recommended.",
+                        warning_message=f"High health risk score ({risk_score.score:.1f}) for {risk_score.disease_category}. Preemptive stock recommended.",
                     ))
 
     # ------------------------------------------------------------------
