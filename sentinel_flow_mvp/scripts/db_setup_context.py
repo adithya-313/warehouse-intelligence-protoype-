@@ -13,6 +13,11 @@ from app.infrastructure.db.models import AssetTelemetryModel, RouteTelemetryMode
 
 def setup_context_db():
     print("Creating new tables...")
+    # NOTE: This is a dev-only convenience script. In real deployments,
+    # the database schema is created and updated by Alembic migrations
+    # (see the migrations/versions/ folder), NOT by this create_all() call.
+    # If you're trying to add or change a table, write a new Alembic
+    # migration instead of relying on this script.
     # This will create any missing tables defined in the metadata
     DBModelsBase.metadata.create_all(bind=engine)
     ModelsBase.metadata.create_all(bind=engine)
