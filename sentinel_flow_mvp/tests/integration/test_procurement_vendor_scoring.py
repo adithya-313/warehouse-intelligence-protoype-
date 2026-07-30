@@ -10,6 +10,7 @@ from app.api.v1.procurement_router import router as procurement_router
 from app.infrastructure.database import get_database_session
 from app.api.dependencies import get_current_tenant
 from app.infrastructure.models import PurchaseOrderModel, Tenant, MedicationModel, ExogenousCovariateModel, Base
+from app.health_risk.infrastructure.db_models import HealthRiskScoreModel
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.compiler import compiles
@@ -47,11 +48,17 @@ def vendor_scoring_client(sqlite_db_session):
         yield c
 
 class TestProcurementVendorScoring:
-    def test_vendor_scoring_picks_supplier_with_most_fulfilled_orders(self, vendor_scoring_client, sqlite_db_session):
+    def test_vendor_scoring_picks_supplier_with_most_fulfilled_orders(self, vendor_scoring_client, sqlite_db_session, monkeypatch):
+        from app.core.config import get_application_settings
+        settings = get_application_settings()
+        monkeypatch.setattr(settings, "HEALTH_RISK_ENABLED", True)
+        
         # 1. Setup tenant context
         tenant = Tenant(
             tenant_id="TENANT-VS-1",
             name="Vendor Scoring Pharmacy",
+            pincode="110001",
+            health_risk_enabled=True
         )
         sqlite_db_session.add(tenant)
         
@@ -62,14 +69,15 @@ class TestProcurementVendorScoring:
             "VALUES ('MED-PARA-100', '[\"Paracetamol\"]', '[\"Antipyretic\"]', 'OTC', 1)"
         ))
         
-        # We need a high trend score to trigger the legacy disease wave alert path
-        covariate = ExogenousCovariateModel(
-            timestamp=datetime.now(),
+        # We need a high health risk score to trigger the disease wave alert path
+        risk_score = HealthRiskScoreModel(
             pincode="110001",
-            symptom_keyword="fever",
-            trend_score=85.0  # Above 70.0 threshold
+            disease_category="fever",
+            score=85.0,  # Above 70.0 threshold
+            confidence="real_data",
+            computed_at=datetime.now()
         )
-        sqlite_db_session.add(covariate)
+        sqlite_db_session.add(risk_score)
         sqlite_db_session.commit()
 
         # 2. Setup Suppliers via direct POs
