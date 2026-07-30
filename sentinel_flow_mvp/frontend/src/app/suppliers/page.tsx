@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, Search, ClipboardList } from 'lucide-react';
@@ -10,11 +10,55 @@ import { AddVendorModal } from '@/components/suppliers/AddVendorModal';
 export default function SuppliersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [vendors, setVendors] = useState([
-    { supplierId: "SUPP-001", name: "MediCorp Global", label: "Elite Performance" },
-    { supplierId: "SUPP-002", name: "Relief Logistics", label: "Standard Vendor" },
-    { supplierId: "SUPP-003", name: "Apex Pharma", label: "High Risk" },
-  ]);
+  const [vendors, setVendors] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch the real list of vendors from our new backend endpoint when the page loads.
+  useEffect(() => {
+    const fetchVendors = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        // Create an AbortController so we can timeout the request if the backend hangs.
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
+        // Call our new GET endpoint.
+        const response = await fetch('/api/v1/suppliers?limit=50&offset=0', {
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch vendors from the server.');
+        }
+
+        const data = await response.json();
+        
+        // Transform the backend response to match the exact shape the UI expects.
+        const transformedVendors = data.items.map((item: any) => ({
+          supplierId: item.supplier_id,
+          name: item.name,
+          label: item.industry_vertical || "Standard Vendor"
+        }));
+
+        setVendors(transformedVendors);
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          setError('The request took too long. Please try refreshing the page.');
+        } else {
+          setError('Unable to load vendors at this time. Please try again later.');
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchVendors();
+  }, []);
 
   const filteredVendors = vendors.filter((v: any) => {
     const vendorName = (v.name || v.label || "").toLowerCase();
@@ -24,6 +68,9 @@ export default function SuppliersPage() {
   });
 
   const handleVendorCreated = (newVendor: any) => {
+    // We add the newly created vendor to our local state instantly for a snappy UI.
+    // When the user eventually refreshes the page, the new vendor will be fetched
+    // from the backend automatically, so this optimistic update is perfectly safe.
     setVendors((prev) => [...prev, {
       supplierId: newVendor.supplier_id,
       name: newVendor.name,
@@ -107,12 +154,38 @@ export default function SuppliersPage() {
 
         {/* SPATIAL SCORECARD MATRIX */}
         <div className="flex-1 flex flex-col gap-12 items-center justify-start pb-24">
-          {filteredVendors.length === 0 && (
+          
+          {/* Loading State */}
+          {isLoading && (
+            <div className="w-full flex flex-col items-center justify-center mt-20 gap-4">
+              <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-500 rounded-full animate-spin" />
+              <p className="text-slate-500 font-medium animate-pulse">Loading vendor intelligence...</p>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && (
+            <div className="w-full max-w-lg mt-20 p-6 bg-rose-50 border border-rose-200 rounded-2xl text-center shadow-sm">
+              <h3 className="text-rose-600 font-semibold mb-2">Connection Issue</h3>
+              <p className="text-rose-500 text-sm">{error}</p>
+              <button 
+                onClick={() => window.location.reload()}
+                className="mt-4 px-4 py-2 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg text-sm font-medium transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!isLoading && !error && filteredVendors.length === 0 && (
             <div className="w-full text-center mt-20">
               <p className="text-slate-400 text-lg font-medium">No vendors match your search.</p>
             </div>
           )}
-          {filteredVendors.map((v, idx) => (
+
+          {/* Render List */}
+          {!isLoading && !error && filteredVendors.map((v, idx) => (
             <React.Fragment key={v.supplierId}>
               {idx > 0 && (
                 <div className="w-full text-center mt-8 mb-4">
