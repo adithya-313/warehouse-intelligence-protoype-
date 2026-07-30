@@ -40,9 +40,29 @@ def list_purchase_orders(
                 "status": po.status,
                 "item_count": 0,
                 "total_value_rupees": 0.0,
+                "ordered_value_rupees": 0.0,
+                "delivered_value_rupees": 0.0,
             }
         ledger[po.po_id]["item_count"] += 1
-        ledger[po.po_id]["total_value_rupees"] += float(po.ordered_qty * po.cost_price)
+        
+        ordered_qty = po.ordered_qty or 0
+        delivered_qty = po.delivered_qty or 0
+        cost_price = po.cost_price or 0.0
+        
+        ordered_val = float(ordered_qty * cost_price)
+        delivered_val = float(delivered_qty * cost_price)
+        
+        ledger[po.po_id]["ordered_value_rupees"] += ordered_val
+        ledger[po.po_id]["delivered_value_rupees"] += delivered_val
+        
+        # Beginner Note: Using ordered_qty here would show the FULL order value even if only part of it 
+        # was ever delivered — this fix ensures the ledger reflects reality. For PENDING/SUBMITTED 
+        # orders where nothing has arrived, we show the committed ordered value. For any delivered status, 
+        # we show the actual delivered value.
+        if po.status in ["PENDING", "SUBMITTED"]:
+            ledger[po.po_id]["total_value_rupees"] += ordered_val
+        else:
+            ledger[po.po_id]["total_value_rupees"] += delivered_val
 
     return list(ledger.values())
 
