@@ -10,12 +10,17 @@ or notification side-effects — a simple "what is my risk right now?" query.
 """
 
 import logging
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_tenant
-from app.health_risk.api.schemas import HealthRiskCurrentResponse, HealthRiskScoreResponse
+from app.health_risk.api.schemas import (
+    HealthRiskCurrentResponse,
+    HealthRiskHistoryResponse,
+    HealthRiskScoreResponse,
+)
 from app.health_risk.infrastructure.db_models import HealthRiskScoreModel
 from app.infrastructure.database import get_database_session
 from app.infrastructure.models import Tenant
@@ -110,5 +115,106 @@ def get_current_health_risk(
                 computed_at=row.computed_at,
             )
             for row in latest_scores
+        ],
+    )
+
+
+# =========================================================================
+# GET /history — Full time-series of risk scores for a pharmacy
+# =========================================================================
+
+@router.get(
+    path="/history",
+    response_model=HealthRiskHistoryResponse,
+    summary="Time-series of health risk scores for the pharmacy's location",
+)
+def get_health_risk_history(
+    database_session: Session = Depends(get_database_session),
+    tenant_id: str = Depends(get_current_tenant),
+    days: int = Query(default=30, description="Number of days of history to return (max 365)."),
+) -> HealthRiskHistoryResponse:
+    """Return the full time-series of risk scores for this pharmacy.
+
+    Unlike /current (which returns only the LATEST score per disease),
+    /history returns ALL rows in the date range, ordered oldest first.
+    This is designed for time-series charts that show how risk evolved
+    over the past N days — you need every data point, not just the latest
+    snapshot.
+
+    Flow:
+      1. Validate the days parameter (must be 1-365).
+      2. Look up the Tenant row to find this pharmacy's registered pincode.
+      3. Query HealthRiskScoreModel for that pincode within the date window.
+      4. Return ALL matching rows in ascending chronological order (oldest
+         first), with NO deduplication — the whole point is seeing change
+         over time.
+    """
+    # ------------------------------------------------------------------
+    # Step 1: Validate days parameter.
+    # Prevent someone from querying an absurd range like 10 000 days
+    # and pulling gigabytes of data, or passing 0 / negative values
+    # that would break the timedelta math or return no rows.
+    # This matches the same pattern used in supplier_router.py for limit.
+    # ------------------------------------------------------------------
+    if days <= 0 or days > 365:
+        raise HTTPException(
+            status_code=400,
+            detail="days must be between 1 and 365.",
+        )
+
+    # ------------------------------------------------------------------
+    # Step 2: Look up the Tenant to get the pharmacy's registered pincode.
+    # Same logic as /current — we need the pincode to filter scores.
+    # ------------------------------------------------------------------
+    tenant = database_session.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found.")
+
+    if not tenant.pincode:
+        raise HTTPException(
+            status_code=404,
+            detail="No pincode registered for this pharmacy yet. "
+            "Set tenant.pincode in the tenants table before querying health risk scores.",
+        )
+
+    # ------------------------------------------------------------------
+    # Step 3: Calculate the cutoff date and query scores.
+    # We ask for ALL rows that fall within the requested window —
+    # multiple rows per disease category, across all categories.
+    # ------------------------------------------------------------------
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+
+    score_rows = (
+        database_session.query(HealthRiskScoreModel)
+        .filter(HealthRiskScoreModel.pincode == tenant.pincode)
+        .filter(HealthRiskScoreModel.computed_at >= cutoff_date)
+        .order_by(HealthRiskScoreModel.computed_at.asc())
+        .all()
+    )
+
+    # ------------------------------------------------------------------
+    # Step 4: Build and return the response.
+    # If score_rows is empty (cold start, or no data in the date range),
+    # we return an empty list with a 200 status — same philosophy as
+    # /current. The frontend can show "no data yet" gracefully.
+    #
+    # IMPORTANT DIFFERENCE FROM /current:
+    # We do NOT deduplicate by disease_category here. The /history
+    # endpoint is for time-series charts — it needs every data point so
+    # the graph can show score changes over time. Deduplication would
+    # hide those changes and defeat the purpose.
+    # ------------------------------------------------------------------
+    return HealthRiskHistoryResponse(
+        pincode=tenant.pincode,
+        days=days,
+        scores=[
+            HealthRiskScoreResponse(
+                disease_category=row.disease_category,
+                score=row.score,
+                confidence=row.confidence,
+                computed_at=row.computed_at,
+            )
+            for row in score_rows
         ],
     )

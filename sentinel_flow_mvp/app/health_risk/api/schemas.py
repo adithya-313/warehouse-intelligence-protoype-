@@ -41,3 +41,14 @@ class HealthRiskCurrentResponse(BaseModel):
 
     pincode: str
     scores: List[HealthRiskScoreResponse]
+
+
+class HealthRiskHistoryResponse(BaseModel):
+    """
+    The full history of risk scores for a pharmacy over the requested
+    number of days, across all disease categories.
+    """
+
+    pincode: str
+    days: int
+    scores: List[HealthRiskScoreResponse]

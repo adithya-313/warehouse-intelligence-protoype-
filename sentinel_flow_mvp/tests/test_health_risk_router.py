@@ -1,5 +1,5 @@
 """
-Tests for the standalone /api/v1/health-risk/current endpoint.
+Tests for the standalone /api/v1/health-risk/current and /history endpoints.
 
 WHY A SEPARATE TEST FILE (NOT ADDING TO test_procurement_router_health_risk.py):
 The procurement_router tests mix health-risk logic with alert-generation
@@ -14,7 +14,7 @@ unpredictable and the source file's module-level mocks (_MOCK_MED, etc.)
 are irrelevant here.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -80,12 +80,15 @@ def _build_mock_session(
             return q
 
         # --- HealthRiskScoreModel query: .filter(...).order_by(...).all() ---
+        # Note: f.filter returns f itself so that calling .filter() multiple
+        # times (as /history does for pincode + date range) still works.
         if model == HealthRiskScoreModel:
             q = MagicMock()
             f = MagicMock()
             o = MagicMock()
             o.all.return_value = score_rows
             f.order_by.return_value = o
+            f.filter.return_value = f
             q.filter.return_value = f
             return q
 
@@ -264,3 +267,214 @@ class TestHealthRiskCurrentEndpoint:
 
         # Assert
         assert response.status_code == 403
+
+
+class TestHealthRiskHistoryEndpoint:
+    """
+    Tests for GET /api/v1/health-risk/history.
+    """
+
+    def test_tenant_with_five_score_rows_across_different_days_returns_all_five_ordered_oldest_first(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        Tenant has 5 HealthRiskScoreModel rows across different days
+        within a 30-day range → endpoint returns all 5, ordered oldest
+        to newest (ascending computed_at). No deduplication.
+        """
+        # Arrange: a tenant with a pincode
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        # Five score rows across different days (simulating a time series)
+        base_time = datetime.now(timezone.utc)
+        score_rows = [
+            _make_health_risk_score_row(score=10.0, disease="DENGUE"),
+            _make_health_risk_score_row(score=20.0, disease="DENGUE"),
+            _make_health_risk_score_row(score=30.0, disease="DENGUE"),
+            _make_health_risk_score_row(score=40.0, disease="LEPTOSPIROSIS"),
+            _make_health_risk_score_row(score=50.0, disease="LEPTOSPIROSIS"),
+        ]
+        # Set computed_at on each row so ordering is predictable:
+        # oldest first, newest last.
+        score_rows[0].computed_at = base_time - timedelta(days=4)
+        score_rows[1].computed_at = base_time - timedelta(days=3)
+        score_rows[2].computed_at = base_time - timedelta(days=2)
+        score_rows[3].computed_at = base_time - timedelta(days=1)
+        score_rows[4].computed_at = base_time
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=score_rows)
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/history?days=30")
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["pincode"] == "682001"
+        assert data["days"] == 30
+        assert len(data["scores"]) == 5
+
+        # Scores should be ordered oldest first (ascending computed_at)
+        timestamps = [s["computed_at"] for s in data["scores"]]
+        assert timestamps == sorted(timestamps), (
+            "Scores must be ordered oldest first for time-series display."
+        )
+
+        # Verify score values are in ascending order matching our setup
+        score_values = [s["score"] for s in data["scores"]]
+        assert score_values == [10.0, 20.0, 30.0, 40.0, 50.0]
+
+    def test_tenant_with_zero_score_rows_returns_empty_list(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        Tenant has a pincode but no score rows in the date range
+        → endpoint returns 200 with an empty scores list (not an error).
+        Same cold-start behaviour as /current.
+        """
+        # Arrange: tenant exists but no HealthRiskScoreModel rows
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=[])
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/history?days=30")
+
+        # Assert: 200 with empty scores, not a 404 or 500
+        assert response.status_code == 200
+        data = response.json()
+        assert data["pincode"] == "682001"
+        assert data["days"] == 30
+        assert data["scores"] == []
+
+    def test_days_equals_zero_returns_400(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        days=0 is outside the valid range (1-365) → endpoint returns
+        400 with a clear error message.
+        """
+        # Arrange: tenant exists so we get past the tenant check
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=[])
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/history?days=0")
+
+        # Assert
+        assert response.status_code == 400
+        data = response.json()
+        assert "days" in data["detail"].lower()
+
+    def test_days_negative_returns_400(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        days=-5 is negative → endpoint returns 400.
+        """
+        # Arrange
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=[])
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/history?days=-5")
+
+        # Assert
+        assert response.status_code == 400
+        data = response.json()
+        assert "days" in data["detail"].lower()
+
+    def test_days_exceeds_maximum_returns_400(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        days=9999 exceeds the maximum of 365 → endpoint returns 400.
+        This prevents absurdly large date ranges that would pull
+        gigabytes of data.
+        """
+        # Arrange
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=[])
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/history?days=9999")
+
+        # Assert
+        assert response.status_code == 400
+        data = response.json()
+        assert "days" in data["detail"].lower()
+
+    def test_days_omitted_defaults_to_30(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        No days query param sent → defaults to 30 and still works.
+        """
+        # Arrange
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        score_rows = [
+            _make_health_risk_score_row(score=75.0, disease="DENGUE"),
+        ]
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=score_rows)
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act — no days param
+        response = client.get("/api/v1/health-risk/history")
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["days"] == 30
+        assert len(data["scores"]) == 1
+
+    def test_tenant_with_no_pincode_returns_404(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        Tenant row exists but pincode is None → endpoint returns 404.
+        Same check and message as /current.
+        """
+        # Arrange: tenant exists but has no pincode
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = None
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=[])
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/history")
+
+        # Assert
+        assert response.status_code == 404
+        data = response.json()
+        assert "pincode" in data["detail"].lower()
