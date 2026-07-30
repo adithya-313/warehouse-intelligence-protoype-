@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Building2, Mail } from 'lucide-react';
 import { api } from '@/services/api';
@@ -15,6 +16,11 @@ export const AddVendorModal: React.FC<AddVendorModalProps> = ({ isOpen, onClose,
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +44,7 @@ export const AddVendorModal: React.FC<AddVendorModalProps> = ({ isOpen, onClose,
     }
   };
 
-  return (
+  const modalContent = (
     <AnimatePresence mode="wait">
       {isOpen && (
         <motion.div
@@ -110,4 +116,10 @@ export const AddVendorModal: React.FC<AddVendorModalProps> = ({ isOpen, onClose,
       )}
     </AnimatePresence>
   );
+
+  // A React Portal renders this component directly into document.body instead of its inline DOM location.
+  // We need this to escape the `will-change` CSS property on our root template.tsx, which traps fixed-position elements.
+  // The mounted check is required because document.body doesn't exist during Next.js SSR.
+  if (!mounted) return null;
+  return ReactDOM.createPortal(modalContent, document.body);
 };
