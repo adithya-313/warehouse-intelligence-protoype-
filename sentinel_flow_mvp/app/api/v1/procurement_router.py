@@ -241,6 +241,12 @@ def create_auto_purchase_order(
     Creates a 1-click Purchase Order. 
     Idempotent: Prevents duplicate pending orders for the same SKU.
     """
+    if not tenant_id:
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot create auto purchase order: no tenant context available"
+        )
+
     # 1. Idempotency Check: Does a PENDING order already exist for this SKU?
     existing_po = db.query(PurchaseOrderModel).filter(
         PurchaseOrderModel.sku_id == request.sku_id,
@@ -257,8 +263,11 @@ def create_auto_purchase_order(
 
     # 2. Create new PO (Patched to include tenant_id)
     import uuid
+    # Beginner Note: tenant_id is required by the database and was never 
+    # being set here — every Auto-PO attempt failed because of this missing value.
     new_po = PurchaseOrderModel(
         po_id=str(uuid.uuid4()), # Need a string PO id
+        tenant_id=tenant_id,
         supplier_id=request.supplier_id,
         sku_id=request.sku_id,
         ordered_qty=request.quantity,
@@ -273,7 +282,7 @@ def create_auto_purchase_order(
     db.commit()
     db.refresh(new_po)
     
-    logger.info(f"Successfully created preemptive PO {new_po.po_id} for SKU {request.sku_id}")
+    logger.info(f"Successfully created preemptive PO {new_po.po_id} for SKU {request.sku_id} (Tenant: {tenant_id})")
     return AutoPOResponse(
         po_id=str(new_po.po_id),  # Safely cast UUID to string to match updated schema
         status=new_po.status,
