@@ -94,19 +94,56 @@ def run_health_risk_ingestion_task():
                 # This fetches Google Trends, reads weather data, calculates
                 # the risk score via TransparentFormulaScorer, and saves the
                 # result as a new HealthRiskScoreModel row.
-                run_ingestion_for_pincode(
+                results = run_ingestion_for_pincode(
                     pincode=tenant.pincode,
                     db=db,
                     settings=settings,
                 )
 
-                # If we get here without an exception, this tenant succeeded
-                succeeded += 1
-                logger.info(
-                    "Successfully scored health risk for tenant_id=%s, pincode=%s",
-                    tenant.tenant_id,
-                    tenant.pincode,
-                )
+                # IMPORTANT: An empty list means every disease silently
+                # failed inside run_ingestion_for_pincode's own per-disease
+                # try/except, even though no exception reached us. Today,
+                # that is incorrectly counted as a success. We fix that
+                # here: treat zero results the SAME as a caught exception.
+                if len(results) == 0:
+
+                    # Soft failure — no exception was raised, but no
+                    # disease was scored either. Count as failed and log
+                    # a clear warning so operators can investigate.
+                    failed += 1
+                    logger.warning(
+                        "Health risk ingestion produced zero scored diseases "
+                        "for tenant_id=%s, pincode=%s — "
+                        "treating as a failed cycle for this tenant.",
+                        tenant.tenant_id,
+                        tenant.pincode,
+                    )
+
+                else:
+
+                    # Real success — at least one disease was scored.
+                    succeeded += 1
+                    logger.info(
+                        "Successfully scored health risk "
+                        "for tenant_id=%s, pincode=%s",
+                        tenant.tenant_id,
+                        tenant.pincode,
+                    )
+
+                    # Auto-onboarding gate: the first time real data
+                    # arrives for a pharmacy, flip their feature flag so
+                    # future cycles pick them up automatically. We check
+                    # the flag is still False to avoid an unnecessary
+                    # db.commit() when there is nothing to change.
+                    if not tenant.health_risk_enabled:
+
+                        tenant.health_risk_enabled = True
+                        db.commit()
+                        logger.info(
+                            "Auto-enabled health_risk for tenant_id=%s "
+                            "on first successful ingestion.",
+                            tenant.tenant_id,
+                        )
 
             except Exception as error:
 
