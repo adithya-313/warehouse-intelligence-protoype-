@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.infrastructure.database import get_database_session
 from app.infrastructure.models import SupplierModel
 from app.services.supplier_scorecard_service import generate_financial_scorecard
-from app.domain.schemas import DistributorScorecardResponse, SupplierCreateRequest
+from app.domain.schemas import DistributorScorecardResponse, SupplierCreateRequest, SupplierListResponse
 import logging
 
 router = APIRouter()
@@ -24,6 +24,67 @@ async def get_supplier_scorecard(
         raise HTTPException(status_code=404, detail="Supplier not found.")
     return generate_financial_scorecard(db, supplier_id)
 
+
+@router.get("", response_model=SupplierListResponse)
+def list_suppliers(
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_database_session)
+):
+    """
+    Fetches a paginated list of all onboarded vendors from the database.
+    This replaces the hardcoded mock array on the frontend Vendor Intelligence page.
+    """
+    # 1. Validate the pagination parameters to prevent abuse or database strain.
+    if limit <= 0 or limit > 200:
+        raise HTTPException(
+            status_code=400, 
+            detail="Limit must be between 1 and 200."
+        )
+    if offset < 0:
+        raise HTTPException(
+            status_code=400, 
+            detail="Offset cannot be negative."
+        )
+        
+    logger.info(f"Fetching supplier list (limit={limit}, offset={offset})")
+
+    try:
+        # 2. Query the total count of suppliers (for frontend pagination UI).
+        total_suppliers = db.query(SupplierModel).count()
+        
+        # 3. Fetch the specific page of suppliers from the database.
+        suppliers = db.query(SupplierModel).offset(offset).limit(limit).all()
+        
+        # 4. Transform the database models into the shape expected by the frontend.
+        items = []
+        for supplier in suppliers:
+            # Safely extract the vendor name from the JSONB metadata payload.
+            meta = supplier.industry_specific_metadata or {}
+            vendor_name = meta.get("name", "Unknown Vendor")
+            
+            items.append({
+                "supplier_id": supplier.supplier_id,
+                "name": vendor_name,
+                "industry_vertical": supplier.industry_vertical,
+            })
+            
+        logger.info(f"Successfully fetched {len(items)} suppliers.")
+        
+        # 5. Return the structured paginated response.
+        return SupplierListResponse(
+            items=items,
+            total=total_suppliers,
+            limit=limit,
+            offset=offset
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch suppliers from database: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="An internal database error occurred while fetching suppliers."
+        )
 
 @router.post("", response_model=DistributorScorecardResponse)
 def onboard_supplier(

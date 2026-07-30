@@ -1012,3 +1012,16 @@ class TenantSettingsResponse(BaseModel):
     upi_id: Optional[str]
     meta_whatsapp_token_configured: bool
     whatsapp_phone_id: Optional[str]
+
+class SupplierListItem(BaseModel):
+    """A single supplier returned in the list endpoint."""
+    supplier_id: str
+    name: str
+    industry_vertical: str
+
+class SupplierListResponse(BaseModel):
+    """The paginated list of suppliers."""
+    items: List[SupplierListItem]
+    total: int
+    limit: int
+    offset: int
