@@ -1,22 +1,23 @@
 """
-Tests for the health_risk wiring in procurement_router.py (Step 4B).
+Tests for the health_risk wiring in procurement_router.py.
 
 WHAT THIS TESTS:
   The feature-flag gate added to get_disease_wave_alerts(). When the
-  flag is enabled, the new run_ingestion_for_pincode path replaces the
-  old trend_score > 70.0 heuristic. When disabled, the old code runs
-  unchanged.
+  flag is enabled, the endpoint reads pre-computed HealthRiskScoreModel
+  rows from the database (populated by the background Celery job).
+  When disabled, the old trend_score > 70.0 heuristic runs unchanged.
 
 WHAT THIS DOES NOT TEST:
   - The ingestion service itself (tested in test_ingestion_service.py).
   - Google Trends fetching (tested in test_trend_fetcher.py).
   - The scoring formula (tested in test_scoring_formula.py).
   - The feature flag logic (tested in test_feature_flag.py).
+  - The Celery background task (tested via integration tests).
 
 We mock:
   - get_application_settings to control HEALTH_RISK_ENABLED.
-  - run_ingestion_for_pincode to return controlled RiskScores.
-  - The database session to return predictable rows for SKU/supplier queries.
+  - The database session to return predictable HealthRiskScoreModel
+    rows and SKU/supplier rows.
 """
 
 from datetime import datetime, timezone
@@ -27,8 +28,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.health_risk.domain.disease_category import DiseaseCategory
-from app.health_risk.domain.risk_score import RiskScore
+from app.health_risk.infrastructure.db_models import HealthRiskScoreModel
 
 
 # =========================================================================
@@ -43,6 +43,30 @@ _MOCK_SUPPLIER.supplier_id = "SUPP-BEST-001"
 
 _MOCK_COVARIATE = MagicMock()
 _MOCK_COVARIATE.trend_score = 85.0
+
+
+# =========================================================================
+# Helper: create a HealthRiskScoreModel row (like what the DB returns)
+# =========================================================================
+
+def _make_health_risk_score_row(
+    score: float,
+    disease: str = "DENGUE",
+    pincode: str = "682001",
+    confidence: str = "real_data",
+) -> MagicMock:
+    """Build a MagicMock that looks like a HealthRiskScoreModel ORM row."""
+    row = MagicMock(spec=HealthRiskScoreModel)
+    row.pincode = pincode
+    row.disease_category = disease
+    row.score = score
+    row.confidence = confidence
+    row.computed_at = datetime.now(timezone.utc)
+    return row
+
+
+# A shared list of score rows that tests can mutate.
+_HEALTH_RISK_SCORE_ROWS: list[MagicMock] = []
 
 
 def _build_query_side_effect(extra_overrides=None):
@@ -87,6 +111,12 @@ def _build_query_side_effect(extra_overrides=None):
                 q.first.return_value = _MOCK_MED  # .first() → mock med (fallback)
             elif name == "NotificationModel":
                 f.first.return_value = None   # no existing notification today
+            elif name == "HealthRiskScoreModel":
+                # The endpoint chain: .query(Model).filter(...).order_by(...).all()
+                # .order_by() is called on f (the filter mock).
+                o = MagicMock()
+                o.all.return_value = _HEALTH_RISK_SCORE_ROWS
+                f.order_by.return_value = o
 
         # Allow per-test overrides
         if extra_overrides:
@@ -132,26 +162,6 @@ def procurement_client(mock_session):
 
     with TestClient(app) as client:
         yield client
-
-
-# =========================================================================
-# Helper: create a realistic RiskScore for test data
-# =========================================================================
-
-def _make_risk_score(
-    score: float,
-    disease: DiseaseCategory = DiseaseCategory.DENGUE,
-    pincode: str = "682001",
-) -> RiskScore:
-    """Build a RiskScore with realistic defaults for testing."""
-    return RiskScore(
-        pincode=pincode,
-        disease_category=disease,
-        score=score,
-        confidence="real_data",
-        computed_at=datetime.now(timezone.utc),
-        contributing_factors={"trend_score": 85.0, "humidity_percent": 90.0, "rain_mm": 15.0},
-    )
 
 
 # =========================================================================
@@ -217,16 +227,14 @@ class TestProcurementHealthRiskFlag:
         assert data[0]["expected_volume"] == 500
 
     @patch("app.api.v1.procurement_router.get_application_settings")
-    @patch("app.api.v1.procurement_router.run_ingestion_for_pincode")
     def test_flag_enabled_uses_health_risk_scores(
         self,
-        mock_run_ingestion,
         mock_get_settings,
         procurement_client,
         mock_session,
     ):
         """
-        Flag ON + ingestion returns a high risk score → alert with
+        Flag ON + DB has a high HealthRiskScoreModel row → alert with
         health_risk warning message (disease-specific).
         """
         # Arrange: feature flag ON
@@ -234,10 +242,11 @@ class TestProcurementHealthRiskFlag:
         mock_settings.HEALTH_RISK_ENABLED = True
         mock_get_settings.return_value = mock_settings
 
-        # Return one high-risk score (DENGUE, 85.0)
-        mock_run_ingestion.return_value = [
-            _make_risk_score(score=85.0, disease=DiseaseCategory.DENGUE),
-        ]
+        # Populate the mock DB with one high-risk row (DENGUE, 85.0)
+        _HEALTH_RISK_SCORE_ROWS.clear()
+        _HEALTH_RISK_SCORE_ROWS.append(
+            _make_health_risk_score_row(score=85.0, disease="DENGUE"),
+        )
 
         # Make the Tenant query return a tenant with health_risk enabled + pincode
         mock_tenant = MagicMock()
@@ -259,33 +268,24 @@ class TestProcurementHealthRiskFlag:
         assert data[0]["probability_score"] == 0.89
         assert data[0]["expected_volume"] == 500
 
-        # run_ingestion_for_pincode was called once with the right args
-        mock_run_ingestion.assert_called_once_with(
-            pincode="682001",
-            db=mock_session,
-            settings=mock_settings,
-        )
-
     @patch("app.api.v1.procurement_router.get_application_settings")
-    @patch("app.api.v1.procurement_router.run_ingestion_for_pincode")
-    def test_ingestion_exception_returns_empty_gracefully(
+    def test_no_scores_yet_returns_empty_gracefully(
         self,
-        mock_run_ingestion,
         mock_get_settings,
         procurement_client,
         mock_session,
     ):
         """
-        Flag ON + run_ingestion_for_pincode raises → no crash,
-        empty list returned, error logged.
+        Flag ON but HealthRiskScoreModel is empty (no DB rows yet)
+        → empty list returned, no crash.
         """
         # Arrange: feature flag ON
         mock_settings = MagicMock()
         mock_settings.HEALTH_RISK_ENABLED = True
         mock_get_settings.return_value = mock_settings
 
-        # Ingestion raises an exception
-        mock_run_ingestion.side_effect = RuntimeError("Trends API timeout")
+        # No score rows in the mock DB (cold-start / first run)
+        _HEALTH_RISK_SCORE_ROWS.clear()
 
         # Make the Tenant query return a tenant
         mock_tenant = MagicMock()
@@ -299,19 +299,18 @@ class TestProcurementHealthRiskFlag:
         # Assert: no crash, empty alerts
         assert response.status_code == 200
         data = response.json()
-        assert data == [], "Ingestion failure should return empty alerts"
+        assert data == [], "No scores in DB → empty alerts"
 
     @patch("app.api.v1.procurement_router.get_application_settings")
-    @patch("app.api.v1.procurement_router.run_ingestion_for_pincode")
     def test_flag_enabled_no_high_risk_scores_returns_empty(
         self,
-        mock_run_ingestion,
         mock_get_settings,
         procurement_client,
         mock_session,
     ):
         """
-        Flag ON but all risk scores below threshold → empty alert list.
+        Flag ON but all HealthRiskScoreModel rows are below threshold
+        → empty alert list.
         """
         # Arrange: feature flag ON
         mock_settings = MagicMock()
@@ -319,11 +318,12 @@ class TestProcurementHealthRiskFlag:
         mock_get_settings.return_value = mock_settings
 
         # All scores are low (below 70.0 threshold)
-        mock_run_ingestion.return_value = [
-            _make_risk_score(score=30.0, disease=DiseaseCategory.DENGUE),
-            _make_risk_score(score=45.0, disease=DiseaseCategory.LEPTOSPIROSIS),
-            _make_risk_score(score=50.0, disease=DiseaseCategory.VIRAL_FEVER),
-        ]
+        _HEALTH_RISK_SCORE_ROWS.clear()
+        _HEALTH_RISK_SCORE_ROWS.extend([
+            _make_health_risk_score_row(score=30.0, disease="DENGUE"),
+            _make_health_risk_score_row(score=45.0, disease="LEPTOSPIROSIS"),
+            _make_health_risk_score_row(score=50.0, disease="VIRAL_FEVER"),
+        ])
 
         mock_tenant = MagicMock()
         mock_tenant.health_risk_enabled = True
@@ -339,16 +339,14 @@ class TestProcurementHealthRiskFlag:
         assert data == [], "No scores >= 70.0 → no alerts"
 
     @patch("app.api.v1.procurement_router.get_application_settings")
-    @patch("app.api.v1.procurement_router.run_ingestion_for_pincode")
     def test_flag_enabled_multiple_diseases_cross_threshold(
         self,
-        mock_run_ingestion,
         mock_get_settings,
         procurement_client,
         mock_session,
     ):
         """
-        Flag ON + multiple diseases with scores >= 70.0 → one alert each.
+        Flag ON + multiple disease rows with scores >= 70.0 → one alert each.
         """
         # Arrange
         mock_settings = MagicMock()
@@ -356,11 +354,12 @@ class TestProcurementHealthRiskFlag:
         mock_get_settings.return_value = mock_settings
 
         # Two diseases cross the threshold
-        mock_run_ingestion.return_value = [
-            _make_risk_score(score=85.0, disease=DiseaseCategory.DENGUE),
-            _make_risk_score(score=92.0, disease=DiseaseCategory.LEPTOSPIROSIS),
-            _make_risk_score(score=45.0, disease=DiseaseCategory.VIRAL_FEVER),
-        ]
+        _HEALTH_RISK_SCORE_ROWS.clear()
+        _HEALTH_RISK_SCORE_ROWS.extend([
+            _make_health_risk_score_row(score=85.0, disease="DENGUE"),
+            _make_health_risk_score_row(score=92.0, disease="LEPTOSPIROSIS"),
+            _make_health_risk_score_row(score=45.0, disease="VIRAL_FEVER"),
+        ])
 
         mock_tenant = MagicMock()
         mock_tenant.health_risk_enabled = True
