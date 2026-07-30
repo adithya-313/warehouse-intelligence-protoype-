@@ -1,5 +1,5 @@
 """
-Tests for the standalone /api/v1/health-risk/current and /history endpoints.
+Tests for the standalone /api/v1/health-risk/current, /history, and /explain endpoints.
 
 WHY A SEPARATE TEST FILE (NOT ADDING TO test_procurement_router_health_risk.py):
 The procurement_router tests mix health-risk logic with alert-generation
@@ -40,14 +40,18 @@ def _make_health_risk_score_row(
     disease: str = "DENGUE",
     pincode: str = "682001",
     confidence: str = "real_data",
+    row_id: int | None = None,
+    contributing_factors: dict | None = None,
 ) -> MagicMock:
     """Build a MagicMock that looks like a HealthRiskScoreModel ORM row."""
     row = MagicMock(spec=HealthRiskScoreModel)
+    row.id = row_id
     row.pincode = pincode
     row.disease_category = disease
     row.score = score
     row.confidence = confidence
     row.computed_at = datetime.now(timezone.utc)
+    row.contributing_factors = contributing_factors
     return row
 
 
@@ -82,6 +86,8 @@ def _build_mock_session(
         # --- HealthRiskScoreModel query: .filter(...).order_by(...).all() ---
         # Note: f.filter returns f itself so that calling .filter() multiple
         # times (as /history does for pincode + date range) still works.
+        # f.first returns the first element of score_rows (or None if empty)
+        # for the /explain endpoint which queries by id via .first().
         if model == HealthRiskScoreModel:
             q = MagicMock()
             f = MagicMock()
@@ -89,6 +95,7 @@ def _build_mock_session(
             o.all.return_value = score_rows
             f.order_by.return_value = o
             f.filter.return_value = f
+            f.first.return_value = score_rows[0] if score_rows else None
             q.filter.return_value = f
             return q
 
@@ -478,3 +485,181 @@ class TestHealthRiskHistoryEndpoint:
         assert response.status_code == 404
         data = response.json()
         assert "pincode" in data["detail"].lower()
+
+
+class TestHealthRiskExplainEndpoint:
+    """
+    Tests for GET /api/v1/health-risk/explain/{score_id}.
+    """
+
+    def test_score_belongs_to_calling_tenant_returns_full_breakdown(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        Score row exists and its pincode matches the calling tenant's
+        pincode → endpoint returns 200 with all fields including the
+        full contributing_factors dict.
+        """
+        # Arrange: a tenant with a pincode
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        # One score row with all fields populated, including
+        # contributing_factors (the actual dict stored by the scorer).
+        score_rows = [
+            _make_health_risk_score_row(
+                score=85.0,
+                disease="DENGUE",
+                pincode="682001",
+                row_id=42,
+                contributing_factors={
+                    "trend_score": 82.0,
+                    "humidity_percent": 91.0,
+                    "rain_mm": 12.0,
+                    "weather_anomaly": 90.0,
+                },
+            ),
+        ]
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=score_rows)
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/explain/42")
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == 42
+        assert data["pincode"] == "682001"
+        assert data["disease_category"] == "DENGUE"
+        assert data["score"] == 85.0
+        assert data["confidence"] == "real_data"
+        assert "computed_at" in data
+
+        # contributing_factors must contain ONLY the 4 real keys stored
+        # by TransparentFormulaScorer — no invented or extra fields.
+        assert data["contributing_factors"] == {
+            "trend_score": 82.0,
+            "humidity_percent": 91.0,
+            "rain_mm": 12.0,
+            "weather_anomaly": 90.0,
+        }
+
+    def test_score_id_does_not_exist_returns_404(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        No score row with the given id exists → endpoint returns 404
+        with message "Health risk score not found."
+        """
+        # Arrange: tenant exists but score_rows is empty (no rows at all)
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=[])
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/explain/999")
+
+        # Assert
+        assert response.status_code == 404
+        data = response.json()
+        assert data["detail"] == "Health risk score not found."
+
+    def test_score_exists_but_belongs_to_different_pincode_returns_404(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        Score row EXISTS with the given id but its pincode differs from
+        the calling tenant's pincode → endpoint returns 404 with the
+        IDENTICAL message as "id not found" — preventing an attacker
+        from distinguishing "doesn't exist" from "not yours."
+        """
+        # Arrange: tenant has pincode "682001"
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        # The score row has a DIFFERENT pincode "682002" — it belongs
+        # to a different pharmacy.
+        score_rows = [
+            _make_health_risk_score_row(
+                score=85.0,
+                disease="DENGUE",
+                pincode="682002",  # Different pincode!
+                row_id=99,
+                contributing_factors={
+                    "trend_score": 82.0,
+                    "humidity_percent": 91.0,
+                    "rain_mm": 12.0,
+                    "weather_anomaly": 90.0,
+                },
+            ),
+        ]
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=score_rows)
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/explain/99")
+
+        # Assert: 404 with the EXACT SAME message as the "id doesn't exist" test.
+        assert response.status_code == 404
+        data = response.json()
+        assert data["detail"] == "Health risk score not found."
+
+    def test_calling_tenant_has_no_pincode_returns_404(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        Tenant row exists but pincode is None → endpoint returns 404.
+        Same check and message as /current and /history.
+        """
+        # Arrange: tenant exists but has no pincode
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = None
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=[])
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/explain/42")
+
+        # Assert
+        assert response.status_code == 404
+        data = response.json()
+        assert "pincode" in data["detail"].lower()
+
+    def test_missing_x_tenant_id_header_returns_403(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        No X-Tenant-ID header sent → get_current_tenant dependency raises
+        HTTPException(403), which FastAPI converts to a 403 response.
+        Same behaviour as /current and /history.
+        """
+        # Arrange: override get_current_tenant with a function that always
+        # raises 403, simulating what happens when the header is missing.
+        def raise_403():
+            raise HTTPException(
+                status_code=403,
+                detail="X-Tenant-ID header is missing. Access Denied.",
+            )
+
+        app.dependency_overrides[get_current_tenant] = raise_403
+        app.dependency_overrides[get_database_session] = lambda: MagicMock()
+
+        # Act — no X-Tenant-ID header sent
+        response = client.get("/api/v1/health-risk/explain/42")
+
+        # Assert
+        assert response.status_code == 403

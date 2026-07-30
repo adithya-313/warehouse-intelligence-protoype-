@@ -52,3 +52,20 @@ class HealthRiskHistoryResponse(BaseModel):
     pincode: str
     days: int
     scores: List[HealthRiskScoreResponse]
+
+
+class HealthRiskExplainResponse(BaseModel):
+    """
+    The full signal breakdown behind one specific risk score —
+    shows exactly which raw inputs (trend data, weather data) fed into
+    this number, so a pharmacist can see the reasoning, not just trust
+    a bare number.
+    """
+
+    id: int
+    pincode: str
+    disease_category: str
+    score: float
+    confidence: str
+    computed_at: datetime
+    contributing_factors: dict

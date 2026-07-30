@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_current_tenant
 from app.health_risk.api.schemas import (
     HealthRiskCurrentResponse,
+    HealthRiskExplainResponse,
     HealthRiskHistoryResponse,
     HealthRiskScoreResponse,
 )
@@ -217,4 +218,117 @@ def get_health_risk_history(
             )
             for row in score_rows
         ],
+    )
+
+
+# =========================================================================
+# GET /explain/{score_id} — Signal breakdown for one specific risk score
+# =========================================================================
+
+@router.get(
+    path="/explain/{score_id}",
+    response_model=HealthRiskExplainResponse,
+    summary="Full signal breakdown behind one risk score entry",
+)
+def get_health_risk_explain(
+    score_id: int,
+    database_session: Session = Depends(get_database_session),
+    tenant_id: str = Depends(get_current_tenant),
+) -> HealthRiskExplainResponse:
+    """Return the complete signal breakdown for one specific risk score.
+
+    Unlike /current and /history (which return lists of scores), this
+    endpoint returns the FULL detail of a SINGLE score row — including
+    the contributing_factors dict that shows which raw inputs (trend
+    data, weather data) produced this number.
+
+    This lets a pharmacist click on any score in the UI and see the
+    reasoning behind it, not just trust a bare number.
+
+    Flow:
+      1. Look up the Tenant to find the pharmacy's registered pincode.
+      2. Query HealthRiskScoreModel by the given id.
+      3. Verify ownership: the score's pincode MUST match the calling
+         tenant's pincode (see SECURITY NOTE below).
+      4. Return all fields including contributing_factors.
+
+    SECURITY NOTE — CROSS-TENANT PROTECTION:
+    The health_risk_scores table has NO tenant_id column — only pincode.
+    A tenant's identity is only linked to a pincode via the Tenant table.
+    If we fetched a row by id WITHOUT checking that its pincode matches
+    the calling tenant's pincode, Tenant A could read Tenant B's health
+    data just by guessing id numbers in the URL.
+
+    The ownership check below prevents this: if the score row's pincode
+    doesn't match the calling tenant's pincode, we return the EXACT SAME
+    404 message as "row doesn't exist." This is deliberate — returning
+    a different status (like 403) or a different message would tell an
+    attacker "this id exists but belongs to someone else," which itself
+    leaks information. From the caller's perspective, "doesn't exist"
+    and "isn't yours" must look identical.
+    """
+    # ------------------------------------------------------------------
+    # Step 1: Look up the Tenant to get the pharmacy's registered pincode.
+    # Same logic as /current and /history.
+    # ------------------------------------------------------------------
+    tenant = database_session.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
+
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found.")
+
+    if not tenant.pincode:
+        raise HTTPException(
+            status_code=404,
+            detail="No pincode registered for this pharmacy yet. "
+            "Set tenant.pincode in the tenants table before querying health risk scores.",
+        )
+
+    # ------------------------------------------------------------------
+    # Step 2: Query the specific score row by id.
+    # ------------------------------------------------------------------
+    score_row = (
+        database_session.query(HealthRiskScoreModel)
+        .filter(HealthRiskScoreModel.id == score_id)
+        .first()
+    )
+
+    # ------------------------------------------------------------------
+    # Step 3: If no row with that id exists, return 404.
+    # ------------------------------------------------------------------
+    if score_row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Health risk score not found.",
+        )
+
+    # ------------------------------------------------------------------
+    # Step 4 — CRITICAL OWNERSHIP CHECK:
+    # Verify that this score row's pincode matches the calling tenant's
+    # pincode. If they don't match, the score belongs to a different
+    # pharmacy — we must NOT return it.
+    #
+    # We use the EXACT SAME 404 message as Step 3 ("not found") so that
+    # an attacker cannot distinguish "this id doesn't exist" from "this
+    # id exists but isn't yours." Both cases look identical to the
+    # caller, preventing information leakage.
+    # ------------------------------------------------------------------
+    if score_row.pincode != tenant.pincode:
+        raise HTTPException(
+            status_code=404,
+            detail="Health risk score not found.",
+        )
+
+    # ------------------------------------------------------------------
+    # Step 5: Return the full breakdown.
+    # contributing_factors is already a dict from the JSON column — we
+    # pass it through as-is, no transformation needed.
+    # ------------------------------------------------------------------
+    return HealthRiskExplainResponse(
+        id=score_row.id,
+        pincode=score_row.pincode,
+        disease_category=score_row.disease_category,
+        score=score_row.score,
+        confidence=score_row.confidence,
+        computed_at=score_row.computed_at,
+        contributing_factors=score_row.contributing_factors,
     )
