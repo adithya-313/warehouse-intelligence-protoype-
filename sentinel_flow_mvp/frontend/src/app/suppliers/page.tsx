@@ -14,50 +14,52 @@ export default function SuppliersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch the real list of vendors from our new backend endpoint when the page loads.
-  useEffect(() => {
-    const fetchVendors = async () => {
-      setIsLoading(true);
-      setError(null);
+  // Fetch the real list of vendors from our new backend endpoint.
+  // We use this on mount and after a new vendor is added to keep the list fresh.
+  const fetchVendors = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Create an AbortController so we can timeout the request if the backend hangs.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
+      // Call our new GET endpoint.
+      const response = await fetch('/api/v1/suppliers?limit=50&offset=0', {
+        signal: controller.signal
+      });
       
-      try {
-        // Create an AbortController so we can timeout the request if the backend hangs.
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+      clearTimeout(timeoutId);
 
-        // Call our new GET endpoint.
-        const response = await fetch('/api/v1/suppliers?limit=50&offset=0', {
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch vendors from the server.');
-        }
-
-        const data = await response.json();
-        
-        // Transform the backend response to match the exact shape the UI expects.
-        const transformedVendors = data.items.map((item: any) => ({
-          supplierId: item.supplier_id,
-          name: item.name,
-          label: item.industry_vertical || "Standard Vendor"
-        }));
-
-        setVendors(transformedVendors);
-      } catch (err: any) {
-        if (err.name === 'AbortError') {
-          setError('The request took too long. Please try refreshing the page.');
-        } else {
-          setError('Unable to load vendors at this time. Please try again later.');
-        }
-      } finally {
-        setIsLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to fetch vendors from the server.');
       }
-    };
 
+      const data = await response.json();
+      
+      // Transform the backend response to match the exact shape the UI expects.
+      const transformedVendors = data.items.map((item: any) => ({
+        supplierId: item.supplier_id,
+        name: item.name,
+        label: item.industry_vertical || "Standard Vendor"
+      }));
+
+      setVendors(transformedVendors);
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        setError('The request took too long. Please try refreshing the page.');
+      } else {
+        setError('Could not refresh the list, but your vendor was saved — try refreshing the page.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchVendors();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filteredVendors = vendors.filter((v: any) => {
@@ -67,16 +69,11 @@ export default function SuppliersPage() {
     return vendorName.includes(query) || vendorId.includes(query);
   });
 
-  const handleVendorCreated = (newVendor: any) => {
-    // We add the newly created vendor to our local state instantly for a snappy UI.
-    // When the user eventually refreshes the page, the new vendor will be fetched
-    // from the backend automatically, so this optimistic update is perfectly safe.
-    setVendors((prev) => [...prev, {
-      supplierId: newVendor.supplier_id,
-      name: newVendor.name,
-      label: "Newly Onboarded",
-    }]);
+  // Replaces the old optimistic append with a real re-fetch from the backend,
+  // ensuring the UI always reflects exactly what is in the database.
+  const handleVendorCreated = async (newVendor: any) => {
     setSearchQuery("");
+    await fetchVendors();
   };
 
   return (
