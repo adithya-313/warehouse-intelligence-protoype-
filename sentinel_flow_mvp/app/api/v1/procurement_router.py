@@ -121,11 +121,14 @@ def get_disease_wave_alerts(
 
                 if med:
                     # Find the highest-performing supplier (most completed POs)
+                    # Beginner Note: This was checking for 'COMPLETED', a status that nothing in the app ever 
+                    # actually sets — the real status set on delivery is 'FULFILLED'. This mismatch meant vendor 
+                    # performance scoring always found zero real orders and silently defaulted to a hardcoded supplier.
                     best_supplier = db.query(
                         PurchaseOrderModel.supplier_id,
                         func.count(PurchaseOrderModel.po_id).label('completed_count')
                     ).filter(
-                        PurchaseOrderModel.status == 'COMPLETED'
+                        PurchaseOrderModel.status == 'FULFILLED'
                     ).group_by(PurchaseOrderModel.supplier_id).order_by(
                         desc('completed_count')
                     ).first()
@@ -188,11 +191,14 @@ def get_disease_wave_alerts(
                 
             if med:
                 # 2. Find the highest-performing supplier (most completed POs)
+                # Beginner Note: This was checking for 'COMPLETED', a status that nothing in the app ever 
+                # actually sets — the real status set on delivery is 'FULFILLED'. This mismatch meant vendor 
+                # performance scoring always found zero real orders and silently defaulted to a hardcoded supplier.
                 best_supplier = db.query(
                     PurchaseOrderModel.supplier_id,
                     func.count(PurchaseOrderModel.po_id).label('completed_count')
                 ).filter(
-                    PurchaseOrderModel.status == 'COMPLETED'
+                    PurchaseOrderModel.status == 'FULFILLED'
                 ).group_by(PurchaseOrderModel.supplier_id).order_by(
                     desc('completed_count')
                 ).first()
