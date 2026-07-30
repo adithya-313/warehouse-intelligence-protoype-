@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.infrastructure.database import get_database_session
 from app.infrastructure.models import MedicationModel, PurchaseOrderModel, Tenant
 from app.domain.schemas import PurchaseOrderBulkCreate, PurchaseOrderReceiveBulk
+from app.api.dependencies import get_current_tenant
 import logging
 
 router = APIRouter()
@@ -14,10 +15,19 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/purchase-orders")
-def list_purchase_orders(db: Session = Depends(get_database_session)):
-    pos = db.query(PurchaseOrderModel).order_by(
+def list_purchase_orders(
+    tenant_id: str = Depends(get_current_tenant),
+    db: Session = Depends(get_database_session)
+):
+    # Beginner Note: Without this filter, any tenant could see every other tenant's orders — 
+    # this line is what keeps each pharmacy's data private to them.
+    pos = db.query(PurchaseOrderModel).filter(
+        PurchaseOrderModel.tenant_id == tenant_id
+    ).order_by(
         PurchaseOrderModel.order_date.desc()
     ).all()
+
+    logger.info(f"Retrieved {len(pos)} purchase order line items for tenant {tenant_id}")
 
     ledger = {}
     for po in pos:
