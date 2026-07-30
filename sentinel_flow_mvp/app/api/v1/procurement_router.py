@@ -7,7 +7,7 @@ from sqlalchemy import func, desc
 
 from app.infrastructure.database import get_database_session
 from app.infrastructure.models import (
-    PurchaseOrderModel, SupplierModel, ExogenousCovariateModel, MedicationModel, NotificationModel, Tenant
+    PurchaseOrderModel, SupplierModel, MedicationModel, NotificationModel, Tenant
 )
 from app.api.dependencies import get_current_tenant
 from app.core.config import get_application_settings
@@ -37,8 +37,6 @@ class AutoPOResponse(BaseModel):
     message: str
 
 # Threshold at which a risk score triggers a disease-wave alert.
-# Matches the old trend_score > 70.0 heuristic so behavior is consistent
-# whether health_risk is enabled or not.
 HIGH_RISK_THRESHOLD = 70.0
 
 # --- ENDPOINTS ---
@@ -48,152 +46,80 @@ def get_disease_wave_alerts(
     db: Session = Depends(get_database_session)
 ):
     """
-    Detects incoming disease waves based on exogenous covariates (weather/trends)
+    Detects incoming disease waves based on health-risk scores
     and recommends preemptive stock procurement.
+
+    Health-risk scoring runs in the background via a Celery job
+    (run_health_risk_ingestion_task, every 6 hours). This endpoint
+    is READ-ONLY — it queries the most recent HealthRiskScoreModel
+    rows from the database.
+
+    Pharmacies not yet enrolled in health-risk scoring
+    (health_risk_enabled=False or no pincode configured) simply see
+    no alerts. The old trend_score > 70.0 heuristic has been removed.
     """
     settings = get_application_settings()
     alerts = []
 
-    # ------------------------------------------------------------------
-    # Look up the Tenant model to check the per-pharmacy feature flag.
+    # Look up the Tenant to check the per-pharmacy feature flag.
     # If the tenant row doesn't exist, health_risk defaults to disabled.
-    # ------------------------------------------------------------------
     tenant = db.query(Tenant).filter(Tenant.tenant_id == tenant_id).first()
 
-    # ------------------------------------------------------------------
-    # NEW PATH: health_risk-powered scoring (behind two-gate flag).
-    # Ingestion now runs in the BACKGROUND via the Celery job
-    # run_health_risk_ingestion_task (every 6 hours). This endpoint
-    # is READ-ONLY — it queries the most recent HealthRiskScoreModel
-    # rows from the database instead of triggering a new ingestion.
-    # ------------------------------------------------------------------
-    if tenant is not None and is_health_risk_enabled(tenant, settings):
-        logger.info("health_risk path: tenant=%s, pincode=%s", tenant_id, tenant.pincode)
+    # If the tenant doesn't exist or health_risk is not enabled,
+    # return an empty list — pharmacies not yet enrolled see no alerts.
+    if tenant is None or not is_health_risk_enabled(tenant, settings):
+        return alerts
 
-        if not tenant.pincode:
-            # No pincode means we cannot run location-based scoring.
-            # Log a warning and return empty — the tenant admin needs
-            # to configure a pincode in the database before scoring works.
-            logger.warning(
-                "health_risk enabled but tenant %s has no pincode. "
-                "Set tenant.pincode in the tenants table.",
-                tenant_id,
-            )
-            return alerts
-
-        # Fetch all health risk scores for this pincode, newest first.
-        # The background Celery job writes these rows every 6 hours.
-        all_score_rows = (
-            db.query(HealthRiskScoreModel)
-            .filter(HealthRiskScoreModel.pincode == tenant.pincode)
-            .order_by(HealthRiskScoreModel.computed_at.desc())
-            .all()
-        )
-
-        # Keep only the most recent row per disease category.
-        # Since the DB query is ordered by computed_at descending, the
-        # first time we see a disease category, that is its latest score.
-        seen_diseases = set()
-        risk_scores = []
-        for score_row in all_score_rows:
-            if score_row.disease_category not in seen_diseases:
-                seen_diseases.add(score_row.disease_category)
-                risk_scores.append(score_row)
-
-        # If no rows exist yet (brand new pharmacy, the Celery job has
-        # not run its first cycle), risk_scores stays empty. We return
-        # an empty alerts list below — this is a temporary "cold start"
-        # case that resolves once the background job completes its first run.
-        if not risk_scores:
-            logger.info(
-                "No health risk scores found yet for pincode %s. "
-                "The Celery background job has likely not run yet.",
-                tenant.pincode,
-            )
-
-        # Fire an alert for every disease whose score crosses the threshold
-        for risk_score in risk_scores:
-            if risk_score.score >= HIGH_RISK_THRESHOLD:
-                # Find a relevant SKU (fallback to first available if specific one missing)
-                med = db.query(MedicationModel).filter(MedicationModel.sku_id.ilike("%para%")).first()
-                if not med:
-                    med = db.query(MedicationModel).first()
-
-                if med:
-                    # Find the highest-performing supplier (most completed POs)
-                    # Beginner Note: This was checking for 'COMPLETED', a status that nothing in the app ever 
-                    # actually sets — the real status set on delivery is 'FULFILLED'. This mismatch meant vendor 
-                    # performance scoring always found zero real orders and silently defaulted to a hardcoded supplier.
-                    best_supplier = db.query(
-                        PurchaseOrderModel.supplier_id,
-                        func.count(PurchaseOrderModel.po_id).label('completed_count')
-                    ).filter(
-                        PurchaseOrderModel.status == 'FULFILLED'
-                    ).group_by(PurchaseOrderModel.supplier_id).order_by(
-                        desc('completed_count')
-                    ).first()
-
-                    # Fallback to any supplier if no history exists
-                    supplier_id = best_supplier.supplier_id if best_supplier else "SUPP-001"
-
-                    # Check if we already notified them today to prevent spam
-                    today = datetime.now(timezone.utc).date()
-                    existing_notif = db.query(NotificationModel).filter(
-                        NotificationModel.tenant_id == tenant_id,
-                        NotificationModel.alert_type == "DISEASE_WAVE",
-                        func.date(NotificationModel.created_at) == today
-                    ).first()
-
-                    if not existing_notif:
-                        new_notif = NotificationModel(
-                            tenant_id=tenant_id,
-                            title=f"Disease Wave: {med.sku_id}",
-                            message=f"High health risk score ({risk_score.score:.1f}) for {risk_score.disease_category}. Preemptive stock recommended.",
-                            alert_type="DISEASE_WAVE"
-                        )
-                        db.add(new_notif)
-                        db.commit()
-
-                    alerts.append(DiseaseWaveAlert(
-                        sku_id=med.sku_id,
-                        sku_name=med.sku_id,
-                        # TODO(Phase 2): still hardcoded, out of scope for health_risk
-                        probability_score=0.89,
-                        # TODO(Phase 2): still hardcoded, out of scope for health_risk
-                        expected_volume=500,
-                        recommended_supplier_id=supplier_id,
-                        warning_message=f"High health risk score ({risk_score.score:.1f}) for {risk_score.disease_category}. Preemptive stock recommended.",
-                    ))
-
-    # ------------------------------------------------------------------
-    # LEGACY PATH: trend_score > 70.0 heuristic (unchanged, byte-for-byte).
-    # Runs when the feature flag is disabled OR the tenant is not found.
-    # ------------------------------------------------------------------
-    else:
-        logger.info(
-            "legacy path: tenant=%s (reason=%s)",
+    if not tenant.pincode:
+        logger.warning(
+            "health_risk enabled but tenant %s has no pincode. "
+            "Set tenant.pincode in the tenants table.",
             tenant_id,
-            "tenant not found" if tenant is None else "feature flag disabled",
+        )
+        return alerts
+
+    logger.info("health_risk path: tenant=%s, pincode=%s", tenant_id, tenant.pincode)
+
+    # Fetch all health risk scores for this pincode, newest first.
+    # The background Celery job writes these rows every 6 hours.
+    all_score_rows = (
+        db.query(HealthRiskScoreModel)
+        .filter(HealthRiskScoreModel.pincode == tenant.pincode)
+        .order_by(HealthRiskScoreModel.computed_at.desc())
+        .all()
+    )
+
+    # Keep only the most recent row per disease category.
+    # Since the DB query is ordered by computed_at descending, the
+    # first time we see a disease category, that is its latest score.
+    seen_diseases = set()
+    risk_scores = []
+    for score_row in all_score_rows:
+        if score_row.disease_category not in seen_diseases:
+            seen_diseases.add(score_row.disease_category)
+            risk_scores.append(score_row)
+
+    # If no rows exist yet (brand new pharmacy, the Celery job has
+    # not run its first cycle), risk_scores stays empty. We return
+    # an empty alerts list below — this is a temporary "cold start"
+    # case that resolves once the background job completes its first run.
+    if not risk_scores:
+        logger.info(
+            "No health risk scores found yet for pincode %s. "
+            "The Celery background job has likely not run yet.",
+            tenant.pincode,
         )
 
-        # 1. Fetch latest covariates to simulate Chronos-2 wave detection
-        latest_covariate = db.query(ExogenousCovariateModel).order_by(
-            desc(ExogenousCovariateModel.timestamp)
-        ).first()
-
-        alerts = []
-        # Heuristic: If search trends for fever are high, flag Paracetamol
-        if latest_covariate and (latest_covariate.trend_score or 0) > 70.0:
+    # Fire an alert for every disease whose score crosses the threshold
+    for risk_score in risk_scores:
+        if risk_score.score >= HIGH_RISK_THRESHOLD:
             # Find a relevant SKU (fallback to first available if specific one missing)
             med = db.query(MedicationModel).filter(MedicationModel.sku_id.ilike("%para%")).first()
             if not med:
                 med = db.query(MedicationModel).first()
-                
+
             if med:
-                # 2. Find the highest-performing supplier (most completed POs)
-                # Beginner Note: This was checking for 'COMPLETED', a status that nothing in the app ever 
-                # actually sets — the real status set on delivery is 'FULFILLED'. This mismatch meant vendor 
-                # performance scoring always found zero real orders and silently defaulted to a hardcoded supplier.
+                # Find the highest-performing supplier (most completed POs)
                 best_supplier = db.query(
                     PurchaseOrderModel.supplier_id,
                     func.count(PurchaseOrderModel.po_id).label('completed_count')
@@ -218,7 +144,7 @@ def get_disease_wave_alerts(
                     new_notif = NotificationModel(
                         tenant_id=tenant_id,
                         title=f"Disease Wave: {med.sku_id}",
-                        message=f"High localized search trends detected. Preemptive stock recommended.",
+                        message=f"High health risk score ({risk_score.score:.1f}) for {risk_score.disease_category}. Preemptive stock recommended.",
                         alert_type="DISEASE_WAVE"
                     )
                     db.add(new_notif)
@@ -232,9 +158,9 @@ def get_disease_wave_alerts(
                     # TODO(Phase 2): still hardcoded, out of scope for health_risk
                     expected_volume=500,
                     recommended_supplier_id=supplier_id,
-                    warning_message=f"High localized search trends detected for viral fever. Preemptive stock recommended."
+                    warning_message=f"High health risk score ({risk_score.score:.1f}) for {risk_score.disease_category}. Preemptive stock recommended.",
                 ))
-    
+
     return alerts
 
 @router.post("/auto-po", response_model=AutoPOResponse)

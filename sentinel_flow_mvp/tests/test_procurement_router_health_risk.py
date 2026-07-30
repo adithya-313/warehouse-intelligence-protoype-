@@ -5,7 +5,8 @@ WHAT THIS TESTS:
   The feature-flag gate added to get_disease_wave_alerts(). When the
   flag is enabled, the endpoint reads pre-computed HealthRiskScoreModel
   rows from the database (populated by the background Celery job).
-  When disabled, the old trend_score > 70.0 heuristic runs unchanged.
+  When disabled, the endpoint returns an empty list — the old
+  trend_score > 70.0 heuristic has been removed.
 
 WHAT THIS DOES NOT TEST:
   - The ingestion service itself (tested in test_ingestion_service.py).
@@ -41,10 +42,6 @@ _MOCK_MED.sku_id = "PARA-001"
 _MOCK_SUPPLIER = MagicMock()
 _MOCK_SUPPLIER.supplier_id = "SUPP-BEST-001"
 
-_MOCK_COVARIATE = MagicMock()
-_MOCK_COVARIATE.trend_score = 85.0
-
-
 # =========================================================================
 # Helper: create a HealthRiskScoreModel row (like what the DB returns)
 # =========================================================================
@@ -75,7 +72,7 @@ def _build_query_side_effect(extra_overrides=None):
       - Single-model:   db.query(Model)          → .filter().first(), .order_by().first()
       - Multi-column:   db.query(Model.col, ...) → .filter().group_by().order_by().first()
 
-    The default config makes the legacy path fire (covariate.trend_score=85 → alert).
+    The default config returns empty results for all non-overridden models.
     extra_overrides: optional callable(model) that can override the mock for specific models.
     """
     def side_effect(*args):
@@ -100,7 +97,7 @@ def _build_query_side_effect(extra_overrides=None):
         q.first.return_value = None          # default .first() (no filter)
 
         o = MagicMock()
-        o.first.return_value = _MOCK_COVARIATE  # .order_by(...).first()
+        o.first.return_value = None  # .order_by(...).first() → no result by default
         q.order_by.return_value = o
 
         # Model-specific overrides
@@ -198,12 +195,12 @@ class TestProcurementHealthRiskFlag:
     """
 
     @patch("app.api.v1.procurement_router.get_application_settings")
-    def test_flag_disabled_runs_legacy_path(
+    def test_flag_disabled_returns_empty_list(
         self, mock_get_settings, procurement_client
     ):
         """
-        HEALTH_RISK_ENABLED=False → the old trend_score > 70.0 path fires.
-        We verify the legacy warning message is returned.
+        HEALTH_RISK_ENABLED=False → return empty alerts immediately.
+        The old trend_score > 70.0 heuristic has been removed.
         """
         # Arrange: feature flag OFF (default)
         mock_settings = MagicMock()
@@ -216,15 +213,7 @@ class TestProcurementHealthRiskFlag:
         # Assert
         assert response.status_code == 200
         data = response.json()
-        assert len(data) >= 1, "Legacy path should fire with mock covariate"
-        # Legacy warning message (unchanged)
-        assert data[0]["warning_message"] == (
-            "High localized search trends detected for viral fever. "
-            "Preemptive stock recommended."
-        )
-        # Hardcoded fields are preserved
-        assert data[0]["probability_score"] == 0.89
-        assert data[0]["expected_volume"] == 500
+        assert data == [], "Flag disabled → empty alerts, no legacy fallback"
 
     @patch("app.api.v1.procurement_router.get_application_settings")
     def test_flag_enabled_uses_health_risk_scores(
