@@ -92,4 +92,77 @@ test.describe('Supplier Page', () => {
     // Note: React StrictMode might cause an extra mount, resulting in 3.
     expect(fetchCount).toBeGreaterThanOrEqual(2);
   });
+
+  test('modal and panel should be positioned correctly within viewport', async ({ page }) => {
+    // Generate 10 vendors
+    const vendors = Array.from({ length: 10 }).map((_, i) => ({
+      supplier_id: `TEST-POS-${i}`,
+      name: `Vendor ${i}`,
+      industry_vertical: "PHARMACEUTICALS"
+    }));
+
+    await page.route('**/api/v1/suppliers?*', async route => {
+      await route.fulfill({
+        json: {
+          total: 10,
+          limit: 50,
+          offset: 0,
+          items: vendors
+        }
+      });
+    });
+
+    await page.route('**/api/v1/suppliers/*/scorecard', async route => {
+      const url = route.request().url();
+      const match = url.match(/\/api\/v1\/suppliers\/([^/]+)\/scorecard/);
+      const id = match ? match[1] : "dummy";
+      // extract the number from TEST-POS-X
+      const num = id.split('-').pop();
+      await route.fulfill({
+        json: {
+          supplier_id: id, name: `Vendor ${num}`, financial_loss_rupees: 0,
+          delivery_success_rate: 100, trust_score: 100, risk_level: "TRUSTED", recent_failures: 0
+        }
+      });
+    });
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('http://localhost:3000/suppliers');
+    await expect(page.locator('text=Vendor 9').first()).toBeVisible({ timeout: 10000 });
+
+    // 1. Test Add Vendor Modal (triggered from top)
+    await page.click('button:has-text("Add Vendor")');
+    const modalHeader = page.locator('text=Onboard Supplier');
+    await expect(modalHeader).toBeVisible();
+    
+    // Check position of modal - should be within viewport
+    const modalBox = await modalHeader.boundingBox();
+    expect(modalBox).not.toBeNull();
+    // Modal is centered, so Y should be roughly in the middle of 800px viewport, well within 0-800 bounds
+    expect(modalBox!.y).toBeGreaterThan(0);
+    expect(modalBox!.y).toBeLessThan(800);
+    
+    // Close modal
+    await page.locator('.fixed.inset-0').locator('button').first().click();
+    await expect(modalHeader).not.toBeVisible();
+
+    // 2. Test Order Stock Panel on 5th vendor
+    // Scroll down to the 5th vendor to ensure the page has scrolled
+    const vendor5 = page.locator('text=Vendor 5');
+    await vendor5.scrollIntoViewIfNeeded();
+    
+    // Click its Order Stock button. We can find the button near Vendor 5.
+    const orderBtn = page.locator('div').filter({ hasText: 'Vendor 5' }).locator('button:has-text("Order Stock")').first();
+    await orderBtn.click();
+    
+    const panelHeader = page.locator('text=Manifest Builder');
+    await expect(panelHeader).toBeVisible();
+
+    // Check position of panel
+    const panelBox = await panelHeader.boundingBox();
+    expect(panelBox).not.toBeNull();
+    // It is fixed top-0, so it should be near y=0 of the viewport (not scrolled out of view)
+    expect(panelBox!.y).toBeGreaterThanOrEqual(0);
+    expect(panelBox!.y).toBeLessThan(100);
+  });
 });
