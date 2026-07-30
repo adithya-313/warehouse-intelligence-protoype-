@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { X, ShoppingCart, Calendar, Search, Trash2, ClipboardList } from 'lucide-react';
@@ -21,6 +22,11 @@ export const OrderStockPanel: React.FC<any> = ({ isOpen, onClose, supplierId, su
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (searchQuery.length < 2) {
@@ -84,7 +90,7 @@ export const OrderStockPanel: React.FC<any> = ({ isOpen, onClose, supplierId, su
     }
   };
 
-  return (
+  const panelContent = (
     <AnimatePresence>
       {isOpen && (
         <>
@@ -175,4 +181,10 @@ export const OrderStockPanel: React.FC<any> = ({ isOpen, onClose, supplierId, su
       )}
     </AnimatePresence>
   );
+
+  // A React Portal renders this component directly into document.body instead of its inline DOM location.
+  // We need this to escape the `will-change` CSS property on our root template.tsx, which traps fixed-position elements.
+  // The mounted check is required because document.body doesn't exist during Next.js SSR.
+  if (!mounted) return null;
+  return ReactDOM.createPortal(panelContent, document.body);
 };
