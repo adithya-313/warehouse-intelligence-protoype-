@@ -60,10 +60,13 @@ class TestAutoPOTenantAssignment:
                     obj = call[0][0]
                     if isinstance(obj, PurchaseOrderModel):
                         # Filter by what GET /purchase-orders expects
-                        added_pos.append(obj)
+                        added_pos.append((obj, None))
                 return added_pos
             
             mock_filter.order_by.return_value.all.side_effect = mock_all
+            mock_outerjoin = mock.MagicMock()
+            mock_outerjoin.filter.return_value = mock_filter
+            mock_query.outerjoin.return_value = mock_outerjoin
             mock_query.filter.return_value = mock_filter
             return mock_query
             

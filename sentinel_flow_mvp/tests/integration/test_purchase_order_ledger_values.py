@@ -90,8 +90,13 @@ class TestLedgerValueCalculation:
             mock_query = mock.MagicMock()
             mock_filter = mock.MagicMock()
             mock_order_by = mock.MagicMock()
-            mock_order_by.all.return_value = [po_full, po_partial, po_pending]
+            mock_order_by.all.return_value = [(po_full, None), (po_partial, None), (po_pending, None)]
             mock_filter.order_by.return_value = mock_order_by
+            
+            mock_outerjoin = mock.MagicMock()
+            mock_outerjoin.filter.return_value = mock_filter
+            mock_query.outerjoin.return_value = mock_outerjoin
+            
             mock_query.filter.return_value = mock_filter
             return mock_query
             

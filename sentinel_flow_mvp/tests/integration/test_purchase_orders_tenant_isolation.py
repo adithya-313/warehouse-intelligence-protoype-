@@ -111,9 +111,10 @@ class TestPurchaseOrderTenantIsolation:
         """
         # We need to configure the mock to return different things so the route returns data
         mock_query = mock_db_session.query.return_value
-        mock_filter = mock_query.filter.return_value
+        mock_outerjoin = mock_query.outerjoin.return_value
+        mock_filter = mock_outerjoin.filter.return_value
         mock_order_by = mock_filter.order_by.return_value
-        mock_order_by.all.return_value = [setup_tenants_and_orders["po_a"]]
+        mock_order_by.all.return_value = [(setup_tenants_and_orders["po_a"], None)]
         
         # Test as Tenant A
         response_a = isolation_client.get(
@@ -129,12 +130,12 @@ class TestPurchaseOrderTenantIsolation:
         
         # Verify the filter was actually called with the correct Tenant ID
         # The filter is called with PurchaseOrderModel.tenant_id == tenant_id
-        # We can inspect mock_query.filter.call_args
-        filter_call = mock_query.filter.call_args
+        # We can inspect mock_outerjoin.filter.call_args
+        filter_call = mock_outerjoin.filter.call_args
         assert filter_call is not None, "A filter MUST be applied"
         
         # Let's check for Tenant B
-        mock_order_by.all.return_value = [setup_tenants_and_orders["po_b"]]
+        mock_order_by.all.return_value = [(setup_tenants_and_orders["po_b"], None)]
         response_b = isolation_client.get(
             "/api/v1/purchase-orders",
             headers={"X-Tenant-ID": "TENANT-B"}

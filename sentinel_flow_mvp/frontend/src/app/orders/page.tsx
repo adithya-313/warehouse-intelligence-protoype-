@@ -153,7 +153,7 @@ export default function OrderLedgerPage() {
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-sm font-semibold text-slate-600">
                     <th className="p-4 w-[14%]">PO ID</th>
-                    <th className="p-4 w-[14%]">Vendor ID</th>
+                    <th className="p-4 w-[14%]">Vendor</th>
                     <th className="p-4 w-[16%]">Order Date</th>
                     <th className="p-4 w-[16%]">Expected Delivery</th>
                     <th className="p-4 w-[12%]">Line Items</th>
@@ -179,7 +179,7 @@ export default function OrderLedgerPage() {
                       className="hover:bg-slate-50 transition-colors"
                     >
                       <td className="p-4 font-mono text-sm font-medium text-indigo-600">{order.po_id}</td>
-                      <td className="p-4 font-medium text-slate-700">{order.supplier_id}</td>
+                      <td className="p-4 font-medium text-slate-700">{order.supplier_name}</td>
                       <td className="p-4 text-slate-600">{new Date(order.order_date).toLocaleDateString()}</td>
                       <td className="p-4 text-slate-600">{new Date(order.expected_delivery_date).toLocaleDateString()}</td>
                       <td className="p-4 text-slate-600 font-medium">{order.item_count} items</td>

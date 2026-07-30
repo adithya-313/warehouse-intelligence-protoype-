@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.infrastructure.database import get_database_session
-from app.infrastructure.models import MedicationModel, PurchaseOrderModel, Tenant
+from app.infrastructure.models import MedicationModel, PurchaseOrderModel, Tenant, SupplierModel
 from app.domain.schemas import PurchaseOrderBulkCreate, PurchaseOrderReceiveBulk
 from app.api.dependencies import get_current_tenant
 import logging
@@ -21,20 +21,28 @@ def list_purchase_orders(
 ):
     # Beginner Note: Without this filter, any tenant could see every other tenant's orders — 
     # this line is what keeps each pharmacy's data private to them.
-    pos = db.query(PurchaseOrderModel).filter(
+    # We use an outerjoin so that if the supplier is missing for some reason, the PO still shows up
+    results = db.query(PurchaseOrderModel, SupplierModel).outerjoin(
+        SupplierModel, PurchaseOrderModel.supplier_id == SupplierModel.supplier_id
+    ).filter(
         PurchaseOrderModel.tenant_id == tenant_id
     ).order_by(
         PurchaseOrderModel.order_date.desc()
     ).all()
 
-    logger.info(f"Retrieved {len(pos)} purchase order line items for tenant {tenant_id}")
+    logger.info(f"Retrieved {len(results)} purchase order line items for tenant {tenant_id}")
 
     ledger = {}
-    for po in pos:
+    for po, supplier in results:
         if po.po_id not in ledger:
+            supplier_name = "Unknown Supplier"
+            if supplier and supplier.industry_specific_metadata:
+                supplier_name = supplier.industry_specific_metadata.get("name", "Unknown Supplier")
+                
             ledger[po.po_id] = {
                 "po_id": po.po_id,
                 "supplier_id": po.supplier_id,
+                "supplier_name": supplier_name,
                 "order_date": po.order_date.isoformat() if po.order_date else None,
                 "expected_delivery_date": po.expected_delivery_date.isoformat() if po.expected_delivery_date else None,
                 "status": po.status,
