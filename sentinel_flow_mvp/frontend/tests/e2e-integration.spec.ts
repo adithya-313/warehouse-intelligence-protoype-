@@ -150,122 +150,125 @@ test.describe('Clinical Copilot Safety & RAG Pipeline', () => {
   test.describe('Automated Purchase Order Pipeline', () => {
 
     // ========================================================================
-    // TEST 3: AUTOMATED PURCHASE ORDER PIPELINE (Deterministic Mocking)
+    // TEST 3: HEALTH RISK BANNER WITH DETERMINISTIC MOCKING
     // ========================================================================
     // Beginner Note:
     //   The Preemptive Warning Banner at the top of the POS dashboard shows
-    //   disease wave alerts. These alerts are fetched from the backend API
-    //   at /api/v1/procurement/disease-wave-alerts.
+    //   the latest health risk scores for this pharmacy, fetched from
+    //   /api/v1/health-risk/current.
     //
-    //   Problem: Disease waves depend on real-time weather and search trend
-    //   data. The backend may return ZERO alerts during testing, which means
-    //   the banner would not appear and we could not test the "1-Click Approve PO"
-    //   button.
+    //   Problem: Real risk scores come from the background Celery scoring job,
+    //   which needs live weather/trend data. During testing the /current
+    //   endpoint may return an empty score list, which means the banner
+    //   would not appear.
     //
     //   Solution: We use page.route() to INTERCEPT the network request and
-    //   return a FAKE alert response. This makes the test deterministic —
-    //   it always passes regardless of external conditions.
+    //   return a FAKE /current payload (one real_data disease and one
+    //   degraded disease). This makes the test deterministic — it always
+    //   passes regardless of external conditions.
     //
-    //   We also mock the POST /api/v1/procurement/auto-po endpoint so that
-    //   clicking "1-Click Approve PO" succeeds and we can verify the UI
-    //   transitions to the success state.
+    //   The "1-Click Approve PO" action was removed from this banner (its
+    //   probability/volume numbers were hardcoded placeholders) — the new
+    //   banner shows the real score + confidence and an explain drill-down.
     // ========================================================================
 
-    test('Test Case 3: 1-Click Approve PO with deterministic mocking', async ({ page }) => {
+    test('Test Case 3: Health risk banner renders real scores with deterministic mocking', async ({ page }) => {
       // =====================================================================
-      // STEP 1: Mock the Disease Wave Alert API
+      // STEP 1: Mock the Health Risk Current API
       // =====================================================================
-      // We intercept EVERY request to the disease-wave-alerts endpoint and
-      // return a pre-baked JSON response.
-      //
-      // The mock alert says that "Paracetamol 650mg" (SKU: DOLO-650) has an
-      // 85% probability of being needed soon, with an expected volume of
-      // 500 units. We recommend supplier "SUPP-001" (MediCorp).
-      //
-      // We include 'alert_type: "DISEASE_WAVE"' because the
-      // PreemptiveWarningBanner component filters alerts by this field.
+      // We intercept every request to /api/v1/health-risk/current and return
+      // two pre-baked disease scores: DENGUE (real data, high score) and
+      // LEPTOSPIROSIS (degraded — the evidence base has gone quiet).
       // =====================================================================
-      await page.route('**/api/v1/procurement/disease-wave-alerts', async (route: Route) => {
+      await page.route('**/api/v1/health-risk/current', async (route: Route) => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify([
-            {
-              sku_id: 'DOLO-650',
-              sku_name: 'Paracetamol 650mg',
-              probability_score: 0.85,
-              expected_volume: 500,
-              recommended_supplier_id: 'SUPP-001',
-              warning_message: 'Dengue season projected — DOLO-650 demand may spike.',
-              alert_type: 'DISEASE_WAVE',
-              title: 'Disease Wave Detected',
-            },
-          ]),
+          body: JSON.stringify({
+            pincode: '110001',
+            scores: [
+              {
+                id: 1,
+                disease_category: 'DENGUE',
+                score: 82.4,
+                confidence: 'HIGH',
+                computed_at: '2026-08-03T06:00:00Z',
+                data_status: 'real_data',
+              },
+              {
+                id: 2,
+                disease_category: 'LEPTOSPIROSIS',
+                score: 45.1,
+                confidence: 'MODERATE',
+                computed_at: '2026-08-03T06:00:00Z',
+                data_status: 'degraded',
+              },
+            ],
+          }),
         });
       });
 
       // =====================================================================
-      // STEP 2: Mock the Auto-PO Creation API
+      // STEP 2: Mock the Explain API for the drill-down
       // =====================================================================
-      // When the pharmacist clicks "1-Click Approve PO", the frontend sends
-      // a POST request to /api/v1/procurement/auto-po with the SKU, supplier,
-      // and quantity. We simulate a successful response with a fake PO ID.
-      // =====================================================================
-      await page.route('**/api/v1/procurement/auto-po', async (route: Route) => {
-        // Only intercept POST requests (the auto-po creation call)
-        if (route.request().method() === 'POST') {
-          await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({
-              po_id: 'PO-MOCK-001',
-              status: 'PENDING',
-              message: 'Purchase Order routed successfully.',
-            }),
-          });
-        } else {
-          // Let other methods (GET, etc.) pass through normally
-          await route.continue();
-        }
+      await page.route('**/api/v1/health-risk/explain/1', async (route: Route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: 1,
+            pincode: '110001',
+            disease_category: 'DENGUE',
+            score: 82.4,
+            confidence: 'HIGH',
+            computed_at: '2026-08-03T06:00:00Z',
+            contributing_factors: {
+              trend_score: 78,
+              humidity_percent: 91,
+              rain_mm: 12.5,
+              weather_anomaly: 62,
+            },
+          }),
+        });
       });
 
       // =====================================================================
       // STEP 3: Navigate to the POS Dashboard
       // =====================================================================
       // The PreemptiveWarningBanner is rendered inside the POS dashboard
-      // page. It fetches alerts on mount via useEffect().
-      await page.goto(`${BASE_URL}/pos`, { waitUntil: 'networkidle' });
+      // page. It fetches /current on mount via useEffect().
+      await page.goto(`${BASE_URL}/pos`, { waitUntil: 'load' });
 
       // =====================================================================
-      // STEP 4: Wait for the Mock Alert Banner to Render
+      // STEP 4: Wait for the Mock Risk Banner to Render
       // =====================================================================
-      // We wait for the disease wave alert text to appear on screen.
-      // The banner shows the warning message we provided in the mock.
-      await page.waitForSelector('text=Dengue season projected', { timeout: 5000 });
+      // Both diseases, their scores and confidence levels appear in the
+      // banner, and the degraded disease shows its honest note.
+      await page.waitForSelector('text=DENGUE', { timeout: 5000 });
+      await expect(page.getByText('82.4')).toBeVisible();
+      await expect(page.getByText('Confidence HIGH')).toBeVisible();
+      await expect(page.getByText('based on limited recent data')).toBeVisible();
 
       // =====================================================================
-      // STEP 5: Click the "1-Click Approve PO" Button
+      // STEP 5: Expand the "See details" drill-down
       // =====================================================================
-      // This triggers a POST request to create the purchase order.
-      // The button text changes to "Routing PO..." while loading, then
-      // shows the success message with the PO ID.
-      const autoPoButton = page.locator('button:has-text("1-Click Approve PO")');
-      await autoPoButton.click();
+      // Clicking a disease item fetches /explain/1 and shows the raw
+      // contributing factors behind the score.
+      const seeDetailsButton = page.locator('button:has-text("See details")').first();
+      await seeDetailsButton.click();
 
       // =====================================================================
-      // STEP 6: Wait for the UI to Show Success State
+      // STEP 6: Wait for the Explain Data to Render
       // =====================================================================
-      // After the mocked POST returns successfully, the button text updates
-      // to show the PO ID. We wait for this change.
-      await page.waitForSelector('text=PO-MOCK-001', { timeout: 10000 });
+      await page.waitForSelector('text=Raw inputs behind this score', { timeout: 5000 });
 
       // =====================================================================
       // STEP 7: Assert Success State
       // =====================================================================
-      // The success message confirms that the purchase order was routed.
-      await expect(page.locator('text=PO-MOCK-001')).toBeVisible();
+      await expect(page.getByText('Trend signal')).toBeVisible();
+      await expect(page.getByText('78 / 100')).toBeVisible();
 
-      console.log('✓ TEST 3 PASSED: Automated Purchase Order with deterministic mocking succeeded.');
+      console.log('✓ TEST 3 PASSED: Health risk banner with deterministic mocking succeeded.');
     });
 
   });
