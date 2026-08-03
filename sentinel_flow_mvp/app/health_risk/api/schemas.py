@@ -30,6 +30,39 @@ class HealthRiskScoreResponse(BaseModel):
     computed_at: datetime
 
 
+class HealthRiskCurrentScoreResponse(BaseModel):
+    """
+    One disease's current risk score plus a data_status signal for
+    /current ONLY.
+
+    We deliberately do NOT reuse HealthRiskScoreResponse here: the
+    /current endpoint is the only one that answers "is my snapshot
+    reliable right now?", so it is the only endpoint carrying
+    data_status. HealthRiskScoreResponse stays untouched for /history
+    and /explain, which answer different questions and should not
+    suddenly grow a field consumers did not ask for.
+
+    data_status meaning:
+      - "real_data" — the majority of the last 3 ingestion runs for
+        this disease used genuinely useful inputs (trend/weather),
+        so the current score is trustworthy.
+      - "degraded"   — the majority of the last 3 runs were TOTAL
+        fallbacks (no trend, no humidity, no rain at all). The score
+        is still returned (never hide data), but consumers know the
+        evidence base has gone quiet.
+
+    A "weather-only" fallback (trend missing but humidity/rain present)
+    counts as real data, NOT degraded — weather is still a genuine
+    measurement even when search-trend data is unavailable.
+    """
+
+    disease_category: str
+    score: float
+    confidence: str
+    computed_at: datetime
+    data_status: str
+
+
 class HealthRiskCurrentResponse(BaseModel):
     """
     The full response for a pharmacy's current risk snapshot,
@@ -40,7 +73,7 @@ class HealthRiskCurrentResponse(BaseModel):
     """
 
     pincode: str
-    scores: List[HealthRiskScoreResponse]
+    scores: List[HealthRiskCurrentScoreResponse]
 
 
 class HealthRiskHistoryResponse(BaseModel):

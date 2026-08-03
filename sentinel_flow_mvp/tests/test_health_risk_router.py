@@ -276,6 +276,337 @@ class TestHealthRiskCurrentEndpoint:
         assert response.status_code == 403
 
 
+class TestHealthRiskCurrentDataStatus:
+    """
+    Tests for the data_status field added to GET /api/v1/health-risk/current.
+
+    data_status is per-disease and answers "has this disease's evidence
+    base gone quiet?" It is "degraded" only when the majority (> half)
+    of the last 3 ingestion runs for that disease were TOTAL fallbacks
+    (no trend, no humidity, no rain at all).
+
+    IMPORTANT TEST ORDERING NOTE:
+    The mock session returns score_rows exactly as given, while the
+    router trusts the database's computed_at DESC ordering. Every test
+    below therefore lists rows NEWEST FIRST so the router's
+    "first 3 per disease" window picks the intended runs.
+    """
+
+    def test_majority_total_fallback_returns_degraded(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        DENGUE's last 3 runs: 2 are total fallbacks (no data at all),
+        1 is real_data → majority (>half) fallback → data_status
+        "degraded".
+        """
+        # Arrange
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        # Newest first (as the router expects from the DB).
+        score_rows = [
+            _make_health_risk_score_row(
+                score=50.0,
+                disease="DENGUE",
+                confidence="fallback_neutral",
+                contributing_factors={
+                    "trend_score": None,
+                    "humidity_percent": None,
+                    "rain_mm": None,
+                    "weather_anomaly": 50.0,
+                },
+            ),
+            _make_health_risk_score_row(
+                score=45.0,
+                disease="DENGUE",
+                confidence="fallback_neutral",
+                contributing_factors={
+                    "trend_score": None,
+                    "humidity_percent": None,
+                    "rain_mm": None,
+                    "weather_anomaly": 50.0,
+                },
+            ),
+            _make_health_risk_score_row(
+                score=88.0,
+                disease="DENGUE",
+                confidence="real_data",
+                contributing_factors={
+                    "trend_score": 82.0,
+                    "humidity_percent": 91.0,
+                    "rain_mm": 12.0,
+                    "weather_anomaly": 90.0,
+                },
+            ),
+        ]
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=score_rows)
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/current")
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["scores"]) == 1
+        assert data["scores"][0]["disease_category"] == "DENGUE"
+        assert data["scores"][0]["data_status"] == "degraded"
+
+    def test_weather_only_fallback_does_not_count_as_degraded(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        DENGUE's last 3 runs: ALL have confidence "fallback_neutral"
+        but 2 of them still have weather data (Case B — trend missing,
+        humidity present). Only a TOTAL fallback (no trend AND no
+        humidity AND no rain) degrades a snapshot, so the majority of
+        these runs is NOT a total fallback → data_status "real_data".
+        """
+        # Arrange
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        # Newest first. Row 1 and 3 are weather-only fallbacks, row 2 is
+        # real_data — zero total fallbacks in the window.
+        score_rows = [
+            _make_health_risk_score_row(
+                score=75.0,
+                disease="DENGUE",
+                confidence="fallback_neutral",
+                contributing_factors={
+                    "trend_score": None,
+                    "humidity_percent": 88.0,
+                    "rain_mm": 30.0,
+                    "weather_anomaly": 75.0,
+                },
+            ),
+            _make_health_risk_score_row(
+                score=80.0,
+                disease="DENGUE",
+                confidence="real_data",
+                contributing_factors={
+                    "trend_score": 79.0,
+                    "humidity_percent": 85.0,
+                    "rain_mm": 20.0,
+                    "weather_anomaly": 81.0,
+                },
+            ),
+            _make_health_risk_score_row(
+                score=60.0,
+                disease="DENGUE",
+                confidence="fallback_neutral",
+                contributing_factors={
+                    "trend_score": None,
+                    "humidity_percent": 90.0,
+                    "rain_mm": 10.0,
+                    "weather_anomaly": 60.0,
+                },
+            ),
+        ]
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=score_rows)
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/current")
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["scores"]) == 1
+        assert data["scores"][0]["data_status"] == "real_data"
+
+    def test_majority_real_data_returns_real_data(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        DENGUE's last 3 runs: 2 real_data, 1 total fallback → majority
+        is real → data_status "real_data".
+        """
+        # Arrange
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        # Newest first.
+        score_rows = [
+            _make_health_risk_score_row(score=85.0, disease="DENGUE"),
+            _make_health_risk_score_row(
+                score=50.0,
+                disease="DENGUE",
+                confidence="fallback_neutral",
+                contributing_factors={
+                    "trend_score": None,
+                    "humidity_percent": None,
+                    "rain_mm": None,
+                    "weather_anomaly": 50.0,
+                },
+            ),
+            _make_health_risk_score_row(score=82.0, disease="DENGUE"),
+        ]
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=score_rows)
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/current")
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["scores"]) == 1
+        assert data["scores"][0]["data_status"] == "real_data"
+
+    def test_single_total_fallback_run_is_degraded(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        Only ONE run exists so far and it is a total fallback → 100% of
+        the available window is fallback → data_status "degraded".
+        """
+        # Arrange
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        score_rows = [
+            _make_health_risk_score_row(
+                score=50.0,
+                disease="DENGUE",
+                confidence="fallback_neutral",
+                contributing_factors={
+                    "trend_score": None,
+                    "humidity_percent": None,
+                    "rain_mm": None,
+                    "weather_anomaly": 50.0,
+                },
+            ),
+        ]
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=score_rows)
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/current")
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["scores"]) == 1
+        assert data["scores"][0]["data_status"] == "degraded"
+
+    def test_mixed_diseases_get_independent_status(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        Two diseases in one snapshot: DENGUE's window is majority total
+        fallback (degraded) while LEPTOSPIROSIS's is majority real
+        (real_data). The status is computed PER DISEASE, not for the
+        whole pincode.
+        """
+        # Arrange
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        # Newest first per disease. Rows alternate so interleaving also
+        # proves the per-disease window collection works.
+        score_rows = [
+            # DENGUE run 3 (newest) — total fallback
+            _make_health_risk_score_row(
+                score=50.0,
+                disease="DENGUE",
+                confidence="fallback_neutral",
+                contributing_factors={
+                    "trend_score": None,
+                    "humidity_percent": None,
+                    "rain_mm": None,
+                    "weather_anomaly": 50.0,
+                },
+            ),
+            # LEPTOSPIROSIS run 3 (newest) — real_data
+            _make_health_risk_score_row(
+                score=90.0, disease="LEPTOSPIROSIS"
+            ),
+            # DENGUE run 2 — real_data
+            _make_health_risk_score_row(score=80.0, disease="DENGUE"),
+            # LEPTOSPIROSIS run 2 — real_data
+            _make_health_risk_score_row(score=88.0, disease="LEPTOSPIROSIS"),
+            # DENGUE run 1 — total fallback
+            _make_health_risk_score_row(
+                score=50.0,
+                disease="DENGUE",
+                confidence="fallback_neutral",
+                contributing_factors={
+                    "trend_score": None,
+                    "humidity_percent": None,
+                    "rain_mm": None,
+                    "weather_anomaly": 50.0,
+                },
+            ),
+            # LEPTOSPIROSIS run 1 — total fallback (1 of 3, not majority)
+            _make_health_risk_score_row(
+                score=50.0,
+                disease="LEPTOSPIROSIS",
+                confidence="fallback_neutral",
+                contributing_factors={
+                    "trend_score": None,
+                    "humidity_percent": None,
+                    "rain_mm": None,
+                    "weather_anomaly": 50.0,
+                },
+            ),
+        ]
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=score_rows)
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/current")
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["scores"]) == 2
+
+        by_disease = {s["disease_category"]: s["data_status"] for s in data["scores"]}
+        assert by_disease["DENGUE"] == "degraded"
+        assert by_disease["LEPTOSPIROSIS"] == "real_data"
+
+    def test_zero_scores_still_returns_empty_list(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        Cold start: no rows at all → 200 with empty scores list, and no
+        data_status anywhere (there is nothing to judge).
+        """
+        # Arrange
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=[])
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/current")
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert data["scores"] == []
+
+
 class TestHealthRiskHistoryEndpoint:
     """
     Tests for GET /api/v1/health-risk/history.
@@ -485,6 +816,37 @@ class TestHealthRiskHistoryEndpoint:
         assert response.status_code == 404
         data = response.json()
         assert "pincode" in data["detail"].lower()
+
+    def test_scores_do_not_include_data_status(
+        self, app: FastAPI, client: TestClient
+    ):
+        """
+        data_status is a /current-ONLY concept. /history keeps using the
+        plain HealthRiskScoreResponse, so its scores must NOT contain
+        the data_status key — consumers of the time-series chart did not
+        ask for a degraded flag and should not silently receive one.
+        """
+        # Arrange
+        mock_tenant = MagicMock(spec=Tenant)
+        mock_tenant.pincode = "682001"
+
+        score_rows = [
+            _make_health_risk_score_row(score=85.0, disease="DENGUE"),
+        ]
+
+        mock_session = _build_mock_session(tenant=mock_tenant, score_rows=score_rows)
+
+        app.dependency_overrides[get_database_session] = lambda: mock_session
+        app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
+
+        # Act
+        response = client.get("/api/v1/health-risk/history")
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["scores"]) == 1
+        assert "data_status" not in data["scores"][0]
 
 
 class TestHealthRiskExplainEndpoint:

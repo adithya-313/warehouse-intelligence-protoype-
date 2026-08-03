@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_current_tenant
 from app.health_risk.api.schemas import (
     HealthRiskCurrentResponse,
+    HealthRiskCurrentScoreResponse,
     HealthRiskExplainResponse,
     HealthRiskHistoryResponse,
     HealthRiskScoreResponse,
@@ -30,6 +31,58 @@ logger = logging.getLogger(__name__)
 
 # No prefix here — prefix is applied in main.py when include_router is called.
 router: APIRouter = APIRouter()
+
+# How many of the most recent ingestion runs we look at to decide whether
+# a disease's snapshot is degraded. The background job writes one row per
+# disease every cycle, so the last 3 rows = the last 3 runs (~18 hours).
+DEGRADED_WINDOW: int = 3
+
+
+def _is_total_fallback(row: "HealthRiskScoreModel") -> bool:
+    """Return True when a stored score came from a TOTAL fallback.
+
+    The scorer stores confidence="fallback_neutral" for BOTH of its
+    fallback cases (weather-only, and no-data-at-all), so we cannot tell
+    them apart from the confidence string alone. We look inside
+    contributing_factors (the JSON "receipt") instead:
+
+      - weather-only fallback (Case B): trend_score is None but
+        humidity_percent or rain_mm is present → still useful data.
+      - no-data fallback (Case C): trend_score, humidity_percent AND
+        rain_mm are ALL None → genuinely no evidence at all.
+
+    Only the no-data case is "total fallback" and counts as degraded.
+    """
+    if row.confidence != "fallback_neutral":
+        return False
+
+    factors: dict = row.contributing_factors or {}
+    return (
+        factors.get("trend_score") is None
+        and factors.get("humidity_percent") is None
+        and factors.get("rain_mm") is None
+    )
+
+
+def _data_status_for_disease(recent_rows: list) -> str:
+    """Classify one disease's snapshot: "degraded" or "real_data".
+
+    Rule (per the onboarding/data-quality spec):
+        degraded = the majority (> half) of the last DEGRADED_WINDOW runs
+                   were TOTAL fallbacks (no trend, no humidity, no rain).
+
+    A weather-only run is NOT degraded — weather is real measurement.
+    A disease with too few rows to matter (1 real + 1 fallback = not a
+    majority) stays "real_data".
+    """
+    if not recent_rows:
+        # No history at all — nothing to judge. Treat as normal.
+        return "real_data"
+
+    total_fallback_count = sum(1 for row in recent_rows if _is_total_fallback(row))
+    if total_fallback_count > len(recent_rows) / 2:
+        return "degraded"
+    return "real_data"
 
 
 @router.get(
@@ -46,8 +99,11 @@ def get_current_health_risk(
     Flow:
       1. Look up the Tenant row to find this pharmacy's registered pincode.
       2. Query HealthRiskScoreModel for that pincode, newest first.
-      3. Deduplicate to keep only the latest row per disease category.
-      4. Return a HealthRiskCurrentResponse with pincode and scores list.
+      3. Deduplicate to keep only the latest row per disease category,
+         while remembering the last DEGRADED_WINDOW rows per disease.
+      4. Return a HealthRiskCurrentResponse with pincode and scores list,
+         each score annotated with a data_status ("real_data"/"degraded")
+         computed from that disease's recent run history.
 
     If the tenant has no pincode configured, we return 404 — the pharmacy
     admin needs to set one before location-based scoring can work.
@@ -86,22 +142,37 @@ def get_current_health_risk(
     )
 
     # ------------------------------------------------------------------
-    # Step 3: Keep only the most recent row per disease category.
-    # This is the same dedup pattern used in procurement_router.py:
-    # because the query is ordered by computed_at DESC, the first time
-    # we encounter a disease_category it IS the latest score for that
-    # disease.
+    # Step 3: Keep only the most recent row per disease category AND
+    # remember the last DEGRADED_WINDOW rows per disease for the
+    # data_status computation.
+    #
+    # Dedup pattern (same as procurement_router.py): because the query is
+    # ordered by computed_at DESC, the first time we encounter a
+    # disease_category it IS the latest score for that disease.
     # ------------------------------------------------------------------
     seen_diseases: set = set()
     latest_scores: list = []
+    recent_rows_by_disease: dict = {}
 
     for row in all_score_rows:
         if row.disease_category not in seen_diseases:
             seen_diseases.add(row.disease_category)
             latest_scores.append(row)
 
+        # While we're here, collect the last DEGRADED_WINDOW rows per
+        # disease for the data_status signal. The list is already sorted
+        # newest-first, so truncating at the window keeps the most recent
+        # runs for each disease.
+        recent_rows = recent_rows_by_disease.setdefault(row.disease_category, [])
+        if len(recent_rows) < DEGRADED_WINDOW:
+            recent_rows.append(row)
+
     # ------------------------------------------------------------------
     # Step 4: Build and return the response.
+    # Each score carries a data_status computed from THIS disease's recent
+    # run history, so the frontend knows whether the snapshot's evidence
+    # base has gone quiet without having to reason about confidence
+    # strings itself.
     # If latest_scores is empty (cold start), we return an empty list
     # with a 200 status — this is the same behaviour as the
     # procurement_router health-risk branch.
@@ -109,11 +180,14 @@ def get_current_health_risk(
     return HealthRiskCurrentResponse(
         pincode=tenant.pincode,
         scores=[
-            HealthRiskScoreResponse(
+            HealthRiskCurrentScoreResponse(
                 disease_category=row.disease_category,
                 score=row.score,
                 confidence=row.confidence,
                 computed_at=row.computed_at,
+                data_status=_data_status_for_disease(
+                    recent_rows_by_disease.get(row.disease_category, [])
+                ),
             )
             for row in latest_scores
         ],
