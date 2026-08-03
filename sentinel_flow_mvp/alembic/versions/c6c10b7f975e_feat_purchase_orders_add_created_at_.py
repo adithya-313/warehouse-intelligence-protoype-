@@ -27,8 +27,10 @@ def upgrade() -> None:
     op.add_column('purchase_orders', sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=True))
     
     # 2. Backfill existing rows that pre-date this migration.
-    # Since we don't know the exact time they were created, using order_date (midnight) is a sensible fallback.
-    op.execute("UPDATE purchase_orders SET created_at = CAST(order_date AS TIMESTAMP) WHERE created_at IS NULL")
+    # Postgres automatically populates the server_default for all existing rows when the column is added,
+    # meaning created_at is NEVER null. We must unconditionally overwrite this auto-populated value 
+    # with order_date (midnight) so that legacy same-day orders don't all tie on the migration execution time.
+    op.execute("UPDATE purchase_orders SET created_at = CAST(order_date AS TIMESTAMP)")
     
     # 3. Enforce the non-nullable constraint now that all rows have data
     op.alter_column('purchase_orders', 'created_at', nullable=False)
