@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Radar, Info, TrendingUp, Droplets, CloudRain, Waves } from 'lucide-react';
+import { Radar, Info, TrendingUp } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
   api,
@@ -12,6 +12,7 @@ import {
   HealthRiskHistoryResponse,
 } from '@/services/api';
 import BackButton from '@/components/ui/BackButton';
+import { RiskExplainDetails } from '@/components/health-risk/RiskExplainDetails';
 
 // Simple fixed palette so each disease gets a distinct (but arbitrary) line color.
 // This is purely cosmetic — it is NOT a tier or severity classification.
@@ -24,11 +25,6 @@ const formatDate = (iso: string): string => {
   if (isNaN(date.getTime())) return iso;
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
-
-// Contributing factors can be null when the underlying weather/trend source was
-// unavailable. We render a dash instead of a misleading "0".
-const formatFactor = (value: number | null | undefined, suffix = ''): string =>
-  value === null || value === undefined ? '—' : `${value}${suffix}`;
 
 // ============================================================================
 // DiseaseCard — one disease's current signal. Clicking it deep-links to
@@ -92,47 +88,10 @@ function DiseaseCard({
 
         {selected && (
           <div className="border-t border-slate-100 pt-4 space-y-3">
-            {loadingExplain ? (
-              <div className="h-4 bg-slate-200 rounded animate-pulse w-2/3"></div>
-            ) : factors ? (
-              <>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                  Raw inputs behind this score
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
-                    <TrendingUp size={16} className="text-indigo-500 shrink-0" />
-                    <div>
-                      <p className="text-xs text-slate-500">Trend signal</p>
-                      <p className="font-semibold text-slate-800">{formatFactor(factors.trend_score)} / 100</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
-                    <Droplets size={16} className="text-cyan-500 shrink-0" />
-                    <div>
-                      <p className="text-xs text-slate-500">Humidity</p>
-                      <p className="font-semibold text-slate-800">{formatFactor(factors.humidity_percent, '%')}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
-                    <CloudRain size={16} className="text-sky-500 shrink-0" />
-                    <div>
-                      <p className="text-xs text-slate-500">Rainfall</p>
-                      <p className="font-semibold text-slate-800">{formatFactor(factors.rain_mm, ' mm')}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
-                    <Waves size={16} className="text-teal-500 shrink-0" />
-                    <div>
-                      <p className="text-xs text-slate-500">Weather anomaly</p>
-                      <p className="font-semibold text-slate-800">{formatFactor(factors.weather_anomaly)} / 100</p>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-slate-500">Couldn't load the signal breakdown for this score.</p>
-            )}
+            <RiskExplainDetails
+              isLoading={loadingExplain}
+              factors={factors}
+            />
           </div>
         )}
       </div>

@@ -2,40 +2,46 @@
 
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertTriangle, ShoppingCart, CheckCircle2 } from "lucide-react";
-import { api, DiseaseWaveAlert } from "@/services/api";
-import { cn } from "@/lib/utils";
+import { AlertTriangle, Info } from "lucide-react";
+import { api, HealthRiskCurrentResponse, HealthRiskExplainResponse } from "@/services/api";
+import { RiskExplainDetails } from "@/components/health-risk/RiskExplainDetails";
 
+// ============================================================================
+// PreemptiveWarningBanner — real health-risk signals for this pharmacy.
+//
+// Reads /api/v1/health-risk/current (real scores, not the removed hardcoded
+// disease-wave placeholders) and lets the pharmacist drill into /explain/{id}
+// for the raw inputs behind each score.
+//
+// No banner, nothing to see: /current returning an empty score list means no
+// scoring data exists yet, so we render null (identical to the old behaviour
+// when there were no disease-wave alerts).
+// ============================================================================
 export function PreemptiveWarningBanner() {
-  const [alerts, setAlerts] = useState<DiseaseWaveAlert[]>([]);
-  const [isOrdering, setIsOrdering] = useState(false);
-  const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
-  const [orderError, setOrderError] = useState<string | null>(null);
+  const [current, setCurrent] = useState<HealthRiskCurrentResponse | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [explainData, setExplainData] = useState<Record<number, HealthRiskExplainResponse>>({});
+  const [loadingExplain, setLoadingExplain] = useState(false);
 
   useEffect(() => {
-    // Fetch alerts on mount
-    api.fetchWaveAlerts().then(setAlerts).catch(console.error);
+    api.fetchHealthRiskCurrent().then(setCurrent).catch(console.error);
   }, []);
 
-  const handleOneClickPO = async (alert: DiseaseWaveAlert) => {
-    setIsOrdering(true);
-    setOrderError(null); // Reset error state
-    try {
-      const res = await api.createAutoPO(alert.sku_id, alert.recommended_supplier_id, alert.expected_volume);
-      setOrderSuccess(`PO #${res.po_id} routed successfully!`);
-      setTimeout(() => setAlerts((prev) => prev.filter((a) => a.sku_id !== alert.sku_id)), 3000);
-    } catch (error: any) {
-      console.error("PO Creation Failed:", error);
-      setOrderError("Failed to route PO. Check backend logs.");
-    } finally {
-      setIsOrdering(false);
-    }
-  };
+  const scores = current?.scores ?? [];
+  if (scores.length === 0) return null;
 
-  const visibleAlerts = alerts.filter((a: any) => 
-    a.alert_type === 'DISEASE_WAVE' || (a.title && a.title.includes('Wave')) || a.sku_id
-  );
-  if (visibleAlerts.length === 0) return null;
+  const handleToggleExplain = async (scoreId: number) => {
+    if (expandedId === scoreId) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(scoreId);
+    if (explainData[scoreId]) return; // already fetched once — reuse
+    setLoadingExplain(true);
+    const data = await api.fetchHealthRiskExplain(scoreId);
+    if (data) setExplainData((prev) => ({ ...prev, [scoreId]: data }));
+    setLoadingExplain(false);
+  };
 
   return (
     <AnimatePresence>
@@ -43,56 +49,59 @@ export function PreemptiveWarningBanner() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
+        data-testid="preemptive-warning-banner"
         className="mb-6 rounded-[2rem] p-[1px] bg-gradient-to-br from-rose-400/60 via-orange-300/60 to-amber-200/60 shadow-[0_16px_32px_rgba(225,29,72,0.15)]"
       >
-        <div className="max-h-[200px] overflow-y-auto pr-2 space-y-4 custom-scrollbar">
-          {alerts.map((alert) => (
-            <div key={alert.sku_id} className="bg-white/80 backdrop-blur-3xl rounded-[calc(2rem-1px)] p-6 flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-rose-100 text-rose-600 rounded-full">
-                  <AlertTriangle className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    Epidemiological Wave Detected
-                    <span className="text-xs font-semibold px-2 py-1 bg-rose-100 text-rose-700 rounded-full">
-                      {(alert.probability_score * 100).toFixed(0)}% Probability
-                    </span>
-                  </h3>
-                  <p className="text-sm text-gray-900 mt-1">{alert.warning_message}</p>
-                  <p className="text-sm font-medium text-gray-900 mt-1">
-                    Recommended Action: Procure {alert.expected_volume} units of {alert.sku_name}.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-col items-end gap-2">
-                <button
-                  suppressHydrationWarning={true}
-                  onClick={() => handleOneClickPO(alert)}
-                  disabled={isOrdering || !!orderSuccess}
-                  className={cn(
-                    "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white transition-all shadow-md",
-                    orderSuccess 
-                      ? "bg-emerald-500 hover:bg-emerald-600" 
-                      : orderError
-                      ? "bg-red-500 hover:bg-red-600"
-                      : "bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 hover:shadow-lg hover:-translate-y-0.5",
-                    isOrdering && "opacity-70 cursor-not-allowed"
-                  )}
-                >
-                  {orderSuccess ? (
-                    <><CheckCircle2 className="w-5 h-5" /> {orderSuccess}</>
-                  ) : orderError ? (
-                    <><AlertTriangle className="w-5 h-5" /> Retry Order</>
-                  ) : (
-                    <><ShoppingCart className="w-5 h-5" /> {isOrdering ? "Routing PO..." : "1-Click Approve PO"}</>
-                  )}
-                </button>
-                {orderError && <span className="text-xs text-red-500 font-medium">{orderError}</span>}
-              </div>
+        <div className="max-h-[260px] overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+          <div className="flex items-center gap-3 px-1 pt-1">
+            <div className="p-2 bg-rose-100 text-rose-600 rounded-full">
+              <AlertTriangle className="w-5 h-5" />
             </div>
-          ))}
+            <div>
+              <h2 className="text-sm font-bold text-gray-900">Active Health Risk Signals</h2>
+              <p className="text-xs text-gray-500">Latest risk scores for this pharmacy&apos;s pincode.</p>
+            </div>
+          </div>
+
+          {scores.map((score) => {
+            const expanded = expandedId === score.id;
+            const isDegraded = score.data_status === "degraded";
+            return (
+              <div key={score.id} className="bg-white/80 backdrop-blur-3xl rounded-[calc(2rem-1px)] p-5">
+                <button onClick={() => handleToggleExplain(score.id)} className="w-full text-left">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-base font-bold text-gray-900">{score.disease_category}</h3>
+                      <p className="text-sm text-gray-900 mt-1">Confidence {score.confidence}</p>
+                      {isDegraded && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-medium mt-2">
+                          <Info size={12} /> based on limited recent data
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      {/* TODO(3.0b): render risk_tier here once the backend adds it —
+                          do NOT invent a client-side tier calculation. */}
+                      <p className="text-2xl font-bold text-gray-900">{score.score}</p>
+                      <p className="text-xs text-gray-500">risk score / 100</p>
+                    </div>
+                  </div>
+                  <p className="text-xs font-semibold text-rose-600 mt-3 uppercase tracking-wide">
+                    {expanded ? "Hide details" : "See details"}
+                  </p>
+                </button>
+
+                {expanded && (
+                  <div className="border-t border-slate-100 pt-4 space-y-3">
+                    <RiskExplainDetails
+                      isLoading={loadingExplain}
+                      factors={explainData[score.id]?.contributing_factors}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </motion.div>
     </AnimatePresence>
