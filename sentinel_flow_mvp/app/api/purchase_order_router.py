@@ -152,7 +152,7 @@ def receive_bulk_purchase_order(
 ):
     po_items = db.query(PurchaseOrderModel).filter(
         PurchaseOrderModel.po_id == payload.po_id,
-        PurchaseOrderModel.status == "SUBMITTED"
+        PurchaseOrderModel.status.in_(["SUBMITTED", "PARTIAL"])
     ).all()
 
     if not po_items:
@@ -164,16 +164,34 @@ def receive_bulk_purchase_order(
     delivery_map = {item.sku_id.upper(): item.delivered_qty for item in payload.items}
 
     try:
+        overall_status = "FULFILLED"
         for po in po_items:
             delivered = delivery_map.get(po.sku_id, 0)
+            if delivered <= 0:
+                continue
+
             po.actual_delivery_date = payload.actual_delivery_date
-            po.delivered_qty = delivered
-            po.status = "FULFILLED"
+            
+            # Make delivered_qty additive to support multiple partial shipments
+            current_delivered = po.delivered_qty or 0
+            po.delivered_qty = current_delivered + delivered
+            
+            # Cap delivered_qty at ordered_qty if over-delivered so we don't corrupt the number
+            if po.delivered_qty > po.ordered_qty:
+                logger.warning(f"Over-delivery detected for PO {po.po_id}, SKU {po.sku_id}. Capping at ordered_qty.")
+                po.delivered_qty = po.ordered_qty
+                
+            # Make status dynamic based on true delivery state
+            if po.delivered_qty < po.ordered_qty:
+                po.status = "PARTIAL"
+                overall_status = "PARTIAL"
+            else:
+                po.status = "FULFILLED"
 
         db.commit()
         return {
             "po_id": payload.po_id,
-            "status": "FULFILLED",
+            "status": overall_status,
             "lines_processed": len(po_items),
         }
     except Exception as e:

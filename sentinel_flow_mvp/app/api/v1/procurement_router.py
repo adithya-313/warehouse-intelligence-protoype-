@@ -182,10 +182,10 @@ def create_auto_purchase_order(
             detail="Cannot create auto purchase order: no tenant context available"
         )
 
-    # 1. Idempotency Check: Does a PENDING order already exist for this SKU?
+    # 1. Idempotency Check: Does a SUBMITTED order already exist for this SKU?
     existing_po = db.query(PurchaseOrderModel).filter(
         PurchaseOrderModel.sku_id == request.sku_id,
-        PurchaseOrderModel.status == 'PENDING'
+        PurchaseOrderModel.status == 'SUBMITTED'
     ).first()
 
     if existing_po:
@@ -193,7 +193,7 @@ def create_auto_purchase_order(
         return AutoPOResponse(
             po_id=str(existing_po.po_id),  # Cast to str for type safety with updated schema
             status=existing_po.status,
-            message="Existing pending order found. No new order created."
+            message="Existing submitted order found. No new order created."
         )
 
     # 2. Create new PO (Patched to include tenant_id)
@@ -210,7 +210,7 @@ def create_auto_purchase_order(
         expected_mrp=15.0,
         order_date=datetime.now(timezone.utc),
         expected_delivery_date=datetime.now(timezone.utc) + timedelta(days=2),
-        status='PENDING'
+        status='SUBMITTED'
     )
     
     db.add(new_po)

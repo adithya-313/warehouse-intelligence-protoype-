@@ -95,7 +95,7 @@ class TestAutoPOTenantAssignment:
         
         data = response.json()
         assert "po_id" in data
-        assert data["status"] == "PENDING"
+        assert data["status"] == "SUBMITTED"
         
         # 2. Verify the row was created with the correct tenant_id
         # We can inspect the calls to mock_db_session.add

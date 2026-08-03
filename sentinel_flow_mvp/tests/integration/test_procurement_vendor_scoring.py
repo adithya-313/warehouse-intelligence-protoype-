@@ -102,7 +102,7 @@ class TestProcurementVendorScoring:
                 json={
                     "supplier_id": "SUPP-B",
                     "expected_delivery_date": datetime.now().date().isoformat(),
-                    "items": [{"sku_id": "MED-PARA-100", "ordered_qty": 100, "cost_price": 4.5, "expected_mrp": 10.0}]
+                    "items": [{"sku_id": "MED-PARA-100", "ordered_qty": 10, "cost_price": 4.5, "expected_mrp": 10.0}]
                 },
                 headers={"x-tenant-id": "TENANT-VS-1"}
             )
