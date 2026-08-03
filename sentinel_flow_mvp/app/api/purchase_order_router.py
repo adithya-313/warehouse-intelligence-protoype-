@@ -27,7 +27,11 @@ def list_purchase_orders(
     ).filter(
         PurchaseOrderModel.tenant_id == tenant_id
     ).order_by(
-        PurchaseOrderModel.order_date.desc()
+        # order_date only stores the day, not the time, so multiple orders placed on the same 
+        # day would otherwise sort in a random, inconsistent order — this tiebreaker 
+        # makes the order stable and predictable.
+        PurchaseOrderModel.order_date.desc(),
+        PurchaseOrderModel.po_id.desc()
     ).all()
 
     logger.info(f"Retrieved {len(results)} purchase order line items for tenant {tenant_id}")
