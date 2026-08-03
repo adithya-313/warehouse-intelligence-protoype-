@@ -148,7 +148,9 @@ def get_disease_wave_alerts(
                         tenant_id=tenant_id,
                         title=f"Disease Wave: {med.sku_id}",
                         message=f"High health risk score ({risk_score.score:.1f}) for {risk_score.disease_category}. Preemptive stock recommended.",
-                        alert_type="DISEASE_WAVE"
+                        alert_type="DISEASE_WAVE",
+                        # Deep-link so the frontend can jump straight to /explain/{id}.
+                        health_risk_score_id=risk_score.id,
                     )
                     db.add(new_notif)
                     db.commit()

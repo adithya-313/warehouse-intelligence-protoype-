@@ -385,6 +385,9 @@ class NotificationModel(Base):
     title = Column(String, nullable=False)
     message = Column(String, nullable=False)
     alert_type = Column(String, nullable=False) # e.g., "DISEASE_WAVE", "SYSTEM"
+    # Nullable because only health-risk-triggered notifications point at a score;
+    # all other alert types (stockouts, system) have no related HealthRiskScoreModel row.
+    health_risk_score_id = Column(Integer, nullable=True)
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

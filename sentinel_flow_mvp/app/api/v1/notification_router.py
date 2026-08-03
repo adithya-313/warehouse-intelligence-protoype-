@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from pydantic import BaseModel
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from app.infrastructure.database import get_database_session
 from app.infrastructure.models import NotificationModel
@@ -16,6 +16,8 @@ class NotificationResponse(BaseModel):
     title: str
     message: str
     alert_type: str
+    # Deep-link the notification to a health risk score (null for non-risk alerts).
+    health_risk_score_id: Optional[int] = None
     is_read: bool
     created_at: datetime
 

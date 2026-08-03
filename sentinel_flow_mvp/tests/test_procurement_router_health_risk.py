@@ -51,9 +51,11 @@ def _make_health_risk_score_row(
     disease: str = "DENGUE",
     pincode: str = "682001",
     confidence: str = "real_data",
+    row_id: int = 1,
 ) -> MagicMock:
     """Build a MagicMock that looks like a HealthRiskScoreModel ORM row."""
     row = MagicMock(spec=HealthRiskScoreModel)
+    row.id = row_id
     row.pincode = pincode
     row.disease_category = disease
     row.score = score
@@ -234,7 +236,7 @@ class TestProcurementHealthRiskFlag:
         # Populate the mock DB with one high-risk row (DENGUE, 85.0)
         _HEALTH_RISK_SCORE_ROWS.clear()
         _HEALTH_RISK_SCORE_ROWS.append(
-            _make_health_risk_score_row(score=85.0, disease="DENGUE"),
+            _make_health_risk_score_row(score=85.0, disease="DENGUE", row_id=1001),
         )
 
         # Make the Tenant query return a tenant with health_risk enabled + pincode
@@ -256,6 +258,12 @@ class TestProcurementHealthRiskFlag:
         # Hardcoded fields are preserved (with TODO comments)
         assert data[0]["probability_score"] == 0.89
         assert data[0]["expected_volume"] == 500
+
+        # The DISEASE_WAVE notification deep-links to the score row that
+        # triggered it (no second lookup needed).
+        mock_session.add.assert_called_once()
+        added_notification = mock_session.add.call_args.args[0]
+        assert added_notification.health_risk_score_id == 1001
 
     @patch("app.api.v1.procurement_router.get_application_settings")
     def test_no_scores_yet_returns_empty_gracefully(
