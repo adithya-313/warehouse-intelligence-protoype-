@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bot, Settings, BarChart3, ShoppingBag, Barcode, History, Banknote, QrCode, CreditCard, Boxes, ClipboardList } from 'lucide-react';
+import { Search, Bot, Settings, BarChart3, ShoppingBag, Barcode, History, Banknote, QrCode, CreditCard, Boxes, ClipboardList, Radar } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePOSStore } from '@/store/posStore';
 import CopilotPanel from '@/components/pos/CopilotPanel';
@@ -282,6 +282,16 @@ export default function POSDashboard() {
                 className="px-5 py-2.5 bg-white/60 hover:bg-white border border-gray-200/50 text-slate-600 rounded-2xl text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
               >
                 <ClipboardList size={18} /> Orders
+              </motion.button>
+            </Link>
+            <Link href="/health-risk-radar">
+              <motion.button
+                suppressHydrationWarning={true}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="px-5 py-2.5 bg-white/60 hover:bg-white border border-gray-200/50 text-slate-600 rounded-2xl text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
+              >
+                <Radar size={18} /> Health Risk
               </motion.button>
             </Link>
             <button

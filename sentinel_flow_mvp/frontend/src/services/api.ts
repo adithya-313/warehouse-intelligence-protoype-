@@ -36,6 +36,52 @@ export interface AutoPOResponse {
   message: string;
 }
 
+// ============================================================================
+// HEALTH RISK RADAR TYPES
+// Mirrors the backend health_risk Pydantic schemas (app/health_risk/api/schemas.py).
+// ============================================================================
+
+export interface HealthRiskScore {
+  id: number;
+  disease_category: string;
+  score: number;
+  confidence: string;
+  computed_at: string;
+}
+
+export interface HealthRiskCurrentScore extends HealthRiskScore {
+  // "real_data" | "degraded" — only present on /current.
+  data_status: string;
+}
+
+export interface HealthRiskCurrentResponse {
+  pincode: string;
+  scores: HealthRiskCurrentScore[];
+}
+
+export interface HealthRiskHistoryResponse {
+  pincode: string;
+  days: number;
+  scores: HealthRiskScore[];
+}
+
+export interface HealthRiskContributingFactors {
+  trend_score: number | null;
+  humidity_percent: number | null;
+  rain_mm: number | null;
+  weather_anomaly: number | null;
+}
+
+export interface HealthRiskExplainResponse {
+  id: number;
+  pincode: string;
+  disease_category: string;
+  score: number;
+  confidence: string;
+  computed_at: string;
+  contributing_factors: HealthRiskContributingFactors;
+}
+
 let _apiKey: string = '';
 // IMPORTANT: This must exactly match the tenant_id seeded in the database.
 // All medication_batches, notifications, procurement alerts, etc. are scoped to this tenant.
@@ -257,6 +303,48 @@ export const api = {
     });
     if (!response.ok) throw new Error("Failed to mark notification as read");
     return await response.json();
+  },
+
+  async fetchHealthRiskCurrent(): Promise<HealthRiskCurrentResponse | null> {
+    try {
+      const response = await fetch(`/api/v1/health-risk/current`, {
+        headers: { 'X-Tenant-ID': DEFAULT_TENANT },
+        cache: 'no-store'
+      });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (error) {
+      console.error("Failed to fetch health risk current:", error);
+      return null; // Graceful degradation
+    }
+  },
+
+  async fetchHealthRiskHistory(days: number): Promise<HealthRiskHistoryResponse | null> {
+    try {
+      const response = await fetch(`/api/v1/health-risk/history?days=${days}`, {
+        headers: { 'X-Tenant-ID': DEFAULT_TENANT },
+        cache: 'no-store'
+      });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (error) {
+      console.error("Failed to fetch health risk history:", error);
+      return null; // Graceful degradation
+    }
+  },
+
+  async fetchHealthRiskExplain(scoreId: number): Promise<HealthRiskExplainResponse | null> {
+    try {
+      const response = await fetch(`/api/v1/health-risk/explain/${scoreId}`, {
+        headers: { 'X-Tenant-ID': DEFAULT_TENANT },
+        cache: 'no-store'
+      });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (error) {
+      console.error("Failed to fetch health risk explain:", error);
+      return null; // Graceful degradation
+    }
   },
 
   async searchInventory(q: string): Promise<any[]> {
