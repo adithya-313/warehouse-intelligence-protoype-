@@ -45,7 +45,9 @@ def _make_health_risk_score_row(
 ) -> MagicMock:
     """Build a MagicMock that looks like a HealthRiskScoreModel ORM row."""
     row = MagicMock(spec=HealthRiskScoreModel)
-    row.id = row_id
+    # Default to 0 when no explicit id is given so every row satisfies
+    # the strict "id: int" schema field on /current and /history responses.
+    row.id = row_id if row_id is not None else 0
     row.pincode = pincode
     row.disease_category = disease
     row.score = score
@@ -153,8 +155,8 @@ class TestHealthRiskCurrentEndpoint:
 
         # Two disease scores for this pincode
         score_rows = [
-            _make_health_risk_score_row(score=85.0, disease="DENGUE"),
-            _make_health_risk_score_row(score=92.0, disease="LEPTOSPIROSIS"),
+            _make_health_risk_score_row(score=85.0, disease="DENGUE", row_id=100),
+            _make_health_risk_score_row(score=92.0, disease="LEPTOSPIROSIS", row_id=101),
         ]
 
         mock_session = _build_mock_session(tenant=mock_tenant, score_rows=score_rows)
@@ -183,6 +185,11 @@ class TestHealthRiskCurrentEndpoint:
             assert isinstance(score["score"], float)
             assert "confidence" in score
             assert "computed_at" in score
+
+        # Each score carries the underlying row's id (for /explain deep links)
+        by_disease = {s["disease_category"]: s for s in data["scores"]}
+        assert by_disease["DENGUE"]["id"] == 100
+        assert by_disease["LEPTOSPIROSIS"]["id"] == 101
 
     def test_tenant_with_zero_scores_returns_empty_list(
         self, app: FastAPI, client: TestClient
@@ -627,11 +634,11 @@ class TestHealthRiskHistoryEndpoint:
         # Five score rows across different days (simulating a time series)
         base_time = datetime.now(timezone.utc)
         score_rows = [
-            _make_health_risk_score_row(score=10.0, disease="DENGUE"),
-            _make_health_risk_score_row(score=20.0, disease="DENGUE"),
-            _make_health_risk_score_row(score=30.0, disease="DENGUE"),
-            _make_health_risk_score_row(score=40.0, disease="LEPTOSPIROSIS"),
-            _make_health_risk_score_row(score=50.0, disease="LEPTOSPIROSIS"),
+            _make_health_risk_score_row(score=10.0, disease="DENGUE", row_id=201),
+            _make_health_risk_score_row(score=20.0, disease="DENGUE", row_id=202),
+            _make_health_risk_score_row(score=30.0, disease="DENGUE", row_id=203),
+            _make_health_risk_score_row(score=40.0, disease="LEPTOSPIROSIS", row_id=204),
+            _make_health_risk_score_row(score=50.0, disease="LEPTOSPIROSIS", row_id=205),
         ]
         # Set computed_at on each row so ordering is predictable:
         # oldest first, newest last.
@@ -665,6 +672,10 @@ class TestHealthRiskHistoryEndpoint:
         # Verify score values are in ascending order matching our setup
         score_values = [s["score"] for s in data["scores"]]
         assert score_values == [10.0, 20.0, 30.0, 40.0, 50.0]
+
+        # Each row carries its underlying row id (for /explain deep links)
+        ids = [s["id"] for s in data["scores"]]
+        assert ids == [201, 202, 203, 204, 205]
 
     def test_tenant_with_zero_score_rows_returns_empty_list(
         self, app: FastAPI, client: TestClient

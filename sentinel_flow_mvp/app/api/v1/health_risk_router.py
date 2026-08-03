@@ -181,6 +181,7 @@ def get_current_health_risk(
         pincode=tenant.pincode,
         scores=[
             HealthRiskCurrentScoreResponse(
+                id=row.id,
                 disease_category=row.disease_category,
                 score=row.score,
                 confidence=row.confidence,
@@ -285,6 +286,7 @@ def get_health_risk_history(
         days=days,
         scores=[
             HealthRiskScoreResponse(
+                id=row.id,
                 disease_category=row.disease_category,
                 score=row.score,
                 confidence=row.confidence,

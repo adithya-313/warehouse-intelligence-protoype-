@@ -20,10 +20,13 @@ class HealthRiskScoreResponse(BaseModel):
     What the API sends back for one disease's current risk score.
 
     Matches the HealthRiskScoreModel columns that are safe to expose:
-    disease_category (string), score (float 0-100), confidence level,
-    and when it was computed. No internal IDs or contributing_factors.
+    id (for /explain deep links), disease_category (string), score
+    (float 0-100), confidence level, and when it was computed. No
+    contributing_factors.
     """
 
+    # Lets the frontend call /explain/{id} without a second lookup.
+    id: int
     disease_category: str
     score: float
     confidence: str
@@ -56,6 +59,8 @@ class HealthRiskCurrentScoreResponse(BaseModel):
     measurement even when search-trend data is unavailable.
     """
 
+    # Lets the frontend call /explain/{id} without a second lookup.
+    id: int
     disease_category: str
     score: float
     confidence: str
