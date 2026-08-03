@@ -36,6 +36,24 @@ export interface AutoPOResponse {
   message: string;
 }
 
+export interface PurchaseOrderLineItem {
+  sku_id: string;
+  ordered_qty: number;
+  delivered_qty: number;
+  cost_price: number;
+  expected_mrp: number;
+}
+
+export interface PurchaseOrderResponse {
+  po_id: string;
+  supplier_id: string;
+  supplier_name: string;
+  order_date: string | null;
+  expected_delivery_date: string | null;
+  status: string;
+  items: PurchaseOrderLineItem[];
+}
+
 // ============================================================================
 // HEALTH RISK RADAR TYPES
 // Mirrors the backend health_risk Pydantic schemas (app/health_risk/api/schemas.py).
@@ -344,6 +362,20 @@ export const api = {
     } catch (error) {
       console.error("Failed to fetch health risk explain:", error);
       return null; // Graceful degradation
+    }
+  },
+
+  async fetchPurchaseOrder(poId: string): Promise<PurchaseOrderResponse | null> {
+    try {
+      const response = await fetch(`/api/v1/purchase-orders/${poId}`, {
+        headers: { 'X-Tenant-ID': DEFAULT_TENANT },
+        cache: 'no-store'
+      });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (error) {
+      console.error("Failed to fetch purchase order details:", error);
+      return null;
     }
   },
 

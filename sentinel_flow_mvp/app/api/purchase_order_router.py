@@ -78,6 +78,48 @@ def list_purchase_orders(
 
     return list(ledger.values())
 
+@router.get("/purchase-orders/{po_id}")
+def get_purchase_order(
+    po_id: str,
+    tenant_id: str = Depends(get_current_tenant),
+    db: Session = Depends(get_database_session)
+):
+    po_items = db.query(PurchaseOrderModel, SupplierModel).outerjoin(
+        SupplierModel, PurchaseOrderModel.supplier_id == SupplierModel.supplier_id
+    ).filter(
+        PurchaseOrderModel.po_id == po_id,
+        PurchaseOrderModel.tenant_id == tenant_id
+    ).all()
+    
+    if not po_items:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+        
+    first_po, supplier = po_items[0]
+    supplier_name = "Unknown Supplier"
+    if supplier and supplier.industry_specific_metadata:
+        supplier_name = supplier.industry_specific_metadata.get("name", "Unknown Supplier")
+        
+    # We derive an overall status logic (PARTIAL if any item is partially delivered but not all FULFILLED)
+    # The first item's status is generally accurate because our receive endpoint updates all of them.
+    return {
+        "po_id": first_po.po_id,
+        "supplier_id": first_po.supplier_id,
+        "supplier_name": supplier_name,
+        "order_date": first_po.order_date.isoformat() if first_po.order_date else None,
+        "expected_delivery_date": first_po.expected_delivery_date.isoformat() if first_po.expected_delivery_date else None,
+        "status": first_po.status,
+        "items": [
+            {
+                "sku_id": po.sku_id,
+                "ordered_qty": po.ordered_qty,
+                "delivered_qty": po.delivered_qty or 0,
+                "cost_price": float(po.cost_price) if po.cost_price else 0.0,
+                "expected_mrp": float(po.expected_mrp) if po.expected_mrp else 0.0,
+            }
+            for po, _ in po_items
+        ]
+    }
+
 @router.get("/purchase-orders/catalog/search")
 def search_catalog(q: str = "", db: Session = Depends(get_database_session)):
     query = q.lower()

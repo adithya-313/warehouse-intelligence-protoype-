@@ -2,16 +2,22 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
-import { Package, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Package, Clock, CheckCircle, AlertTriangle, PackageCheck } from 'lucide-react';
 import { api } from '@/services/api';
 import BackButton from '@/components/ui/BackButton';
+import { ReceiveOrderPanel } from '@/components/orders/ReceiveOrderPanel';
 
 export default function OrderLedgerPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  const [isReceivePanelOpen, setIsReceivePanelOpen] = useState(false);
+  const [selectedPoId, setSelectedPoId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const fetchOrders = async () => {
+      setIsLoading(true);
       try {
         const response = await api.get('/api/v1/purchase-orders');
         setOrders(response);
@@ -22,7 +28,7 @@ export default function OrderLedgerPage() {
       }
     };
     fetchOrders();
-  }, []);
+  }, [refreshKey]);
 
   // This is the container for all the order rows.
   // We tell it to wait 0.05 seconds between showing each row,
@@ -184,7 +190,23 @@ export default function OrderLedgerPage() {
                       <td className="p-4 text-slate-600">{new Date(order.expected_delivery_date).toLocaleDateString()}</td>
                       <td className="p-4 text-slate-600 font-medium">{order.item_count} items</td>
                       <td className="p-4 font-bold text-slate-800">₹{order.total_value_rupees.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="p-4">{getStatusBadge(order.status)}</td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          {getStatusBadge(order.status)}
+                          {(order.status === 'SUBMITTED' || order.status === 'PARTIAL') && (
+                            <button
+                              onClick={() => {
+                                setSelectedPoId(order.po_id);
+                                setIsReceivePanelOpen(true);
+                              }}
+                              className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              title="Receive Items"
+                            >
+                              <PackageCheck size={18} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </motion.tr>
                   ))}
                 </motion.tbody>
@@ -193,6 +215,13 @@ export default function OrderLedgerPage() {
           )}
         </AnimatePresence>
       </div>
+      
+      <ReceiveOrderPanel 
+        isOpen={isReceivePanelOpen} 
+        onClose={() => setIsReceivePanelOpen(false)} 
+        poId={selectedPoId || ''} 
+        onSuccess={() => setRefreshKey(prev => prev + 1)} 
+      />
     </div>
   );
 }
