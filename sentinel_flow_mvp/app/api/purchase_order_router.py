@@ -27,11 +27,11 @@ def list_purchase_orders(
     ).filter(
         PurchaseOrderModel.tenant_id == tenant_id
     ).order_by(
-        # order_date only stores the day, not the time, so multiple orders placed on the same 
-        # day would otherwise sort in a random, inconsistent order — this tiebreaker 
-        # makes the order stable and predictable.
+        # Previously we used po_id as a tiebreaker, which was stable but not actually chronological. 
+        # Now that we have a real created_at timestamp, same-day orders sort by 
+        # when they were truly placed.
         PurchaseOrderModel.order_date.desc(),
-        PurchaseOrderModel.po_id.desc()
+        PurchaseOrderModel.created_at.desc()
     ).all()
 
     logger.info(f"Retrieved {len(results)} purchase order line items for tenant {tenant_id}")
