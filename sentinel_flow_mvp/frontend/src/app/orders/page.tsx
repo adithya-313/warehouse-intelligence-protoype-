@@ -6,6 +6,7 @@ import { Package, Clock, CheckCircle, AlertTriangle, PackageCheck } from 'lucide
 import { api } from '@/services/api';
 import BackButton from '@/components/ui/BackButton';
 import { ReceiveOrderPanel } from '@/components/orders/ReceiveOrderPanel';
+import { calculateDaysLate } from '@/utils/orderDelay';
 
 export default function OrderLedgerPage() {
   const [orders, setOrders] = useState<any[]>([]);
@@ -178,12 +179,26 @@ export default function OrderLedgerPage() {
                   initial="hidden"
                   animate="visible"
                 >
-                  {orders.map((order, idx) => (
-                    <motion.tr
-                      key={order.po_id ?? idx}
-                      variants={singleRowVariants}
-                      className="hover:bg-slate-50 transition-colors"
-                    >
+                  {orders.map((order, idx) => {
+                    const daysLate = calculateDaysLate(order.status, order.expected_delivery_date, order.actual_delivery_date);
+                    
+                    const getDelayBadge = (daysLate: number) => {
+                      if (daysLate <= 0) return null;
+                      if (daysLate >= 7) {
+                        return <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold border border-red-200">• {daysLate} days late</span>;
+                      } else if (daysLate >= 3) {
+                        return <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-red-50 text-red-600 font-medium border border-red-100">• {daysLate} days late</span>;
+                      } else {
+                        return <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-orange-50 text-orange-600 font-medium border border-orange-100">• {daysLate} {daysLate === 1 ? 'day' : 'days'} late</span>;
+                      }
+                    };
+
+                    return (
+                      <motion.tr
+                        key={order.po_id ?? idx}
+                        variants={singleRowVariants}
+                        className="hover:bg-slate-50 transition-colors"
+                      >
                       <td className="p-4 font-mono text-sm font-medium text-indigo-600">{order.po_id}</td>
                       <td className="p-4 font-medium text-slate-700">{order.supplier_name}</td>
                       <td className="p-4 text-slate-600">{new Date(order.order_date).toLocaleDateString()}</td>
@@ -193,6 +208,7 @@ export default function OrderLedgerPage() {
                       <td className="p-4">
                         <div className="flex items-center gap-3">
                           {getStatusBadge(order.status)}
+                          {getDelayBadge(daysLate)}
                           {(order.status === 'SUBMITTED' || order.status === 'PARTIAL') && (
                             <button
                               onClick={() => {
