@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from app.infrastructure.database import get_database_session
 from app.infrastructure.models import SupplierModel, PurchaseOrderModel
-from app.api.deps import get_current_tenant
+from app.api.dependencies import get_current_tenant
 from app.services.supplier_scorecard_service import generate_financial_scorecard
 from app.domain.schemas import DistributorScorecardResponse, SupplierCreateRequest, SupplierListResponse
 import logging
