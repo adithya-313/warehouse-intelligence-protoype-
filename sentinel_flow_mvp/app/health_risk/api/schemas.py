@@ -57,6 +57,9 @@ class HealthRiskCurrentScoreResponse(BaseModel):
     A "weather-only" fallback (trend missing but humidity/rain present)
     counts as real data, NOT degraded — weather is still a genuine
     measurement even when search-trend data is unavailable.
+
+    risk_tier is the server-side severity band ("Low"/"Moderate"/"High"/
+    "Severe") computed from the score — /current only, like data_status.
     """
 
     # Lets the frontend call /explain/{id} without a second lookup.
@@ -65,6 +68,8 @@ class HealthRiskCurrentScoreResponse(BaseModel):
     score: float
     confidence: str
     computed_at: datetime
+    # Server-side severity band — computed from the score, never on the client.
+    risk_tier: str
     data_status: str
 
 

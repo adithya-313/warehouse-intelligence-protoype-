@@ -185,11 +185,17 @@ class TestHealthRiskCurrentEndpoint:
             assert isinstance(score["score"], float)
             assert "confidence" in score
             assert "computed_at" in score
+            assert "risk_tier" in score
 
         # Each score carries the underlying row's id (for /explain deep links)
         by_disease = {s["disease_category"]: s for s in data["scores"]}
         assert by_disease["DENGUE"]["id"] == 100
         assert by_disease["LEPTOSPIROSIS"]["id"] == 101
+
+        # Each score carries its server-computed risk tier (85.0 and 92.0
+        # are both above 79.9 → "Severe").
+        assert by_disease["DENGUE"]["risk_tier"] == "Severe"
+        assert by_disease["LEPTOSPIROSIS"]["risk_tier"] == "Severe"
 
     def test_tenant_with_zero_scores_returns_empty_list(
         self, app: FastAPI, client: TestClient
@@ -362,6 +368,8 @@ class TestHealthRiskCurrentDataStatus:
         assert len(data["scores"]) == 1
         assert data["scores"][0]["disease_category"] == "DENGUE"
         assert data["scores"][0]["data_status"] == "degraded"
+        # Latest DENGUE row is the 50.0 total fallback → Moderate band.
+        assert data["scores"][0]["risk_tier"] == "Moderate"
 
     def test_weather_only_fallback_does_not_count_as_degraded(
         self, app: FastAPI, client: TestClient
@@ -428,6 +436,8 @@ class TestHealthRiskCurrentDataStatus:
         data = response.json()
         assert len(data["scores"]) == 1
         assert data["scores"][0]["data_status"] == "real_data"
+        # Latest DENGUE row is the 75.0 weather-only fallback → High band.
+        assert data["scores"][0]["risk_tier"] == "High"
 
     def test_majority_real_data_returns_real_data(
         self, app: FastAPI, client: TestClient
@@ -470,6 +480,8 @@ class TestHealthRiskCurrentDataStatus:
         data = response.json()
         assert len(data["scores"]) == 1
         assert data["scores"][0]["data_status"] == "real_data"
+        # Latest DENGUE row is the 85.0 real_data → Severe band.
+        assert data["scores"][0]["risk_tier"] == "Severe"
 
     def test_single_total_fallback_run_is_degraded(
         self, app: FastAPI, client: TestClient
@@ -509,6 +521,8 @@ class TestHealthRiskCurrentDataStatus:
         data = response.json()
         assert len(data["scores"]) == 1
         assert data["scores"][0]["data_status"] == "degraded"
+        # The single 50.0 total-fallback run → Moderate band.
+        assert data["scores"][0]["risk_tier"] == "Moderate"
 
     def test_mixed_diseases_get_independent_status(
         self, app: FastAPI, client: TestClient
@@ -588,6 +602,12 @@ class TestHealthRiskCurrentDataStatus:
         by_disease = {s["disease_category"]: s["data_status"] for s in data["scores"]}
         assert by_disease["DENGUE"] == "degraded"
         assert by_disease["LEPTOSPIROSIS"] == "real_data"
+
+        # Tiers follow each disease's latest row: DENGUE 50.0 → Moderate,
+        # LEPTOSPIROSIS 90.0 → Severe.
+        tiers = {s["disease_category"]: s["risk_tier"] for s in data["scores"]}
+        assert tiers["DENGUE"] == "Moderate"
+        assert tiers["LEPTOSPIROSIS"] == "Severe"
 
     def test_zero_scores_still_returns_empty_list(
         self, app: FastAPI, client: TestClient

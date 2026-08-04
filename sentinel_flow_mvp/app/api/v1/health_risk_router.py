@@ -23,6 +23,7 @@ from app.health_risk.api.schemas import (
     HealthRiskHistoryResponse,
     HealthRiskScoreResponse,
 )
+from app.health_risk.domain.risk_tier import compute_risk_tier
 from app.health_risk.infrastructure.db_models import HealthRiskScoreModel
 from app.infrastructure.database import get_database_session
 from app.infrastructure.models import Tenant
@@ -186,6 +187,7 @@ def get_current_health_risk(
                 score=row.score,
                 confidence=row.confidence,
                 computed_at=row.computed_at,
+                risk_tier=compute_risk_tier(row.score).value,
                 data_status=_data_status_for_disease(
                     recent_rows_by_disease.get(row.disease_category, [])
                 ),
