@@ -13,6 +13,7 @@ import {
 } from '@/services/api';
 import BackButton from '@/components/ui/BackButton';
 import { RiskExplainDetails } from '@/components/health-risk/RiskExplainDetails';
+import { HowThisWorksModal } from '@/components/health-risk/HowThisWorksModal';
 
 // Simple fixed palette so each disease gets a distinct (but arbitrary) line color.
 // This is purely cosmetic — it is NOT a tier or severity classification.
@@ -124,6 +125,8 @@ export default function HealthRiskRadarPage() {
   // True only when a deep-link (?disease=...) triggered the selection, so the
   // scroll-to-card behaviour never fires for ordinary manual toggles.
   const [deepLinked, setDeepLinked] = useState(false);
+  // The "How this works" explainer modal — closed by default.
+  const [howOpen, setHowOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -204,7 +207,15 @@ export default function HealthRiskRadarPage() {
           <h1 className="text-2xl font-bold text-slate-900">Health Risk Radar</h1>
           <p className="text-slate-500 mt-1">Disease risk signals for this pharmacy's pincode, updated every 6 hours.</p>
         </div>
+        <button
+          onClick={() => setHowOpen(true)}
+          className="ml-auto text-sm text-slate-400 hover:text-slate-700 hover:bg-white/60 backdrop-blur-md border border-transparent hover:border-white/80 px-3 py-1.5 rounded-xl transition-colors"
+        >
+          How this works
+        </button>
       </div>
+
+      <HowThisWorksModal isOpen={howOpen} onClose={() => setHowOpen(false)} />
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
