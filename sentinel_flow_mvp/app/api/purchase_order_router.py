@@ -49,6 +49,7 @@ def list_purchase_orders(
                 "supplier_name": supplier_name,
                 "order_date": po.order_date.isoformat() if po.order_date else None,
                 "expected_delivery_date": po.expected_delivery_date.isoformat() if po.expected_delivery_date else None,
+                "actual_delivery_date": po.actual_delivery_date.isoformat() if po.actual_delivery_date else None,
                 "status": po.status,
                 "item_count": 0,
                 "total_value_rupees": 0.0,
