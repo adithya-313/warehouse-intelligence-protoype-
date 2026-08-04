@@ -60,6 +60,7 @@ function DiseaseCard({
 
   return (
     <motion.div
+      id={`disease-card-${score.id}`}
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       className="p-[1px] bg-gradient-to-br from-blue-200/50 via-rose-200/50 to-amber-200/50 rounded-[2rem]"
@@ -120,6 +121,9 @@ export default function HealthRiskRadarPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [explainData, setExplainData] = useState<Record<number, HealthRiskExplainResponse>>({});
   const [loadingExplain, setLoadingExplain] = useState(false);
+  // True only when a deep-link (?disease=...) triggered the selection, so the
+  // scroll-to-card behaviour never fires for ordinary manual toggles.
+  const [deepLinked, setDeepLinked] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -133,11 +137,33 @@ export default function HealthRiskRadarPage() {
       if (cancelled) return;
       setCurrent(cur);
       setHistory(hist);
+
+      // Deep-link support: ?disease=dengue pre-selects + expands that disease's
+      // card (the NotificationBell navigates here after a notification click).
+      const diseaseParam = new URLSearchParams(window.location.search).get('disease');
+      if (diseaseParam && cur) {
+        const match = cur.scores.find(
+          (s) => s.disease_category.toLowerCase() === diseaseParam.toLowerCase()
+        );
+        if (match) {
+          setSelectedId(match.id);
+          setDeepLinked(true);
+        }
+      }
+
       setIsLoading(false);
     };
     load();
     return () => { cancelled = true; };
   }, []);
+
+  // Scroll the deep-linked card into view once it has rendered.
+  useEffect(() => {
+    if (deepLinked && selectedId != null) {
+      const el = document.getElementById(`disease-card-${selectedId}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [deepLinked, selectedId]);
 
   const handleToggleExplain = async (scoreId: number) => {
     if (selectedId === scoreId) {

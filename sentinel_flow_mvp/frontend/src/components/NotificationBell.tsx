@@ -1,11 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { api, NotificationResponse } from '../services/api';
 import { Bell } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getDiseaseStyle } from '@/utils/diseaseIdentity';
 
 export function NotificationBell() {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<NotificationResponse[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -32,6 +35,21 @@ export function NotificationBell() {
 
   const unreadCount = notifications.filter(n => n && !n.is_read).length;
 
+  const handleNotificationClick = (notification: NotificationResponse) => {
+    // Optimistic read update — reflect immediately, don't wait for the PATCH.
+    if (notification.id && !notification.is_read) {
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notification.id ? { ...n, is_read: true } : n))
+      );
+      api.markNotificationRead(notification.id).catch(console.error);
+    }
+    setIsOpen(false);
+    // Deep-link to the Radar page, identifying the target disease via the
+    // query param (the Radar page pre-selects + scrolls to the matching card).
+    const disease = notification.disease_category;
+    router.push(disease ? `/health-risk-radar?disease=${encodeURIComponent(disease)}` : '/health-risk-radar');
+  };
+
   // Hydration Guard: Render a safe placeholder on SSR
   if (!mounted) {
     return (
@@ -48,11 +66,12 @@ export function NotificationBell() {
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setIsOpen(!isOpen)} 
+        data-testid="notification-bell"
         className="p-2 relative rounded-full hover:bg-gray-100 text-gray-600 transition-colors focus:outline-none"
       >
         <Bell className="w-5 h-5 text-slate-700" />
         {unreadCount > 0 && (
-          <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white">
+          <span data-testid="notification-unread-dot" className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
           </span>
         )}
@@ -83,21 +102,32 @@ export function NotificationBell() {
               ) : (
                 notifications.map((notification) => {
                   if (!notification) return null;
+                  const style = getDiseaseStyle(notification.disease_category);
+                  const Icon = style.icon;
                   return (
-                    <div 
-                      key={notification.id || Math.random()} 
-                      className="hover:bg-white/50 transition-colors p-4 border-b border-slate-100/50 last:border-0 flex flex-col"
+                    <button
+                      key={notification.id ?? Math.random()}
+                      data-testid="notification-item"
+                      onClick={() => handleNotificationClick(notification)}
+                      className="w-full text-left hover:bg-white/50 transition-colors p-4 border-b border-slate-100/50 last:border-0 flex items-start gap-3"
                     >
-                      <span className="text-xs font-semibold text-red-600 uppercase tracking-wider mb-1">
-                        {notification.alert_type || "ALERT"}
+                      <span className={`mt-0.5 p-2 rounded-full ${style.badgeClass}`}>
+                        <Icon className="w-4 h-4" style={{ color: style.color }} />
                       </span>
-                      <span className="text-sm font-bold text-gray-900 mb-1">
-                        {notification.title || "Preemptive Order Alert"}
+                      <span className="flex flex-col flex-1 min-w-0">
+                        <span className={`text-sm font-bold ${notification.is_read ? 'text-gray-500' : 'text-gray-900'}`}>
+                          {notification.title || "Preemptive Order Alert"}
+                        </span>
+                        <p className="text-xs text-gray-600 leading-relaxed">
+                          {notification.message || "Action recommended."}
+                        </p>
+                        {notification.alert_type && (
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-1">
+                            {notification.alert_type}
+                          </span>
+                        )}
                       </span>
-                      <p className="text-xs text-gray-600 leading-relaxed">
-                        {notification.message || "Action recommended."}
-                      </p>
-                    </div>
+                    </button>
                   );
                 })
               )}
