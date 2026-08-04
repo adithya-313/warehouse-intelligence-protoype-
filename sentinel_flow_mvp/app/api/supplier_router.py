@@ -1,8 +1,10 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 from app.infrastructure.database import get_database_session
-from app.infrastructure.models import SupplierModel
+from app.infrastructure.models import SupplierModel, PurchaseOrderModel
+from app.api.deps import get_current_tenant
 from app.services.supplier_scorecard_service import generate_financial_scorecard
 from app.domain.schemas import DistributorScorecardResponse, SupplierCreateRequest, SupplierListResponse
 import logging
@@ -10,6 +12,39 @@ import logging
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+from pydantic import BaseModel
+from datetime import date
+from typing import List, Optional
+
+class SupplierOrderLineItem(BaseModel):
+    po_id: str
+    sku_id: str
+    order_date: date
+    expected_delivery_date: date
+    actual_delivery_date: Optional[date] = None
+    status: str
+    ordered_qty: int
+    delivered_qty: int
+    cost_price: float
+    expected_mrp: float
+
+    class Config:
+        orm_mode = True
+        from_attributes = True
+
+@router.get("/{supplier_id}/orders", response_model=List[SupplierOrderLineItem])
+def list_supplier_orders(
+    supplier_id: str,
+    tenant_id: str = Depends(get_current_tenant),
+    db: Session = Depends(get_database_session)
+):
+    """Returns all PO line items for a specific supplier, scoped to the tenant."""
+    orders = db.query(PurchaseOrderModel).filter(
+        PurchaseOrderModel.supplier_id == supplier_id,
+        PurchaseOrderModel.tenant_id == tenant_id
+    ).order_by(desc(PurchaseOrderModel.order_date)).all()
+    
+    return orders
 
 @router.get("/{supplier_id}/scorecard", response_model=DistributorScorecardResponse)
 async def get_supplier_scorecard(
