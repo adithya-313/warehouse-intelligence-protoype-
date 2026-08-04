@@ -1,29 +1,54 @@
 import pytest
 from datetime import date
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
-from app.main import app
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY
+
+from app.infrastructure.models import Base, SupplierModel, PurchaseOrderModel, Tenant
+from app.api.supplier_router import router as supplier_router
 from app.infrastructure.database import get_database_session
-from app.infrastructure.models import SupplierModel, PurchaseOrderModel
+
+@compiles(JSONB, 'sqlite')
+def compile_jsonb_sqlite(type_, compiler, **kw):
+    return 'JSON'
+
+@compiles(ARRAY, 'sqlite')
+def compile_array_sqlite(type_, compiler, **kw):
+    return 'JSON'
 
 @pytest.fixture
-def client(mock_db_session: Session):
-    def _override():
-        yield mock_db_session
-    app.dependency_overrides[get_database_session] = _override
+def sqlite_db_session():
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    session = SessionLocal()
+    yield session
+    session.close()
+
+@pytest.fixture
+def client(sqlite_db_session):
+    app = FastAPI()
+    app.include_router(supplier_router, prefix="/api/v1/suppliers")
+    app.dependency_overrides[get_database_session] = lambda: sqlite_db_session
     with TestClient(app) as c:
         yield c
-    app.dependency_overrides.clear()
 
-def test_supplier_history_endpoint(client: TestClient, mock_db_session: Session):
+def test_supplier_history_endpoint(client: TestClient, sqlite_db_session):
     # Setup data
+    tenant = Tenant(tenant_id="T1", name="Test Tenant")
+    sqlite_db_session.add(tenant)
+    
     supplier1 = SupplierModel(
         supplier_id="SUP-1",
         system_origin="MANUAL",
         industry_vertical="PHARMA",
         industry_specific_metadata={"name": "Fast Supplier"}
     )
-    mock_db_session.add(supplier1)
+    sqlite_db_session.add(supplier1)
     
     supplier2 = SupplierModel(
         supplier_id="SUP-EMPTY",
@@ -31,7 +56,7 @@ def test_supplier_history_endpoint(client: TestClient, mock_db_session: Session)
         industry_vertical="PHARMA",
         industry_specific_metadata={"name": "Empty Supplier"}
     )
-    mock_db_session.add(supplier2)
+    sqlite_db_session.add(supplier2)
     
     po_late = PurchaseOrderModel(
         po_id="PO-LATE-123",
@@ -47,7 +72,7 @@ def test_supplier_history_endpoint(client: TestClient, mock_db_session: Session)
         actual_delivery_date=date(2026, 8, 10),
         status="FULFILLED"
     )
-    mock_db_session.add(po_late)
+    sqlite_db_session.add(po_late)
     
     po_ontime = PurchaseOrderModel(
         po_id="PO-ONTIME-124",
@@ -63,9 +88,9 @@ def test_supplier_history_endpoint(client: TestClient, mock_db_session: Session)
         actual_delivery_date=date(2026, 8, 5),
         status="FULFILLED"
     )
-    mock_db_session.add(po_ontime)
+    sqlite_db_session.add(po_ontime)
     
-    mock_db_session.commit()
+    sqlite_db_session.commit()
 
     headers = {"X-Tenant-ID": "T1"}
     
