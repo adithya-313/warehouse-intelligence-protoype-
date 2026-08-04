@@ -108,3 +108,39 @@ def test_supplier_history_endpoint(client: TestClient, sqlite_db_session):
     res_empty = client.get("/api/v1/suppliers/SUP-EMPTY/orders", headers=headers)
     assert res_empty.status_code == 200
     assert res_empty.json() == []
+    
+    # Test Tenant Isolation
+    tenant2 = Tenant(tenant_id="T2", name="Another Tenant")
+    sqlite_db_session.add(tenant2)
+    
+    po_tenant2 = PurchaseOrderModel(
+        po_id="PO-T2-125",
+        tenant_id="T2",
+        supplier_id="SUP-1",
+        sku_id="SKU-3",
+        ordered_qty=5,
+        delivered_qty=5,
+        cost_price=10.0,
+        expected_mrp=15.0,
+        order_date=date(2026, 8, 2),
+        expected_delivery_date=date(2026, 8, 5),
+        actual_delivery_date=date(2026, 8, 5),
+        status="FULFILLED"
+    )
+    sqlite_db_session.add(po_tenant2)
+    sqlite_db_session.commit()
+    
+    # Requesting as T1 should not see T2's order
+    res_t1_again = client.get("/api/v1/suppliers/SUP-1/orders", headers={"X-Tenant-ID": "T1"})
+    assert res_t1_again.status_code == 200
+    data_t1_again = res_t1_again.json()
+    assert len(data_t1_again) == 2
+    po_ids_t1 = [po["po_id"] for po in data_t1_again]
+    assert "PO-T2-125" not in po_ids_t1
+    
+    # Requesting as T2 should only see T2's order
+    res_t2 = client.get("/api/v1/suppliers/SUP-1/orders", headers={"X-Tenant-ID": "T2"})
+    assert res_t2.status_code == 200
+    data_t2 = res_t2.json()
+    assert len(data_t2) == 1
+    assert data_t2[0]["po_id"] == "PO-T2-125"
