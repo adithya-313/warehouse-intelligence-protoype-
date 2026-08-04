@@ -18,6 +18,15 @@ import { RiskExplainDetails } from '@/components/health-risk/RiskExplainDetails'
 // This is purely cosmetic — it is NOT a tier or severity classification.
 const CHART_COLORS = ['#6366f1', '#0891b2', '#d97706', '#059669', '#dc2626', '#7c3aed'];
 
+// Pill colors per server-computed risk tier — same badge language as the
+// degraded-data pill below. Colors are cosmetic; the label itself is server truth.
+const TIER_BADGE_STYLES: Record<string, string> = {
+  Low: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Moderate: 'bg-amber-50 text-amber-700 border-amber-200',
+  High: 'bg-orange-50 text-orange-700 border-orange-200',
+  Severe: 'bg-rose-50 text-rose-700 border-rose-200',
+};
+
 // Show a friendly "Jan 5" style label for a chart x-axis, falling back to the raw
 // string if the backend ever sends something we cannot parse.
 const formatDate = (iso: string): string => {
@@ -68,8 +77,13 @@ function DiseaseCard({
               </p>
             </div>
             <div className="text-right">
-              {/* TODO(3.0b): render risk_tier here once the backend adds it —
-                  do NOT invent a client-side tier calculation. */}
+              <span
+                className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-medium mb-1 ${
+                  TIER_BADGE_STYLES[score.risk_tier] ?? 'bg-slate-50 text-slate-600 border-slate-200'
+                }`}
+              >
+                {score.risk_tier}
+              </span>
               <p className="text-3xl font-bold text-slate-900">{score.score}</p>
               <p className="text-xs text-slate-400">risk score / 100</p>
             </div>

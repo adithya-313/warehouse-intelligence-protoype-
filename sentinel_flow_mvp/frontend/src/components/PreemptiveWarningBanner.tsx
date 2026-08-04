@@ -6,6 +6,15 @@ import { AlertTriangle, Info } from "lucide-react";
 import { api, HealthRiskCurrentResponse, HealthRiskExplainResponse } from "@/services/api";
 import { RiskExplainDetails } from "@/components/health-risk/RiskExplainDetails";
 
+// Pill colors per server-computed risk tier — same badge language as the
+// degraded-data pill below. Colors are cosmetic; the label itself is server truth.
+const TIER_BADGE_STYLES: Record<string, string> = {
+  Low: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  Moderate: "bg-amber-50 text-amber-700 border-amber-200",
+  High: "bg-orange-50 text-orange-700 border-orange-200",
+  Severe: "bg-rose-50 text-rose-700 border-rose-200",
+};
+
 // ============================================================================
 // PreemptiveWarningBanner — real health-risk signals for this pharmacy.
 //
@@ -80,8 +89,13 @@ export function PreemptiveWarningBanner() {
                       )}
                     </div>
                     <div className="text-right">
-                      {/* TODO(3.0b): render risk_tier here once the backend adds it —
-                          do NOT invent a client-side tier calculation. */}
+                      <span
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-medium mb-1 ${
+                          TIER_BADGE_STYLES[score.risk_tier] ?? "bg-slate-50 text-slate-600 border-slate-200"
+                        }`}
+                      >
+                        {score.risk_tier}
+                      </span>
                       <p className="text-2xl font-bold text-gray-900">{score.score}</p>
                       <p className="text-xs text-gray-500">risk score / 100</p>
                     </div>

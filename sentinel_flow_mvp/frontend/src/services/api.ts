@@ -68,6 +68,8 @@ export interface HealthRiskScore {
 }
 
 export interface HealthRiskCurrentScore extends HealthRiskScore {
+  // "Low" | "Moderate" | "High" | "Severe" — computed server-side, /current only.
+  risk_tier: string;
   // "real_data" | "degraded" — only present on /current.
   data_status: string;
 }
