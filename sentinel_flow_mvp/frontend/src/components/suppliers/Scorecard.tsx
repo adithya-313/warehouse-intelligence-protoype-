@@ -5,11 +5,14 @@ import { motion, useMotionValue, useTransform, useSpring } from 'framer-motion';
 import { TrendingDown, Truck, ShieldAlert, AlertOctagon, CheckCircle2, ShoppingCart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { OrderStockPanel } from '@/components/suppliers/OrderStockPanel';
+import { VendorHistoryPanel } from '@/components/suppliers/VendorHistoryPanel';
+import { History } from 'lucide-react';
 
 export default function Scorecard({ supplierId = "SUPP-001" }: { supplierId?: string }) {
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
 
   // 3D Spatial Parallax Hooks
   const x = useMotionValue(0);
@@ -98,6 +101,13 @@ export default function Scorecard({ supplierId = "SUPP-001" }: { supplierId?: st
               >
                 <ShoppingCart size={16} />
                 Order Stock
+              </button>
+              <button
+                onClick={() => setIsHistoryPanelOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl transition-all active:scale-95 text-sm font-medium shadow-sm"
+              >
+                <History size={16} />
+                View History
               </button>
               <div className={cn(
                 "px-5 py-2 rounded-2xl text-sm font-bold tracking-widest uppercase shadow-sm border",
@@ -199,6 +209,12 @@ export default function Scorecard({ supplierId = "SUPP-001" }: { supplierId?: st
       <OrderStockPanel
         isOpen={isPanelOpen}
         onClose={() => setIsPanelOpen(false)}
+        supplierId={data.supplier_id}
+        supplierName={data.name}
+      />
+      <VendorHistoryPanel
+        isOpen={isHistoryPanelOpen}
+        onClose={() => setIsHistoryPanelOpen(false)}
         supplierId={data.supplier_id}
         supplierName={data.name}
       />
