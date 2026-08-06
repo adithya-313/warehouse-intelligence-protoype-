@@ -23,7 +23,7 @@ celery_application.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    imports=["app.services.worker_tasks", "app.services.lora_training_worker", "app.workers.embedding_tasks", "app.workers.adherence_tasks", "app.tasks.covariate_tasks", "app.tasks.health_risk_tasks"],
+    imports=["app.services.worker_tasks", "app.services.lora_training_worker", "app.workers.embedding_tasks", "app.workers.adherence_tasks", "app.tasks.covariate_tasks", "app.tasks.health_risk_tasks", "app.tasks.purchase_order_tasks"],
     beat_schedule={
         "run-drift-analysis-every-5-minutes": {
             "task": "run_drift_analysis",
@@ -40,6 +40,10 @@ celery_application.conf.update(
         'run-health-risk-ingestion-every-6-hours': {
             'task': 'run_health_risk_ingestion_task',
             'schedule': 21600.0, # 6 hours in seconds
+        },
+        'check-overdue-orders-daily': {
+            'task': 'check_overdue_purchase_orders',
+            'schedule': crontab(hour=9, minute=0),
         },
     },
 )
