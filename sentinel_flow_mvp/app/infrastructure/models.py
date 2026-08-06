@@ -388,6 +388,7 @@ class NotificationModel(Base):
     # Nullable because only health-risk-triggered notifications point at a score;
     # all other alert types (stockouts, system) have no related HealthRiskScoreModel row.
     health_risk_score_id = Column(Integer, nullable=True)
+    reference_id = Column(String, index=True, nullable=True) # Generic string reference for deep links (e.g. po_id)
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
