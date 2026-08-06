@@ -16,16 +16,19 @@
 //        The RAG pipeline should find the matching clinical knowledge and return
 //        it with a verified source citation (DOLO-650).
 //
-//     3. Automated Purchase Order Pipeline:
-//        We simulate a disease wave alert by intercepting the backend network
-//        call and returning a FAKE alert. Then we watch the pharmacist click
-//        "1-Click Approve PO" and verify the success state.
+//     3. Health Risk Banner with Deterministic Mocking:
+//        The POS dashboard shows live risk scores fetched from
+//        /health-risk/current. We intercept that network call (plus the
+//        /health-risk/explain/{id} drill-down) and return a FAKE payload —
+//        one real_data disease and one degraded. We then verify the banner
+//        renders the real score + confidence level and that "See details"
+//        shows the raw contributing factors behind the score.
 //
 //     Why we mock network requests in Test 3:
-//         Disease waves depend on real weather/trend data from external APIs.
-//         We cannot guarantee those APIs return data during a test run.
-//         By mocking, we create a deterministic test that always passes
-//         regardless of external conditions.
+//         Real risk scores are computed by a background Celery scoring job
+//         that depends on live weather/trend data, so /current may return an
+//         empty list during a test run. By mocking, we create a deterministic
+//         test that always passes regardless of external conditions.
 // ============================================================================
 
 import { test, expect, Page, Route } from '@playwright/test';

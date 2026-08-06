@@ -12,15 +12,6 @@ import {
 } from './schemas';
 import { z, ZodSchema } from 'zod';
 
-export interface DiseaseWaveAlert {
-  sku_id: string;
-  sku_name: string;
-  probability_score: number;
-  expected_volume: number;
-  recommended_supplier_id: string;
-  warning_message: string;
-}
-
 export interface NotificationResponse {
   id: number;
   title: string;
@@ -34,12 +25,6 @@ export interface NotificationResponse {
   disease_category?: string | null;
   is_read: boolean;
   created_at: string;
-}
-
-export interface AutoPOResponse {
-  po_id: string;
-  status: string;
-  message: string;
 }
 
 export interface PurchaseOrderLineItem {
@@ -279,33 +264,6 @@ export const api = {
 
   listAdapters: () =>
     request('GET', '/api/v1/adapters', z.array(AdapterResponse)),
-
-  async fetchWaveAlerts(): Promise<DiseaseWaveAlert[]> {
-    try {
-      const response = await fetch(`/api/v1/procurement/disease-wave-alerts`, {
-        headers: { 'X-Tenant-ID': DEFAULT_TENANT },
-        cache: 'no-store'
-      });
-      if (!response.ok) return [];
-      return await response.json();
-    } catch (error) {
-      console.error("Failed to fetch wave alerts:", error);
-      return []; // Graceful degradation
-    }
-  },
-
-  async createAutoPO(sku_id: string, supplier_id: string, quantity: number): Promise<AutoPOResponse> {
-    const response = await fetch(`/api/v1/procurement/auto-po`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'X-Tenant-ID': DEFAULT_TENANT 
-      },
-      body: JSON.stringify({ sku_id, supplier_id, quantity }),
-    });
-    if (!response.ok) throw new Error("Failed to create Purchase Order");
-    return await response.json();
-  },
 
   async fetchNotifications(): Promise<NotificationResponse[]> {
     try {
