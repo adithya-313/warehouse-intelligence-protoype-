@@ -48,7 +48,7 @@ export function NotificationBell() {
     if (notification.alert_type === 'OVERDUE_ORDER') {
       // Deep link to procurement page (optionally with po_id if we have one)
       const po_id = notification.reference_id;
-      router.push(po_id ? `/procurement?po_id=${encodeURIComponent(po_id)}` : '/procurement');
+      router.push(po_id ? `/orders?po_id=${encodeURIComponent(po_id)}` : '/orders');
       return;
     }
 
