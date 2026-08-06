@@ -28,6 +28,8 @@ export interface NotificationResponse {
   alert_type: string;
   // Deep-link to the risk score this alert points at (null for SYSTEM/non-risk alerts).
   health_risk_score_id?: number | null;
+  // External reference ID (e.g. PO ID, SKU ID)
+  reference_id?: string | null;
   // Disease this alert concerns (derived server-side from the linked score row).
   disease_category?: string | null;
   is_read: boolean;

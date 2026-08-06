@@ -44,6 +44,14 @@ export function NotificationBell() {
       api.markNotificationRead(notification.id).catch(console.error);
     }
     setIsOpen(false);
+    
+    if (notification.alert_type === 'OVERDUE_ORDER') {
+      // Deep link to procurement page (optionally with po_id if we have one)
+      const po_id = notification.reference_id;
+      router.push(po_id ? `/procurement?po_id=${encodeURIComponent(po_id)}` : '/procurement');
+      return;
+    }
+
     // Deep-link to the Radar page, identifying the target disease via the
     // query param (the Radar page pre-selects + scrolls to the matching card).
     const disease = notification.disease_category;

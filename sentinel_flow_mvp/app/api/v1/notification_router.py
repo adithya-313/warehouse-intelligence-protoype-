@@ -19,6 +19,8 @@ class NotificationResponse(BaseModel):
     alert_type: str
     # Deep-link the notification to a health risk score (null for non-risk alerts).
     health_risk_score_id: Optional[int] = None
+    # Generic string reference for deep-linking (e.g., po_id for overdue orders).
+    reference_id: Optional[str] = None
     # Disease the linked score belongs to. DERIVED at query time from the
     # health_risk_scores row (see get_notifications) rather than stored on
     # the notification — the score row is the single source of truth.
@@ -54,6 +56,7 @@ def get_notifications(tenant_id: str = Depends(get_current_tenant), db: Session 
             message=n.message,
             alert_type=n.alert_type,
             health_risk_score_id=n.health_risk_score_id,
+            reference_id=n.reference_id,
             is_read=n.is_read,
             created_at=n.created_at,
             disease_category=disease_by_score_id.get(n.health_risk_score_id),
