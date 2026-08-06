@@ -23,7 +23,7 @@ def check_overdue_purchase_orders():
         # Query orders that are not fulfilled/failed and have passed their expected delivery date
         overdue_orders = db.query(
             PurchaseOrderModel, 
-            SupplierModel.system_origin,  # We just need some supplier info, or better yet, join to get names
+            SupplierModel.industry_specific_metadata,
             MedicationModel.sku_id
         ).join(
             SupplierModel, PurchaseOrderModel.supplier_id == SupplierModel.supplier_id
@@ -36,7 +36,7 @@ def check_overdue_purchase_orders():
         
         logger.info(f"Found {len(overdue_orders)} overdue purchase orders")
 
-        for po, supplier_origin, sku in overdue_orders:
+        for po, supplier_metadata, sku in overdue_orders:
             days_late = (today - po.expected_delivery_date).days
             
             if days_late < 1:
@@ -62,10 +62,15 @@ def check_overdue_purchase_orders():
             if existing_notifications_count >= target_tier:
                 continue
 
+            # Extract vendor name from metadata
+            supplier_name = "Unknown Supplier"
+            if supplier_metadata and isinstance(supplier_metadata, dict):
+                supplier_name = supplier_metadata.get("name", "Unknown Supplier")
+
             # We need to send a new notification
             title = f"Overdue Order: {po.po_id}"
             message = (
-                f"Your order for {po.ordered_qty}x {po.sku_id} from {po.supplier_id} "
+                f"Your order for {po.ordered_qty}x {po.sku_id} from {supplier_name} "
                 f"is {days_late} days past its expected delivery date."
             )
 

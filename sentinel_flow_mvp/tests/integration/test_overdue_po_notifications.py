@@ -39,7 +39,12 @@ def setup_overdue_po_data(sqlite_db_session: Session):
     db.merge(tenant_b)
 
     # Setup Supplier and Medication
-    supplier = SupplierModel(supplier_id="SUPP-OVERDUE-1", system_origin="TALLY", industry_vertical="PHARMA")
+    supplier = SupplierModel(
+        supplier_id="SUPP-OVERDUE-1", 
+        system_origin="TALLY", 
+        industry_vertical="PHARMA",
+        industry_specific_metadata={"name": "PharmaCorp Ltd"}
+    )
     db.merge(supplier)
     
     from sqlalchemy import text
@@ -88,6 +93,8 @@ def test_escalation_and_duplicate_prevention(sqlite_db_session: Session, setup_o
         check_overdue_purchase_orders()
         
         notifications = db.query(NotificationModel).filter_by(reference_id=po_id).all()
+        print(f"\n[EVIDENCE] Step 1 (1 day late) - Notification count: {len(notifications)}")
+        for n in notifications: print(f"  -> {n.message}")
         assert len(notifications) == 1
         assert "1 days past" in notifications[0].message
         assert notifications[0].tenant_id == tenant_a
@@ -96,6 +103,7 @@ def test_escalation_and_duplicate_prevention(sqlite_db_session: Session, setup_o
         check_overdue_purchase_orders()
         
         notifications = db.query(NotificationModel).filter_by(reference_id=po_id).all()
+        print(f"[EVIDENCE] Step 2 (same day rerun) - Notification count: {len(notifications)}")
         assert len(notifications) == 1 # Duplicate prevention worked!
         
         # Step 3: PO is 3 days overdue (Tier 2)
@@ -106,6 +114,8 @@ def test_escalation_and_duplicate_prevention(sqlite_db_session: Session, setup_o
         check_overdue_purchase_orders()
         
         notifications = db.query(NotificationModel).filter_by(reference_id=po_id).order_by(NotificationModel.id).all()
+        print(f"[EVIDENCE] Step 3 (3 days late) - Notification count: {len(notifications)}")
+        for n in notifications: print(f"  -> {n.message}")
         assert len(notifications) == 2 # Second notification created
         assert "3 days past" in notifications[1].message
         
@@ -117,6 +127,8 @@ def test_escalation_and_duplicate_prevention(sqlite_db_session: Session, setup_o
         check_overdue_purchase_orders()
         
         notifications = db.query(NotificationModel).filter_by(reference_id=po_id).order_by(NotificationModel.id).all()
+        print(f"[EVIDENCE] Step 4 (7 days late) - Notification count: {len(notifications)}")
+        for n in notifications: print(f"  -> {n.message}")
         assert len(notifications) == 3 # Third notification created
         assert "7 days past" in notifications[2].message
         
@@ -128,6 +140,7 @@ def test_escalation_and_duplicate_prevention(sqlite_db_session: Session, setup_o
         check_overdue_purchase_orders()
         
         notifications = db.query(NotificationModel).filter_by(reference_id=po_id).order_by(NotificationModel.id).all()
+        print(f"[EVIDENCE] Step 5 (10 days late rerun) - Notification count: {len(notifications)}")
         assert len(notifications) == 3 # Max 3 notifications per PO!
 
 def test_tenant_isolation(sqlite_db_session: Session, setup_overdue_po_data):
@@ -144,9 +157,11 @@ def test_tenant_isolation(sqlite_db_session: Session, setup_overdue_po_data):
         
         # Ensure Tenant A has no notifications
         notifs_a = db.query(NotificationModel).filter_by(tenant_id=tenant_a).all()
+        print(f"\n[EVIDENCE] Tenant A notification count: {len(notifs_a)}")
         assert len(notifs_a) == 0
         
         # Ensure Tenant B got their notification
         notifs_b = db.query(NotificationModel).filter_by(tenant_id=tenant_b).all()
+        print(f"[EVIDENCE] Tenant B notification count: {len(notifs_b)} for PO: {notifs_b[0].reference_id}")
         assert len(notifs_b) == 1
         assert notifs_b[0].reference_id == po_id_b
