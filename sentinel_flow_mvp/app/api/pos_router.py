@@ -513,6 +513,8 @@ def get_transaction_history(
     """
     receipts = db.query(SaleReceiptModel).options(
         selectinload(SaleReceiptModel.lines)
+    ).filter(
+        SaleReceiptModel.tenant_id == tenant_id  # Enforce multi-tenant isolation: only return receipts for this tenant
     ).order_by(
         SaleReceiptModel.timestamp.desc()
     ).limit(50).all()
