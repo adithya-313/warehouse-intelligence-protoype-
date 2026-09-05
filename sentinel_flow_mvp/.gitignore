@@ -38,5 +38,8 @@ next-env.d.ts
 # Application log / cache
 graphify-out/
 
+# Celery beat schedule (auto-generated, don't track)
+celerybeat-schedule
+
 # Secrets vault (contains API keys, tokens)
 .secrets.json
