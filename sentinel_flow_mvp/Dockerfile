@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     gcc \
     git \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # ISOLATED AI LAYER: Permanent cache for heavy ML libraries
