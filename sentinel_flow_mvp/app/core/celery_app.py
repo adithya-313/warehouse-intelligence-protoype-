@@ -23,7 +23,7 @@ celery_application.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    imports=["app.services.worker_tasks", "app.services.lora_training_worker", "app.workers.embedding_tasks", "app.workers.adherence_tasks", "app.tasks.covariate_tasks", "app.tasks.health_risk_tasks", "app.tasks.purchase_order_tasks"],
+    imports=["app.services.worker_tasks", "app.services.lora_training_worker", "app.workers.embedding_tasks", "app.workers.adherence_tasks", "app.tasks.covariate_tasks", "app.tasks.health_risk_tasks", "app.tasks.purchase_order_tasks", "app.tasks.backup_tasks"],
     beat_schedule={
         "run-drift-analysis-every-5-minutes": {
             "task": "run_drift_analysis",
@@ -44,6 +44,10 @@ celery_application.conf.update(
         'check-overdue-orders-daily': {
             'task': 'check_overdue_purchase_orders',
             'schedule': crontab(hour=9, minute=0),
+        },
+        'nightly-database-backup': {
+            'task': 'nightly_backup_to_drive',
+            'schedule': crontab(hour=2, minute=0),  # 2 AM UTC, low-traffic time
         },
     },
 )
