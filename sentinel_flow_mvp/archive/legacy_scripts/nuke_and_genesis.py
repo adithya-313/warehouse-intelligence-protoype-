@@ -1,3 +1,8 @@
+# ARCHIVED — DO NOT RUN.
+# This script was used once during initial project setup (V1 Genesis, June 2026)
+# and destroys git history / force-pushes. It has been moved here and is no
+# longer part of any active workflow. Kept only for historical reference.
+
 import os
 import shutil
 import subprocess

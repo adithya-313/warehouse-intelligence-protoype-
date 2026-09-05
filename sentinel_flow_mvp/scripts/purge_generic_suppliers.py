@@ -1,5 +1,6 @@
 import sys
 import os
+import argparse
 
 # Ensure the app module can be found
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -8,6 +9,43 @@ from app.infrastructure.database import SessionLocal
 from app.infrastructure.models import SupplierModel, TelemetryModel
 from app.infrastructure.db.models import LoRAAdapterRegistry
 from sqlalchemy import not_, select
+
+# This guard prevents accidental execution against production databases.
+# This script deletes supplier and telemetry records not on a hardcoded
+# whitelist and should only be run against local dev databases.
+def check_safety():
+    parser = argparse.ArgumentParser(
+        description="Delete suppliers and related data not on a hardware whitelist. "
+                    "This deletes records from multiple tables and should only run "
+                    "against a local dev database."
+    )
+    parser.add_argument(
+        "--i-know-what-im-doing",
+        action="store_true",
+        help="Required flag to confirm you understand this deletes supplier and telemetry records."
+    )
+    args = parser.parse_args()
+
+    if not args.i_know_what_im_doing:
+        print("WARNING: This script deletes supplier and related telemetry records.")
+        print("It should ONLY be run against a local dev database.")
+        print("To proceed, re-run with: python purge_generic_suppliers.py --i-know-what-im-doing")
+        sys.exit(1)
+
+    # Check DATABASE_URL doesn't look like production
+    db_url = os.environ.get("DATABASE_URL", "")
+    if db_url:
+        try:
+            host_part = db_url.split("@")[-1].split("/")[0]
+            hostname = host_part.split(":")[0]
+            allowed_hosts = ["localhost", "127.0.0.1", "timescaledb"]
+            if hostname not in allowed_hosts:
+                print(f"ERROR: DATABASE_URL hostname '{hostname}' is not a local/dev host.")
+                print(f"Allowed hosts: {allowed_hosts}")
+                print("This script should only run against local dev databases.")
+                sys.exit(1)
+        except Exception:
+            pass
 
 ALLOWED_HARDWARE_SUPPLIERS = ["NVIDIA", "Intel", "AMD", "ASUS", "TSMC", "NVIDIA Corporation", "ASUS Global"]
 
@@ -56,4 +94,5 @@ def enforce_hardware_domain():
         db.close()
 
 if __name__ == "__main__":
+    check_safety()
     enforce_hardware_domain()

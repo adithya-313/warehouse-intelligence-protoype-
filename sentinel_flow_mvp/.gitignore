@@ -34,6 +34,8 @@ node_modules/
 frontend/.next/
 *.tsbuildinfo
 next-env.d.ts
+frontend/test-results/
+dev-server.log
 
 # Application log / cache
 graphify-out/
