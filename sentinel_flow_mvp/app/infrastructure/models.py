@@ -68,7 +68,14 @@ class SupplierModel(Base):
 
 
 class TelemetryModel(Base):
-    """Represents the 'inventory_telemetry' TimescaleDB hypertable.
+    """Represents the 'inventory_telemetry' table.
+
+    This table is designed as a future TimescaleDB hypertable for time-series
+    telemetry data. As of 2026-09-05, the TimescaleDB extension is NOT installed
+    in the database and the table is EMPTY (0 rows). Conversion to a hypertable
+    is deferred until real data volume justifies it — the existing btree index
+    on (recorded_at, supplier_id) is sufficient for current query patterns.
+    See engineering audit for full reasoning.
 
     Attributes:
         recorded_at: Timestamp of the telemetry record.

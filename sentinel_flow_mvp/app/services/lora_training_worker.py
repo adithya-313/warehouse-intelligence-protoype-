@@ -93,25 +93,23 @@ def generate_file_hash(filepath: str) -> str:
 # ======================================================================
 
 def _ensure_gpu_infrastructure() -> None:
-    """Crash the task if no CUDA GPU is available."""
-    if not torch.cuda.is_available():
-        logger.error(
-            "CRITICAL: CUDA GPU not detected. "
-            "Cannot execute ML training on CPU. Halting."
+    """Log available compute device (GPU or CPU). Does not crash on CPU-only environments."""
+    if torch.cuda.is_available():
+        device_count: int = torch.cuda.device_count()
+        device_name: str = torch.cuda.get_device_name(0)
+        vram_gb: float = torch.cuda.get_device_properties(0).total_memory / 1e9
+        logger.info(
+            "GPU infrastructure validated: %d device(s) available. "
+            "Using '%s' with %.2f GB VRAM.",
+            device_count,
+            device_name,
+            vram_gb,
         )
-        raise SystemError("CUDA GPU required for LoRA training.")
-
-    device_count: int = torch.cuda.device_count()
-    device_name: str = torch.cuda.get_device_name(0)
-    vram_gb: float = torch.cuda.get_device_properties(0).total_memory / 1e9
-
-    logger.info(
-        "GPU infrastructure validated: %d device(s) available. "
-        "Using '%s' with %.2f GB VRAM.",
-        device_count,
-        device_name,
-        vram_gb,
-    )
+    else:
+        logger.warning(
+            "No CUDA GPU detected. Running LoRA training on CPU. "
+            "This will be slower than GPU training."
+        )
 
 
 # ======================================================================
@@ -168,7 +166,11 @@ def train_lora_adapter(supplier_id: str) -> str:
     _ensure_gpu_infrastructure()
 
     adapter_id: str = str(uuid4())
-    device: torch.device = torch.device("cuda:0")
+    # Use GPU if available, fall back to CPU otherwise.
+    # This prevents a crash on CPU-only environments (e.g. the Dockerfile installs
+    # CPU-only PyTorch) and will automatically use GPU if the environment ever
+    # changes to a CUDA-enabled PyTorch build.
+    device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module_name = "demand_forecast"
 
     logger.info(

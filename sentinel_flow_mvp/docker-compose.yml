@@ -63,13 +63,10 @@ services:
     # Live-mount host source so Uvicorn --reload picks up changes without --build
     volumes:
       - .:/app
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+    # GPU reservation removed: PyTorch is installed CPU-only (see Dockerfile line 19).
+    # No code path currently benefits from GPU. Reintroduce if switching to a
+    # CUDA-enabled torch build (change Dockerfile pip install torch --index-url
+    # to a cu118/cu121 index) and adding GPU-accelerated inference.
     depends_on:
       timescaledb:
         condition: service_healthy
@@ -87,13 +84,7 @@ services:
     # Live-mount host source so code changes apply on `docker compose restart worker`
     volumes:
       - .:/app
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+    # GPU reservation removed: same reason as api service — CPU-only PyTorch.
     depends_on:
       timescaledb:
         condition: service_healthy
