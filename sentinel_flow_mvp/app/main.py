@@ -41,6 +41,7 @@ from app.api.supplier_router import router as supplier_router
 from app.api.purchase_order_router import router as purchase_order_router
 from app.api.v1.procurement_router import router as procurement_router
 from app.api.v1.notification_router import router as notif_router
+from app.api.v1.audit_log_router import router as audit_log_router
 from app.core.config import get_application_settings
 from app.core.metrics import get_metrics_app
 from app.domain.schemas import (
@@ -328,6 +329,7 @@ def create_application() -> FastAPI:
     application_instance.include_router(settings.router, prefix="/api/v1/settings", tags=["Tenant Settings"])
     application_instance.include_router(inventory.router, prefix="/api/v1/inventory", tags=["Inventory"])
     application_instance.include_router(triage.router, prefix="/api/v1/inventory", tags=["Inventory"])
+    application_instance.include_router(audit_log_router, prefix="/api/v1/audit-logs", tags=["Audit Logs"])
 
     # Mount the Prometheus metrics endpoint at /metrics
     # This allows Prometheus to scrape metrics from the API
