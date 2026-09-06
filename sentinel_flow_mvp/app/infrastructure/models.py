@@ -583,9 +583,73 @@ class DrugBrandAlias(Base):
 
     __table_args__ = (
         Index(
-            'ix_drug_brand_aliases_trgm', 
-            'alias_text', 
-            postgresql_using='gin', 
+            'ix_drug_brand_aliases_trgm',
+            'alias_text',
+            postgresql_using='gin',
             postgresql_ops={'alias_text': 'gin_trgm_ops'}
         ),
     )
+
+
+# ==========================================
+# AUDIT LOG TABLE
+# ==========================================
+
+class AuditLogModel(Base):
+    """Immutable audit trail that records every mutating action in the system.
+
+    Beginner Note — What is an "audit log"?
+
+        An audit log is a diary of everything important that happened in the
+        system. Every time someone creates, updates, or deletes a business
+        record (like a purchase order, a medication batch, or a patient
+        record), we write a row here so that administrators can later review
+        who did what, when, and what the data looked like before and after
+        the change.
+
+        Think of it like a security camera for the database: it doesn't
+        prevent anything, but if something goes wrong, you can rewind the
+        tape and see exactly what happened.
+
+    Why does this table exist?
+
+        Regulatory compliance (drug tracking), debugging production issues,
+        and accountability all require a clear history of data changes. This
+        table provides that history without requiring complex database triggers
+        or changes to every endpoint.
+
+    How do services write to it?
+
+        Services call the helper function ``log_audit_event()`` from
+        ``app/services/audit_service.py`` just BEFORE their own ``db.commit()``.
+        The audit entry and the real business change share the same database
+        transaction, so they either both succeed or both fail — never a
+        situation where the audit log says something happened but the data
+        doesn't reflect it.
+
+    Attributes:
+        id: Auto-incrementing primary key.
+        timestamp: When the action occurred (server default: now).
+        tenant_id: Which pharmacy/organization performed this action.
+        entity_type: What kind of record was changed (e.g. "purchase_order").
+        entity_id: The specific record's ID (e.g. "PO-abc123").
+        action_type: What happened — "CREATE", "UPDATE", or "DELETE".
+        old_value: JSON snapshot of the record BEFORE the change. Null for
+            CREATE actions (there was no previous state).
+        new_value: JSON snapshot of the record AFTER the change. Null for
+            DELETE actions (there is no remaining state).
+        extra_metadata: Any additional context worth capturing (e.g. the
+            API endpoint that triggered the change, IP address, etc.).
+    """
+
+    __tablename__ = "audit_logs"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    tenant_id = Column(String, ForeignKey("tenants.tenant_id"), nullable=False, index=True)
+    entity_type = Column(String, nullable=False, index=True)
+    entity_id = Column(String, nullable=False, index=True)
+    action_type = Column(String, nullable=False)
+    old_value = Column(JSON, nullable=True)
+    new_value = Column(JSON, nullable=True)
+    extra_metadata = Column(JSON, nullable=True)

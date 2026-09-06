@@ -8,6 +8,7 @@ from app.infrastructure.database import get_database_session
 from app.infrastructure.models import MedicationModel, PurchaseOrderModel, Tenant, SupplierModel
 from app.domain.schemas import PurchaseOrderBulkCreate, PurchaseOrderReceiveBulk
 from app.api.dependencies import get_current_tenant
+from app.services.audit_service import log_audit_event
 import logging
 
 router = APIRouter()
@@ -166,6 +167,27 @@ def create_bulk_purchase_order(
             )
             db.add(new_po)
 
+        # Audit log: capture the new PO creation. Placed before commit so
+        # this audit row and the PO rows share the same transaction — they
+        # either both succeed or both fail.
+        log_audit_event(
+            db=db,
+            tenant_id=tenant.tenant_id,
+            entity_type="purchase_order",
+            entity_id=po_id,
+            action_type="CREATE",
+            old_value=None,
+            new_value={
+                "po_id": po_id,
+                "supplier_id": payload.supplier_id,
+                "items": [
+                    {"sku_id": item.sku_id.upper(), "ordered_qty": item.ordered_qty}
+                    for item in payload.items
+                ],
+                "status": "SUBMITTED",
+            },
+        )
+
         db.commit()
         return {
             "po_id": po_id,
@@ -206,6 +228,16 @@ def receive_bulk_purchase_order(
 
     delivery_map = {item.sku_id.upper(): item.delivered_qty for item in payload.items}
 
+    # Capture old state BEFORE any changes, so the audit log records
+    # what the data looked like before this receive action.
+    old_states = []
+    for po in po_items:
+        old_states.append({
+            "sku_id": po.sku_id,
+            "delivered_qty": po.delivered_qty or 0,
+            "status": po.status,
+        })
+
     try:
         overall_status = "FULFILLED"
         for po in po_items:
@@ -214,22 +246,43 @@ def receive_bulk_purchase_order(
                 continue
 
             po.actual_delivery_date = payload.actual_delivery_date
-            
+
             # Make delivered_qty additive to support multiple partial shipments
             current_delivered = po.delivered_qty or 0
             po.delivered_qty = current_delivered + delivered
-            
+
             # Cap delivered_qty at ordered_qty if over-delivered so we don't corrupt the number
             if po.delivered_qty > po.ordered_qty:
                 logger.warning(f"Over-delivery detected for PO {po.po_id}, SKU {po.sku_id}. Capping at ordered_qty.")
                 po.delivered_qty = po.ordered_qty
-                
+
             # Make status dynamic based on true delivery state
             if po.delivered_qty < po.ordered_qty:
                 po.status = "PARTIAL"
                 overall_status = "PARTIAL"
             else:
                 po.status = "FULFILLED"
+
+        # Capture new state AFTER changes for the audit log.
+        new_states = []
+        for po in po_items:
+            new_states.append({
+                "sku_id": po.sku_id,
+                "delivered_qty": po.delivered_qty or 0,
+                "status": po.status,
+            })
+
+        # Audit log: capture the PO receive action. Placed before commit so
+        # this audit row and the PO updates share the same transaction.
+        log_audit_event(
+            db=db,
+            tenant_id=po_items[0].tenant_id,
+            entity_type="purchase_order",
+            entity_id=payload.po_id,
+            action_type="UPDATE",
+            old_value={"items": old_states},
+            new_value={"items": new_states, "actual_delivery_date": str(payload.actual_delivery_date)},
+        )
 
         db.commit()
         return {
