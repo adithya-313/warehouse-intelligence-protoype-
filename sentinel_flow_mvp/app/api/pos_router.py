@@ -13,6 +13,7 @@ from app.infrastructure.models import (
     Patient
 )
 from app.api.dependencies import get_current_tenant
+from app.services.audit_service import log_audit_event
 
 # Import the Redis-based transactional guards (idempotency, velocity, inventory locks)
 from app.core.redis_client import (
@@ -390,6 +391,20 @@ async def process_checkout(
                 db.flush()
                 resolvedPatientId = newlyCreatedPatient.patient_id
 
+                log_audit_event(
+                    db=db,
+                    tenant_id=tenant_id,
+                    entity_type="patient",
+                    entity_id=resolvedPatientId,
+                    action_type="CREATE",
+                    old_value=None,
+                    new_value={
+                        "name": payload.customer_name or "Unknown",
+                        "phone_number": payload.customer_phone,
+                    },
+                    extra_metadata={"endpoint": "/api/v1/pos/checkout"},
+                )
+
         # 3. Create the empty receipt header FIRST so it has a row in the DB.
         newReceiptRecord = SaleReceiptModel(
             id=generatedReceiptId,
@@ -400,6 +415,21 @@ async def process_checkout(
         )
         db.add(newReceiptRecord)
         db.flush()
+
+        log_audit_event(
+            db=db,
+            tenant_id=tenant_id,
+            entity_type="sale_receipt",
+            entity_id=generatedReceiptId,
+            action_type="CREATE",
+            old_value=None,
+            new_value={
+                "total_amount_inr": 0,
+                "payment_method": payload.payment_method.value,
+                "patient_id": resolvedPatientId,
+            },
+            extra_metadata={"endpoint": "/api/v1/pos/checkout"},
+        )
 
         # 4. Iterate through each item in the cart to validate stock and calculate totals
         for cartItem in payload.items:
@@ -425,7 +455,19 @@ async def process_checkout(
                 )
 
             # Deduct the inventory quantity safely
+            old_available_quantity = currentBatchInventory.available_quantity
             currentBatchInventory.available_quantity -= cartItem.quantity
+
+            log_audit_event(
+                db=db,
+                tenant_id=tenant_id,
+                entity_type="medication_batch",
+                entity_id=cartItem.batch_id,
+                action_type="UPDATE",
+                old_value={"available_quantity": old_available_quantity},
+                new_value={"available_quantity": currentBatchInventory.available_quantity},
+                extra_metadata={"endpoint": "/api/v1/pos/checkout", "sku_id": cartItem.sku_id},
+            )
             
             # Calculate the financial contribution of this line item
             lineItemTotalCost = cartItem.quantity * cartItem.price
@@ -444,6 +486,17 @@ async def process_checkout(
 
         # 5. Update the receipt header with the final calculated total
         newReceiptRecord.total_amount_inr = totalTransactionAmount
+
+        log_audit_event(
+            db=db,
+            tenant_id=tenant_id,
+            entity_type="sale_receipt",
+            entity_id=generatedReceiptId,
+            action_type="UPDATE",
+            old_value={"total_amount_inr": 0},
+            new_value={"total_amount_inr": totalTransactionAmount},
+            extra_metadata={"endpoint": "/api/v1/pos/checkout"},
+        )
 
         # 6. Pragmatic Outbox Pattern: Save an event for background workers (Kafka/Analytics)
         # By saving this inside the exact same database transaction, we guarantee we never

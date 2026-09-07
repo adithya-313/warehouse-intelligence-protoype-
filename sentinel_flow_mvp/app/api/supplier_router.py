@@ -7,6 +7,7 @@ from app.infrastructure.models import SupplierModel, PurchaseOrderModel
 from app.api.dependencies import get_current_tenant
 from app.services.supplier_scorecard_service import generate_financial_scorecard
 from app.domain.schemas import DistributorScorecardResponse, SupplierCreateRequest, SupplierListResponse
+from app.services.audit_service import log_audit_event
 import logging
 
 router = APIRouter()
@@ -139,6 +140,23 @@ def onboard_supplier(
             industry_specific_metadata=meta,
         )
         db.add(new_supplier)
+
+        log_audit_event(
+            db=db,
+            tenant_id="system_admin",
+            entity_type="supplier",
+            entity_id=new_id,
+            action_type="CREATE",
+            old_value=None,
+            new_value={
+                "name": payload.name,
+                "contact_email": payload.contact_email,
+                "industry_vertical": payload.industry_vertical,
+                "system_origin": "USER_PORTAL",
+            },
+            extra_metadata={"endpoint": "/api/v1/suppliers"},
+        )
+
         db.commit()
     except Exception as e:
         db.rollback()
