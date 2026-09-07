@@ -265,6 +265,8 @@ export default function AuditLogPage() {
             <option value="purchase_order">Purchase Order</option>
             <option value="medication_batch">Medication Batch</option>
             <option value="patient">Patient</option>
+            <option value="sale_receipt">Sale Receipt</option>
+            <option value="supplier">Supplier</option>
           </select>
 
           <select
