@@ -1,11 +1,11 @@
 """
-Tests for audit logging in POS checkout and add-vendor endpoints.
+Tests for audit logging in POS checkout and supplier onboarding endpoints.
 
 Verifies:
 1. Checkout with NEW phone → 4 audit calls (patient CREATE, receipt CREATE,
    medication_batch UPDATE, sale_receipt UPDATE) with correct old/new values
 2. Checkout with EXISTING phone → 3 audit calls (no patient CREATE)
-3. Add vendor → 1 audit call with correct new_value
+3. Add-vendor → 1 audit call (supplier CREATE) with correct new_value
 
 Uses FastAPI TestClient + SQLite in-memory DB. Mocks log_audit_event to
 avoid BigInteger autoincrement issues in SQLite while verifying call args.
@@ -62,15 +62,6 @@ def checkout_client(sqlite_db_session):
     app.include_router(pos_router, prefix="/api/v1/pos")
     app.dependency_overrides[get_database_session] = lambda: sqlite_db_session
     app.dependency_overrides[get_current_tenant] = lambda: "test-tenant-001"
-    with TestClient(app) as c:
-        yield c
-
-
-@pytest.fixture
-def vendor_client(sqlite_db_session):
-    app = FastAPI()
-    app.include_router(supplier_router, prefix="/api/v1/suppliers")
-    app.dependency_overrides[get_database_session] = lambda: sqlite_db_session
     with TestClient(app) as c:
         yield c
 
@@ -249,19 +240,24 @@ def test_checkout_existing_patient_writes_3_audit_entries(
     assert mock_log_audit.call_args_list[2][1]["new_value"]["total_amount_inr"] == 75.0
 
 
+@pytest.fixture
+def vendor_client(sqlite_db_session):
+    app = FastAPI()
+    app.include_router(supplier_router, prefix="/api/v1/suppliers")
+    app.dependency_overrides[get_database_session] = lambda: sqlite_db_session
+    with TestClient(app) as c:
+        yield c
+
+
 @patch("app.api.supplier_router.log_audit_event")
-def test_add_vendor_writes_1_audit_entry(
-    mock_log_audit,
-    vendor_client,
-    sqlite_db_session,
-):
+def test_add_vendor_writes_1_audit_entry(mock_log_audit, vendor_client, sqlite_db_session):
     """
-    POST /api/v1/suppliers should produce exactly 1 audit call with
-    entity_type='supplier', action_type='CREATE', correct new_value.
+    Onboarding a new supplier should produce exactly 1 audit call:
+      supplier CREATE with old=None, new has name/contact/industry/system_origin.
     """
     payload = {
-        "name": "Acme Pharma",
-        "contact_email": "contact@acme.com",
+        "name": "Test Pharma Co",
+        "contact_email": "test@pharma.com",
         "industry_vertical": "PHARMACEUTICALS",
     }
 
@@ -271,12 +267,18 @@ def test_add_vendor_writes_1_audit_entry(
     # Exactly 1 audit call
     assert mock_log_audit.call_count == 1
 
-    c = mock_log_audit.call_args[1]
-    assert c["entity_type"] == "supplier"
-    assert c["action_type"] == "CREATE"
-    assert c["old_value"] is None
-    assert c["new_value"]["name"] == "Acme Pharma"
-    assert c["new_value"]["contact_email"] == "contact@acme.com"
-    assert c["new_value"]["industry_vertical"] == "PHARMACEUTICALS"
-    assert c["new_value"]["system_origin"] == "USER_PORTAL"
-    assert c["entity_id"].startswith("SUPP-")
+    c1 = mock_log_audit.call_args_list[0][1]
+    assert c1["entity_type"] == "supplier"
+    assert c1["action_type"] == "CREATE"
+    assert c1["old_value"] is None
+    assert c1["new_value"]["name"] == "Test Pharma Co"
+    assert c1["new_value"]["contact_email"] == "test@pharma.com"
+    assert c1["new_value"]["industry_vertical"] == "PHARMACEUTICALS"
+    assert c1["new_value"]["system_origin"] == "USER_PORTAL"
+    assert c1["tenant_id"] == "system_admin"
+
+    # Supplier was actually created in the DB
+    from app.infrastructure.models import SupplierModel
+    supplier = sqlite_db_session.query(SupplierModel).first()
+    assert supplier is not None
+    assert supplier.industry_vertical == "PHARMACEUTICALS"

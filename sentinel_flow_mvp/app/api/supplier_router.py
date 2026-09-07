@@ -6,8 +6,8 @@ from app.infrastructure.database import get_database_session
 from app.infrastructure.models import SupplierModel, PurchaseOrderModel
 from app.api.dependencies import get_current_tenant
 from app.services.supplier_scorecard_service import generate_financial_scorecard
-from app.domain.schemas import DistributorScorecardResponse, SupplierCreateRequest, SupplierListResponse
 from app.services.audit_service import log_audit_event
+from app.domain.schemas import DistributorScorecardResponse, SupplierCreateRequest, SupplierListResponse
 import logging
 
 router = APIRouter()
@@ -154,7 +154,6 @@ def onboard_supplier(
                 "industry_vertical": payload.industry_vertical,
                 "system_origin": "USER_PORTAL",
             },
-            extra_metadata={"endpoint": "/api/v1/suppliers"},
         )
 
         db.commit()
